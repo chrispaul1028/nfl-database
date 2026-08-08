@@ -795,7 +795,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
           {team.logo ? (
             <img src={team.logo} alt="" className="w-16 h-16 rounded-full object-contain bg-white/20 shrink-0" />
           ) : (
-            <span className="text-3xl">🏀</span>
+            <span className="text-3xl">🏈</span>
           )}
           <div className="min-w-0">
             <div className="text-2xl font-extrabold leading-tight truncate">{team.name}</div>
@@ -1311,7 +1311,7 @@ function ComingSoon({ icon, title, blurb }) {
 
 // ═══════════════ APP SHELL ═══════════════════════════════════════
 const TABS = [
-  { id: "teams", label: "Teams", icon: "🏀" },
+  { id: "teams", label: "Teams", icon: "🏈" },
   { id: "players", label: "Players", icon: "👤" },
   { id: "stats", label: "Stats", icon: "📊" },
   { id: "contracts", label: "Contracts", icon: "💰" },
