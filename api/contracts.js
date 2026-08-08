@@ -150,7 +150,7 @@ async function fetchAll(base, table, token) {
     url.searchParams.set("pageSize", "100");
     if (offset) url.searchParams.set("offset", offset);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`Airtable table "${table}": ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new Error(`Airtable table "${table}": ${res.status} ${await res.text()} · server used base "${base}" (${base.length} chars)`);
     const data = await res.json();
     records.push(...data.records);
     offset = data.offset;
@@ -178,8 +178,8 @@ function seasonLabel(s) {
 
 export default async function handler(req, res) {
   try {
-    const token = process.env.AIRTABLE_TOKEN;
-    const base = process.env.AIRTABLE_BASE_ID;
+    const token = (process.env.AIRTABLE_TOKEN || "").trim();
+    const base = (process.env.AIRTABLE_BASE_ID || "").trim();
     if (!token || !base) {
       return res.status(500).json({ error: "Missing AIRTABLE_TOKEN or AIRTABLE_BASE_ID env var" });
     }
