@@ -166,8 +166,11 @@ function Tile({ value, label, sub, accent, valueClass }) {
 
 // "2026-2027" -> "'26-'27"; falls back to the old single-year tick
 function seasonTick(y) {
-  const m = String(y.season || "").match(/(\d{4})\s*-\s*(\d{4})/);
+  const raw = String(y.season || "");
+  const m = raw.match(/(\d{4})\s*-\s*(\d{4})/);
   if (m) return "'" + m[1].slice(2) + "-'" + m[2].slice(2);
+  const single = raw.match(/(\d{4})/);
+  if (single) return single[1];
   return y.s;
 }
 
@@ -281,7 +284,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
               : Math.round(p.rating2k) >= 80 ? "text-slate-500 dark:text-slate-300"
               : "text-orange-700 dark:text-orange-400"}
           />
-          <Tile value={currentSalary(p) > 0 ? fmtM(currentSalary(p)) : "—"} label={CURRENT_SEASON.slice(2, 4) + "-" + CURRENT_SEASON.slice(7) + " Salary"} />
+          <Tile value={currentSalary(p) > 0 ? fmtM(currentSalary(p)) : "—"} label={CURRENT_SEASON + " Salary"} />
           {(() => {
             const ev = nextEvent(p);
             const labels = { PO: "Player Option", TO: "Team Option", UFA: "Free Agent", RFA: "Restricted FA" };
@@ -725,7 +728,7 @@ function TeamsTab({ teams, players, onSelect }) {
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{t.name}</span>
                   <span className="block text-[11px] text-slate-400 font-medium truncate">
-                    {t.division ? (divRank[t.id] ? `${divRank[t.id]} in ${t.division} Division` : t.division + " Division") : "—"}
+                    {t.division ? (divRank[t.id] ? `${divRank[t.id]} in ${t.division}` : t.division) : "—"}
                   </span>
                 </span>
                 {(t.wins != null || t.losses != null) && (
@@ -821,7 +824,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
                   .sort((a, b) => winPct(b) - winPct(a) || (b.wins ?? 0) - (a.wins ?? 0));
                 const i = rivals.findIndex((t) => t.id === team.id);
                 const ord = i >= 0 ? (ORDINALS[i] || `${i + 1}th`) : null;
-                return ord ? `${ord} in ${team.division} Division` : `${team.division} Division`;
+                return ord ? `${ord} in ${team.division}` : team.division;
               })()}
             </div>
           </div>
