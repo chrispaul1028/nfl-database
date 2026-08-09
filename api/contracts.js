@@ -176,6 +176,21 @@ function seasonLabel(s) {
   return "'" + String(end).slice(-2);
 }
 
+// ESPN-style position sequence used to rank "QB1"/"RB2"-style sort labels.
+const POS_SEQ = ["QB", "RB", "FB", "WR", "TE", "LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OL",
+  "DE", "EDGE", "DT", "NT", "DL", "LB", "ILB", "MLB", "OLB", "CB", "S", "FS", "SS", "DB",
+  "K", "P", "LS", "KR", "PR"];
+function sortRank(raw) {
+  if (raw == null) return null;
+  const s = String(Array.isArray(raw) ? raw[0] : raw).trim().toUpperCase();
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s); // plain numbers still work
+  const m = s.match(/^([A-Z]+)\s*(\d*)$/);
+  if (!m) return null;
+  const i = POS_SEQ.indexOf(m[1]);
+  if (i === -1) return null;
+  return i * 100 + (m[2] ? Number(m[2]) : 0); // "QB1" -> 1, "RB2" -> 102, "WR2" -> 302
+}
+
 export default async function handler(req, res) {
   try {
     const token = (process.env.AIRTABLE_TOKEN || "").trim();
@@ -357,7 +372,7 @@ export default async function handler(req, res) {
         rating2k: coerceNum(getField(p.fields, FIELDS.player2K)),
         archetype: asText(getField(p.fields, FIELDS.playerArchetype)),
         role: asText(getField(p.fields, FIELDS.playerRole)),
-        sort: coerceNum(getField(p.fields, FIELDS.playerSort)),
+        sort: sortRank(getField(p.fields, FIELDS.playerSort)),
         draft: asText(getField(p.fields, FIELDS.playerDraft)).replace(/^\s*\d{4}\s*[:\u00b7\-]?\s*/, ""),
         draftYear: coerceNum(getField(p.fields, FIELDS.playerDraftYear)),
         birthplace: asText(getField(p.fields, FIELDS.playerBirthplace)),
