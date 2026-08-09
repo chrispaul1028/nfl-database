@@ -618,7 +618,21 @@ function currentSalary(p) {
   return first ? first.salary : 0;
 }
 
-const ROLE_ORDER = ["Starter", "Bench", "Reserve", "Two-Way"];
+const ROLE_ORDER = ["Offense", "Offensive Line", "Defense", "Defensive Line", "Special Teams"];
+// Position -> unit. Position wins over the Role field so an OT always rolls
+// up to Offensive Line; Role is the fallback for unknown positions.
+const POS_UNIT = {};
+for (const p of ["QB", "RB", "FB", "HB", "WR", "TE"]) POS_UNIT[p] = "Offense";
+for (const p of ["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OL"]) POS_UNIT[p] = "Offensive Line";
+for (const p of ["DE", "DT", "NT", "EDGE", "DL"]) POS_UNIT[p] = "Defensive Line";
+for (const p of ["LB", "ILB", "OLB", "MLB", "CB", "S", "FS", "SS", "DB"]) POS_UNIT[p] = "Defense";
+for (const p of ["K", "P", "LS", "KR", "PR"]) POS_UNIT[p] = "Special Teams";
+function unitOf(p) {
+  const pos = String(p.pos || "").toUpperCase().trim();
+  if (POS_UNIT[pos]) return POS_UNIT[pos];
+  if (ROLE_ORDER.includes(p.role)) return p.role;
+  return "Roster";
+}
 
 const ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"];
 
@@ -771,6 +785,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const abbr = team.abbr || toAbbr(team.name);
   const [seg, setSeg] = useState("roster");
+  const [roleFilter, setRoleFilter] = useState(null);
   const [chartMode, setChartMode] = useState("cap");
   const [capSeason, setCapSeason] = useState(null);
   const roster = players.filter((p) => {
@@ -782,7 +797,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
 
   const groups = {};
   for (const p of roster) {
-    const role = ROLE_ORDER.includes(p.role) ? p.role : "Roster";
+    const role = unitOf(p);
     (groups[role] ??= []).push(p);
   }
   const orderedRoles = [...ROLE_ORDER.filter((r) => groups[r]), ...(groups["Roster"] ? ["Roster"] : [])];
@@ -840,7 +855,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
           ))}
         </div>
 
-        {seg === "roster" && orderedRoles.map((role) => (
+        {seg === "roster" && (
+          <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar">
+            {ROLE_ORDER.map((r) => (
+              <button key={r} onClick={() => setRoleFilter(roleFilter === r ? null : r)}
+                className={"px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors " + (roleFilter === r
+                  ? "text-white"
+                  : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
+                style={roleFilter === r ? { backgroundColor: teamColor(abbr) } : undefined}>
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+        {seg === "roster" && orderedRoles.filter((role) => !roleFilter || role === roleFilter).map((role) => (
           <div key={role}>
             <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{role}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
