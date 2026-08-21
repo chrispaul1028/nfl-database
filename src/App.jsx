@@ -388,7 +388,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f2";
+const NFL_VERSION = "f3";
 
 // ═══════════════ LIVE INJURY LAYER (Sleeper API) ═════════════════
 // Fetched once at load; free public feed, no key. Statuses:
@@ -448,62 +448,94 @@ const isStarter = (p) => {
 };
 
 function FormationView({ roster, abbr, onSelectPlayer }) {
+  const [unit, setUnit] = useState("offense");
+  const SLOTS = unit === "offense" ? [
+    { lbl: "WR", x: 8, y: 26, aliases: ["WR"] },
+    { lbl: "WR", x: 92, y: 26, aliases: ["WR"] },
+    { lbl: "WR", x: 22, y: 38, aliases: ["WR"] },
+    { lbl: "TE", x: 82, y: 44, aliases: ["TE"] },
+    { lbl: "LT", x: 16, y: 54, aliases: ["LT", "OT", "T"] },
+    { lbl: "LG", x: 33, y: 54, aliases: ["LG", "G", "OG"] },
+    { lbl: "C", x: 50, y: 54, aliases: ["C", "OC"] },
+    { lbl: "RG", x: 67, y: 54, aliases: ["RG", "G", "OG"] },
+    { lbl: "RT", x: 84, y: 54, aliases: ["RT", "OT", "T"] },
+    { lbl: "QB", x: 50, y: 72, aliases: ["QB"] },
+    { lbl: "RB", x: 50, y: 88, aliases: ["RB", "HB", "FB"] },
+  ] : [
+    { lbl: "DE", x: 14, y: 82, aliases: ["DE", "EDGE"] },
+    { lbl: "DT", x: 38, y: 82, aliases: ["DT", "NT", "DL"] },
+    { lbl: "DT", x: 62, y: 82, aliases: ["DT", "NT", "DL"] },
+    { lbl: "DE", x: 86, y: 82, aliases: ["DE", "EDGE"] },
+    { lbl: "LB", x: 26, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "LB", x: 50, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "LB", x: 74, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "CB", x: 8, y: 40, aliases: ["CB", "DB"] },
+    { lbl: "CB", x: 92, y: 40, aliases: ["CB", "DB"] },
+    { lbl: "S", x: 33, y: 20, aliases: ["S", "FS", "SS"] },
+    { lbl: "S", x: 67, y: 20, aliases: ["S", "FS", "SS"] },
+  ];
   const used = new Set();
-  const pick = (aliases, depth) => {
+  const pick = (aliases) => {
     const cands = roster
       .filter((p) => aliases.includes(String(p.pos || "").toUpperCase()) && !used.has(p.id))
       .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
-    const hit = cands[depth - 1] || cands[0] || null;
+    const hit = cands[0] || null;
     if (hit) used.add(hit.id);
     return hit;
   };
-  const SLOTS = [
-    { lbl: "WR", x: 7, y: 56, aliases: ["WR"], d: 1 },
-    { lbl: "WR", x: 93, y: 56, aliases: ["WR"], d: 1 },
-    { lbl: "WR", x: 22, y: 64, aliases: ["WR"], d: 1 },
-    { lbl: "TE", x: 84, y: 66, aliases: ["TE"], d: 1 },
-    { lbl: "LT", x: 18, y: 74, aliases: ["LT", "OT", "T"], d: 1 },
-    { lbl: "LG", x: 34, y: 74, aliases: ["LG", "G", "OG"], d: 1 },
-    { lbl: "C", x: 50, y: 74, aliases: ["C", "OC"], d: 1 },
-    { lbl: "RG", x: 66, y: 74, aliases: ["RG", "G", "OG"], d: 1 },
-    { lbl: "RT", x: 82, y: 74, aliases: ["RT", "OT", "T"], d: 1 },
-    { lbl: "QB", x: 50, y: 84, aliases: ["QB"], d: 1 },
-    { lbl: "RB", x: 50, y: 94, aliases: ["RB", "HB", "FB"], d: 1 },
-  ];
-  const bubbleCls = (p) => {
-    if (!p) return "bg-slate-300/70 text-slate-600";
+  const ringCls = (p) => {
+    if (!p) return "border-white/40";
     const inj = injFor(p.name, abbr);
     const is2 = inj && inj.injury_status;
-    if (is2 === "Out" || (inj && /injured reserve|pup|non football/i.test(String(inj.status || "")))) return "bg-rose-500 text-white";
-    if (is2 === "Doubtful") return "bg-orange-500 text-white";
-    if (is2 === "Questionable") return "bg-amber-400 text-slate-900";
-    return "bg-emerald-500 text-white";
+    if (is2 === "Out" || (inj && /injured reserve|pup|non football/i.test(String(inj.status || "")))) return "border-rose-500";
+    if (is2 === "Doubtful") return "border-orange-500";
+    if (is2 === "Questionable") return "border-amber-400";
+    return "border-emerald-500";
   };
   return (
     <div className="mt-4">
+      <div className="flex gap-2 mb-3">
+        {[["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
+          <button key={k} onClick={() => setUnit(k)}
+            className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold " + (unit === k
+              ? "text-white"
+              : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
+            style={unit === k ? { backgroundColor: teamColor(abbr) } : undefined}>
+            {lbl}
+          </button>
+        ))}
+      </div>
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
-        style={{ paddingBottom: "118%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
-        {[20, 35, 50, 65, 80].map((y) => (
+        style={{ paddingBottom: "112%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
+        {[16, 32, 48, 64, 80].map((y) => (
           <div key={y} className="absolute left-0 right-0 h-px bg-white/25" style={{ top: y + "%" }} />
         ))}
         {SLOTS.map((s, i) => {
-          const p = pick(s.aliases, s.d);
+          const p = pick(s.aliases);
           return (
-            <button key={i} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
+            <button key={unit + i} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
               className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
               style={{ left: s.x + "%", top: s.y + "%" }}>
-              <span className={"w-11 h-11 rounded-full flex flex-col items-center justify-center shadow-md " + bubbleCls(p)}>
-                <span className="text-[9px] font-extrabold leading-none">{s.lbl}</span>
-                <span className="text-[11px] font-extrabold leading-tight tabular-nums">{p && p.rating2k != null ? Math.round(p.rating2k) : "—"}</span>
+              <span className="relative">
+                {p && p.photo ? (
+                  <img src={p.photo} alt="" className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)} loading="lazy" />
+                ) : (
+                  <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
+                    {s.lbl}
+                  </span>
+                )}
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold bg-slate-900/85 text-white tabular-nums shadow">
+                  {p && p.rating2k != null ? Math.round(p.rating2k) : s.lbl}
+                </span>
               </span>
-              <span className="mt-0.5 text-[8px] font-bold text-white/90 max-w-[64px] truncate drop-shadow">
+              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[70px] truncate drop-shadow">
                 {p ? p.name.split(" ").slice(-1)[0] : ""}
               </span>
             </button>
           );
         })}
       </div>
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Bubble = starter at each spot · number = OVR · green healthy, yellow Questionable, orange Doubtful, red Out/IR · tap for profile</div>
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Ring = health (green ok · yellow Questionable · orange Doubtful · red Out/IR) · chip = OVR · dashed = no player at spot in Airtable · tap for profile</div>
     </div>
   );
 }
@@ -1003,7 +1035,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         </div>
 
         <div className="flex gap-2 mt-4">
-          {[["roster", "Depth Chart"], ["formation", "Formation"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
+          {[["roster", "Roster"], ["formation", "Formation"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
                 ? "text-white"
