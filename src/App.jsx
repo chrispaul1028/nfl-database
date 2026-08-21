@@ -266,10 +266,15 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
                 {[cleanNo(p.no) ? "#" + cleanNo(p.no) : "", p.pos].filter(Boolean).join(" · ")}
               </span>
               <StatusBadge status={p.status} />
+              <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg />
             </div>
-            {p.injuryNotes && (
-              <div className="text-xs font-semibold text-red-200 mt-1 truncate">{p.injuryNotes}</div>
-            )}
+            {(() => {
+              const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
+              const live = inj && (inj.injury_body_part || inj.injury_notes)
+                ? [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" — ") : null;
+              const note = live || p.injuryNotes;
+              return note ? <div className="text-xs font-semibold text-red-200 mt-1 truncate">{note}</div> : null;
+            })()}
           </div>
         </div>
       </div>
@@ -382,6 +387,54 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
+const NFL_VERSION = "f1";
+
+// ═══════════════ LIVE INJURY LAYER (Sleeper API) ═════════════════
+// Fetched once at load; free public feed, no key. Statuses:
+//   injury_status: Questionable / Doubtful / Out
+//   status: Active / Injured Reserve / PUP / NFI / Inactive
+const INJ_BY_NAME = {}; // normalized name -> [sleeper players] (dupes kept)
+const injNrm = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+const injTeamEq = (a, b) => {
+  const n = (t) => String(t || "").toUpperCase();
+  if (n(a) === n(b)) return true;
+  const AL = [["WAS", "WSH"], ["JAX", "JAC"], ["LAR", "LA"], ["ARI", "ARZ"], ["BAL", "BLT"], ["CLE", "CLV"], ["HOU", "HST"]];
+  return AL.some(([x, y]) => (n(a) === x && n(b) === y) || (n(a) === y && n(b) === x));
+};
+function injFor(name, teamAbbr) {
+  const list = INJ_BY_NAME[injNrm(name)];
+  if (!list || !list.length) return null;
+  if (list.length > 1 && teamAbbr) {
+    const hit = list.find((p) => injTeamEq(p.team, teamAbbr));
+    if (hit) return hit;
+    return null; // duplicate name, wrong/unknown team — don't guess
+  }
+  return list[0];
+}
+// Badge only when NOT plain healthy-active (keeps rows quiet)
+function InjBadge({ p, team, lg = false }) {
+  const inj = injFor(p.name, team);
+  if (!inj) return null;
+  let label = null, cls = "";
+  const is2 = inj.injury_status;
+  if (is2 === "Questionable") { label = "Q"; cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"; }
+  else if (is2 === "Doubtful") { label = "D"; cls = "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"; }
+  else if (is2 === "Out") { label = "OUT"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
+  else {
+    const st = String(inj.status || "");
+    if (/injured reserve/i.test(st)) { label = "IR"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
+    else if (/pup|physically unable/i.test(st)) { label = "PUP"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
+    else if (/non football/i.test(st)) { label = "NFI"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
+    else if (/inactive/i.test(st)) { label = "INA"; cls = "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"; }
+  }
+  if (!label) return null;
+  return (
+    <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
+      {label}
+    </span>
+  );
+}
+
 function ListHeader({ title, q, setQ, placeholder }) {
   return (
     <div className="bg-blue-600 px-5 pb-5 text-white sticky top-0 z-10 shadow-md" style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.5rem)" }}>
@@ -416,10 +469,27 @@ function TeamPill({ team }) {
 // ═══════════════ TAB: PLAYER HUB ═════════════════════════════════
 function PlayersTab({ players, onSelect }) {
   const [q, setQ] = useState("");
-  const list = useMemo(() => players.filter((p) => matchesQuery(p, q)), [players, q]);
+  const [injOnly, setInjOnly] = useState(false);
+  const list = useMemo(
+    () => players
+      .filter((p) => matchesQuery(p, q))
+      .filter((p) => !injOnly || (() => {
+        const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
+        return inj && (inj.injury_status || !/^active$/i.test(String(inj.status || "")));
+      })()),
+    [players, q, injOnly]
+  );
   return (
     <div>
-      <ListHeader title="Players" q={q} setQ={setQ} />
+      <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} />
+      <div className="flex px-4 mt-3">
+        <button onClick={() => setInjOnly((v) => !v)}
+          className={"py-1.5 px-4 rounded-full text-[11px] font-extrabold " + (injOnly
+            ? "bg-rose-600 text-white"
+            : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-800")}>
+          🏥 Injury Report
+        </button>
+      </div>
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
@@ -427,7 +497,10 @@ function PlayersTab({ players, onSelect }) {
               <span className="w-7 text-center text-[11px] font-extrabold text-slate-400 uppercase shrink-0">{p.pos || "—"}</span>
               <Avatar p={p} />
               <span className="flex-1 min-w-0">
-                <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
+                <span className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
+                  <span className="truncate">{p.name}</span>
+                  <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} />
+                </span>
                 <span className="block text-[11px] text-slate-400 font-medium truncate">
                   {[p.height, p.weight, p.age ? p.age + " yrs" : ""]
                     .filter(Boolean)
@@ -1357,6 +1430,23 @@ export default function App() {
   const [selTeam, setSelTeam] = useState(null);
   const [error, setError] = useState(null);
 
+  const [, setInjTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetch("https://api.sleeper.app/v1/players/nfl?active=true")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        for (const p of Object.values(d || {})) {
+          if (!p || !p.full_name || !p.team) continue;
+          const k = injNrm(p.full_name);
+          (INJ_BY_NAME[k] = INJ_BY_NAME[k] || []).push(p);
+        }
+        setInjTick((t) => t + 1);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     fetch("/api/contracts")
       .then((r) => r.json())
