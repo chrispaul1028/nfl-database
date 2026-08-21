@@ -265,8 +265,9 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
               <span className="text-sm opacity-80 font-medium truncate">
                 {[cleanNo(p.no) ? "#" + cleanNo(p.no) : "", p.pos].filter(Boolean).join(" · ")}
               </span>
-              <StatusBadge status={p.status} />
-              <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg />
+              {injHasFlag(p, toAbbr(teamOfPlayer(p) || p.teamName || ""))
+                ? <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg />
+                : <StatusBadge status={p.status} />}
             </div>
             {(() => {
               const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
@@ -387,7 +388,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f1";
+const NFL_VERSION = "f2";
 
 // ═══════════════ LIVE INJURY LAYER (Sleeper API) ═════════════════
 // Fetched once at load; free public feed, no key. Statuses:
@@ -417,15 +418,15 @@ function InjBadge({ p, team, lg = false }) {
   if (!inj) return null;
   let label = null, cls = "";
   const is2 = inj.injury_status;
-  if (is2 === "Questionable") { label = "Q"; cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"; }
-  else if (is2 === "Doubtful") { label = "D"; cls = "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"; }
+  if (is2 === "Questionable") { label = "QUESTIONABLE"; cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"; }
+  else if (is2 === "Doubtful") { label = "DOUBTFUL"; cls = "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"; }
   else if (is2 === "Out") { label = "OUT"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
   else {
     const st = String(inj.status || "");
     if (/injured reserve/i.test(st)) { label = "IR"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
     else if (/pup|physically unable/i.test(st)) { label = "PUP"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
     else if (/non football/i.test(st)) { label = "NFI"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
-    else if (/inactive/i.test(st)) { label = "INA"; cls = "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"; }
+    else if (/inactive/i.test(st)) { label = "INACTIVE"; cls = "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"; }
   }
   if (!label) return null;
   return (
@@ -433,6 +434,88 @@ function InjBadge({ p, team, lg = false }) {
       {label}
     </span>
   );
+}
+
+// Live status wins over the Airtable status field when they disagree
+// (this is what makes Teams and Players views tell the same story)
+// How many players per position count as "starters" (tune to your labels)
+const STARTER_DEPTH = { WR: 3, CB: 2, LB: 2, OLB: 2, ILB: 2, DT: 2, DE: 2, EDGE: 2, S: 2, G: 2, T: 2 };
+const depthOf = (p) => (p.sort != null ? (p.sort % 100 === 0 ? 1 : p.sort % 100) : null);
+const isStarter = (p) => {
+  const d = depthOf(p);
+  if (d == null) return false;
+  return d <= (STARTER_DEPTH[String(p.pos || "").toUpperCase()] || 1);
+};
+
+function FormationView({ roster, abbr, onSelectPlayer }) {
+  const used = new Set();
+  const pick = (aliases, depth) => {
+    const cands = roster
+      .filter((p) => aliases.includes(String(p.pos || "").toUpperCase()) && !used.has(p.id))
+      .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
+    const hit = cands[depth - 1] || cands[0] || null;
+    if (hit) used.add(hit.id);
+    return hit;
+  };
+  const SLOTS = [
+    { lbl: "WR", x: 7, y: 56, aliases: ["WR"], d: 1 },
+    { lbl: "WR", x: 93, y: 56, aliases: ["WR"], d: 1 },
+    { lbl: "WR", x: 22, y: 64, aliases: ["WR"], d: 1 },
+    { lbl: "TE", x: 84, y: 66, aliases: ["TE"], d: 1 },
+    { lbl: "LT", x: 18, y: 74, aliases: ["LT", "OT", "T"], d: 1 },
+    { lbl: "LG", x: 34, y: 74, aliases: ["LG", "G", "OG"], d: 1 },
+    { lbl: "C", x: 50, y: 74, aliases: ["C", "OC"], d: 1 },
+    { lbl: "RG", x: 66, y: 74, aliases: ["RG", "G", "OG"], d: 1 },
+    { lbl: "RT", x: 82, y: 74, aliases: ["RT", "OT", "T"], d: 1 },
+    { lbl: "QB", x: 50, y: 84, aliases: ["QB"], d: 1 },
+    { lbl: "RB", x: 50, y: 94, aliases: ["RB", "HB", "FB"], d: 1 },
+  ];
+  const bubbleCls = (p) => {
+    if (!p) return "bg-slate-300/70 text-slate-600";
+    const inj = injFor(p.name, abbr);
+    const is2 = inj && inj.injury_status;
+    if (is2 === "Out" || (inj && /injured reserve|pup|non football/i.test(String(inj.status || "")))) return "bg-rose-500 text-white";
+    if (is2 === "Doubtful") return "bg-orange-500 text-white";
+    if (is2 === "Questionable") return "bg-amber-400 text-slate-900";
+    return "bg-emerald-500 text-white";
+  };
+  return (
+    <div className="mt-4">
+      <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
+        style={{ paddingBottom: "118%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
+        {[20, 35, 50, 65, 80].map((y) => (
+          <div key={y} className="absolute left-0 right-0 h-px bg-white/25" style={{ top: y + "%" }} />
+        ))}
+        {SLOTS.map((s, i) => {
+          const p = pick(s.aliases, s.d);
+          return (
+            <button key={i} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+              style={{ left: s.x + "%", top: s.y + "%" }}>
+              <span className={"w-11 h-11 rounded-full flex flex-col items-center justify-center shadow-md " + bubbleCls(p)}>
+                <span className="text-[9px] font-extrabold leading-none">{s.lbl}</span>
+                <span className="text-[11px] font-extrabold leading-tight tabular-nums">{p && p.rating2k != null ? Math.round(p.rating2k) : "—"}</span>
+              </span>
+              <span className="mt-0.5 text-[8px] font-bold text-white/90 max-w-[64px] truncate drop-shadow">
+                {p ? p.name.split(" ").slice(-1)[0] : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Bubble = starter at each spot · number = OVR · green healthy, yellow Questionable, orange Doubtful, red Out/IR · tap for profile</div>
+    </div>
+  );
+}
+
+function injHasFlag(p, team) {
+  const inj = injFor(p.name, team);
+  return !!(inj && (inj.injury_status || !/^active$/i.test(String(inj.status || ""))));
+}
+function LiveStatus({ p, team }) {
+  return injHasFlag(p, team)
+    ? <InjBadge p={p} team={team} />
+    : <StatusBadge status={p.status} />;
 }
 
 function ListHeader({ title, q, setQ, placeholder }) {
@@ -920,7 +1003,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         </div>
 
         <div className="flex gap-2 mt-4">
-          {[["roster", "Depth Chart"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
+          {[["roster", "Depth Chart"], ["formation", "Formation"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
                 ? "text-white"
@@ -948,14 +1031,23 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
           <div key={role}>
             <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{role}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-              {groups[role]
-                .sort((a, b) => {
+              {(() => {
+                const sorted = groups[role].slice().sort((a, b) => {
                   if (a.sort != null && b.sort != null) return a.sort - b.sort;
                   if (a.sort != null) return -1;
                   if (b.sort != null) return 1;
                   return currentSalary(b) - currentSalary(a);
-                })
-                .map((p) => (
+                });
+                const starters = sorted.filter(isStarter);
+                const bench = sorted.filter((p) => !isStarter(p));
+                const withHeaders = [];
+                if (starters.length) withHeaders.push({ __hdr: "Starters" }, ...starters);
+                if (bench.length) withHeaders.push({ __hdr: "Bench" }, ...bench);
+                return withHeaders;
+              })()
+                .map((p) => p.__hdr ? (
+                  <div key={"hdr-" + p.__hdr} className="px-4 py-1.5 text-[9px] font-extrabold tracking-widest uppercase text-slate-400 bg-slate-50 dark:bg-slate-800/60">{p.__hdr}</div>
+                ) : (
                   <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
                     <span className="w-7 text-center text-[11px] font-extrabold text-slate-400 uppercase shrink-0">{p.pos || "—"}</span>
                     <Avatar p={p} />
@@ -966,7 +1058,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
                       </span>
                       <span className="flex items-center gap-1.5 mt-0.5">
                         {cleanNo(p.no) && <span className="text-[11px] text-slate-400 font-medium">#{cleanNo(p.no)}</span>}
-                        <StatusBadge status={p.status} />
+                        <LiveStatus p={p} team={abbr} />
                         <span className="flex-1" />
                         {(() => {
                           const st = latestStats(p);
@@ -996,6 +1088,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             </div>
           </div>
         ))}
+        {seg === "formation" && <FormationView roster={roster} abbr={abbr} onSelectPlayer={onSelectPlayer} />}
         {seg === "contracts" && (
           <>
             <div className="flex items-baseline justify-between mt-6 mb-2 px-1">
