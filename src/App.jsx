@@ -388,7 +388,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f4";
+const NFL_VERSION = "f5";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -462,10 +462,10 @@ const isStarter = (p) => {
 function FormationView({ roster, abbr, onSelectPlayer }) {
   const [unit, setUnit] = useState("offense");
   const SLOTS = unit === "offense" ? [
-    { lbl: "WR", x: 8, y: 26, aliases: ["WR"] },
-    { lbl: "WR", x: 92, y: 26, aliases: ["WR"] },
-    { lbl: "WR", x: 22, y: 38, aliases: ["WR"] },
-    { lbl: "TE", x: 82, y: 44, aliases: ["TE"] },
+    { lbl: "WR", x: 11, y: 26, aliases: ["WR"] },
+    { lbl: "WR", x: 89, y: 26, aliases: ["WR"] },
+    { lbl: "WR", x: 22, y: 42, aliases: ["WR"] },
+    { lbl: "TE", x: 82, y: 42, aliases: ["TE"] },
     { lbl: "LT", x: 16, y: 54, aliases: ["LT", "OT", "T"] },
     { lbl: "LG", x: 33, y: 54, aliases: ["LG", "G", "OG"] },
     { lbl: "C", x: 50, y: 54, aliases: ["C", "OC"] },
@@ -481,8 +481,8 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
     { lbl: "LB", x: 26, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
     { lbl: "LB", x: 50, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
     { lbl: "LB", x: 74, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
-    { lbl: "CB", x: 8, y: 40, aliases: ["CB", "DB"] },
-    { lbl: "CB", x: 92, y: 40, aliases: ["CB", "DB"] },
+    { lbl: "CB", x: 11, y: 40, aliases: ["CB", "DB"] },
+    { lbl: "CB", x: 89, y: 40, aliases: ["CB", "DB"] },
     { lbl: "S", x: 33, y: 20, aliases: ["S", "FS", "SS"] },
     { lbl: "S", x: 67, y: 20, aliases: ["S", "FS", "SS"] },
   ];
@@ -537,7 +537,7 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
                   </span>
                 )}
                 {p && cleanNo(p.no) && (
-                  <span className="absolute top-1/2 -translate-y-1/2 -left-3.5 px-1 rounded text-[8px] font-extrabold bg-white/85 text-slate-700 tabular-nums shadow">
+                  <span className="absolute top-1/2 -translate-y-1/2 -left-2.5 px-1 rounded text-[8px] font-extrabold bg-white/85 text-slate-700 tabular-nums shadow">
                     #{cleanNo(p.no)}
                   </span>
                 )}
