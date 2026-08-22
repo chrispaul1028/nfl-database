@@ -388,7 +388,19 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f3";
+const NFL_VERSION = "f4";
+// Until the current season has results, fall back to last season's numbers
+const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
+function teamRec(t, started) {
+  const w = started ? t.wins : (t.winsPrev ?? t.wins);
+  const l = started ? t.losses : (t.lossesPrev ?? t.losses);
+  const ti = started ? t.ties : (t.tiesPrev ?? t.ties);
+  return { w: w ?? 0, l: l ?? 0, t: ti ?? 0, str: (w ?? 0) + "-" + (l ?? 0) + ((ti ?? 0) > 0 ? "-" + ti : "") };
+}
+const teamPts = (t, started) => ({
+  pf: started ? t.pf : (t.pfPrev ?? t.pf),
+  pa: started ? t.pa : (t.paPrev ?? t.pa),
+});
 
 // ═══════════════ LIVE INJURY LAYER (Sleeper API) ═════════════════
 // Fetched once at load; free public feed, no key. Statuses:
@@ -524,12 +536,22 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
                     {s.lbl}
                   </span>
                 )}
+                {p && cleanNo(p.no) && (
+                  <span className="absolute top-1/2 -translate-y-1/2 -left-3.5 px-1 rounded text-[8px] font-extrabold bg-white/85 text-slate-700 tabular-nums shadow">
+                    #{cleanNo(p.no)}
+                  </span>
+                )}
                 <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold bg-slate-900/85 text-white tabular-nums shadow">
                   {p && p.rating2k != null ? Math.round(p.rating2k) : s.lbl}
                 </span>
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[70px] truncate drop-shadow">
-                {p ? p.name.split(" ").slice(-1)[0] : ""}
+                {p ? (() => {
+                  const parts = p.name.split(" ");
+                  return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                    ? parts.slice(-2).join(" ")
+                    : parts.slice(-1)[0];
+                })() : ""}
               </span>
             </button>
           );
@@ -919,9 +941,9 @@ function TeamsTab({ teams, players, onSelect }) {
                     {t.division ? (divRank[t.id] ? `${divRank[t.id]} in ${t.division}` : t.division) : "—"}
                   </span>
                 </span>
-                {(t.wins != null || t.losses != null) && (
+                {(() => { const r = teamRec(t, seasonStarted(teams)); return (r.w + r.l + r.t) >= 0; })() && (
                   <span className="flex gap-2.5 shrink-0">
-                    {[["W", t.wins ?? 0], ["L", t.losses ?? 0]].map(([lbl, v]) => (
+                    {(() => { const r = teamRec(t, seasonStarted(teams)); return [["W", r.w], ["L", r.l], ["T", r.t]]; })().map(([lbl, v]) => (
                       <span key={lbl} className="w-7 text-center">
                         <span className="block text-[8px] font-bold text-slate-400 uppercase">{lbl}</span>
                         <span className="block text-xs font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{v}</span>
@@ -1021,17 +1043,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
 
       <div className="px-4 -mt-3">
         <div className="grid grid-cols-3 gap-2">
-          <Tile value={(team.wins ?? 0) + "-" + (team.losses ?? 0)} label="Record" />
-          <Tile
-            value={team.ppg != null ? team.ppg.toFixed(1) : "—"}
-            label="PPG"
-            sub={rankOf(teams, team, "ppg", "desc")}
-          />
-          <Tile
-            value={team.oppPpg != null ? team.oppPpg.toFixed(1) : "—"}
-            label="Opp PPG"
-            sub={rankOf(teams, team, "oppPpg", "asc")}
-          />
+          {(() => {
+            const started = seasonStarted(teams);
+            const r = teamRec(team, started);
+            const pts = teamPts(team, started);
+            return (
+              <>
+                <Tile value={r.str} label={started ? "Record" : "Record ('25)"} />
+                <Tile value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored"
+                  sub={team.ppg != null ? team.ppg.toFixed(1) + "/gm" : null} />
+                <Tile value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed"
+                  sub={team.oppPpg != null ? team.oppPpg.toFixed(1) + "/gm" : null} />
+              </>
+            );
+          })()}
         </div>
 
         <div className="flex gap-2 mt-4">
