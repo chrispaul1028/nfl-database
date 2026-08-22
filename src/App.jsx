@@ -388,7 +388,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f5";
+const NFL_VERSION = "f6";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -541,8 +541,14 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
                     #{cleanNo(p.no)}
                   </span>
                 )}
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold bg-slate-900/85 text-white tabular-nums shadow">
-                  {p && p.rating2k != null ? Math.round(p.rating2k) : s.lbl}
+                <span className={"absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold tabular-nums shadow " +
+                  (p && p.rating2k != null
+                    ? (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
+                      : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
+                      : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
+                      : "bg-rose-600 text-white")
+                    : "bg-slate-900/85 text-white")}>
+                  {p && p.rating2k != null ? (Math.round(p.rating2k) >= 90 ? "⭐" : "") + Math.round(p.rating2k) : s.lbl}
                 </span>
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[70px] truncate drop-shadow">
@@ -684,12 +690,13 @@ function Rating2kBadge({ r }) {
   if (r == null) return null;
   const n = Math.round(r);
   const cls =
-    n >= 90 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"        // gold
-    : n >= 80 ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"          // silver
-    : "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300";            // bronze
+    n >= 90 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"        // superstar
+    : n >= 85 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" // great
+    : n >= 70 ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"          // solid
+    : "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300";                    // liability
   return (
     <span className={"shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold " + cls}>
-      {n} OVR
+      {n >= 90 ? "⭐ " : ""}{n} OVR
     </span>
   );
 }
