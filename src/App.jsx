@@ -116,7 +116,7 @@ function matchesQuery(p, q) {
 function Avatar({ p, size }) {
   const px = size === "lg" ? "w-20 h-20 text-2xl" : "w-11 h-11 text-sm";
   if (p.photo) {
-    return <img src={p.photo} alt={p.name} className={px + " rounded-full object-cover object-top bg-slate-200 shrink-0"} />;
+    return <img src={p.photo} alt={p.name} className={px + " rounded-full object-cover object-top bg-white shrink-0"} />;
   }
   const no = cleanNo(p.no);
   const label = no ? "#" + no : p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
@@ -388,7 +388,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f6";
+const NFL_VERSION = "f7";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -462,29 +462,29 @@ const isStarter = (p) => {
 function FormationView({ roster, abbr, onSelectPlayer }) {
   const [unit, setUnit] = useState("offense");
   const SLOTS = unit === "offense" ? [
-    { lbl: "WR", x: 11, y: 26, aliases: ["WR"] },
-    { lbl: "WR", x: 89, y: 26, aliases: ["WR"] },
-    { lbl: "WR", x: 22, y: 42, aliases: ["WR"] },
-    { lbl: "TE", x: 82, y: 42, aliases: ["TE"] },
-    { lbl: "LT", x: 16, y: 54, aliases: ["LT", "OT", "T"] },
-    { lbl: "LG", x: 33, y: 54, aliases: ["LG", "G", "OG"] },
-    { lbl: "C", x: 50, y: 54, aliases: ["C", "OC"] },
-    { lbl: "RG", x: 67, y: 54, aliases: ["RG", "G", "OG"] },
-    { lbl: "RT", x: 84, y: 54, aliases: ["RT", "OT", "T"] },
+    { lbl: "WR", x: 11, y: 24, aliases: ["WR"] },
+    { lbl: "WR", x: 89, y: 24, aliases: ["WR"] },
+    { lbl: "WR", x: 22, y: 40, aliases: ["WR"] },
+    { lbl: "TE", x: 82, y: 40, aliases: ["TE"] },
+    { lbl: "LT", x: 16, y: 56, aliases: ["LT", "OT", "T"] },
+    { lbl: "LG", x: 33, y: 56, aliases: ["LG", "G", "OG"] },
+    { lbl: "C", x: 50, y: 56, aliases: ["C", "OC"] },
+    { lbl: "RG", x: 67, y: 56, aliases: ["RG", "G", "OG"] },
+    { lbl: "RT", x: 84, y: 56, aliases: ["RT", "OT", "T"] },
     { lbl: "QB", x: 50, y: 72, aliases: ["QB"] },
-    { lbl: "RB", x: 50, y: 88, aliases: ["RB", "HB", "FB"] },
+    { lbl: "RB", x: 50, y: 90, aliases: ["RB", "HB", "FB"] },
   ] : [
-    { lbl: "DE", x: 14, y: 82, aliases: ["DE", "EDGE"] },
-    { lbl: "DT", x: 38, y: 82, aliases: ["DT", "NT", "DL"] },
-    { lbl: "DT", x: 62, y: 82, aliases: ["DT", "NT", "DL"] },
-    { lbl: "DE", x: 86, y: 82, aliases: ["DE", "EDGE"] },
-    { lbl: "LB", x: 26, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
-    { lbl: "LB", x: 50, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
-    { lbl: "LB", x: 74, y: 62, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "DE", x: 14, y: 72, aliases: ["DE", "EDGE"] },
+    { lbl: "DT", x: 38, y: 72, aliases: ["DT", "NT", "DL"] },
+    { lbl: "DT", x: 62, y: 72, aliases: ["DT", "NT", "DL"] },
+    { lbl: "DE", x: 86, y: 72, aliases: ["DE", "EDGE"] },
+    { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "LB", x: 50, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
     { lbl: "CB", x: 11, y: 40, aliases: ["CB", "DB"] },
     { lbl: "CB", x: 89, y: 40, aliases: ["CB", "DB"] },
-    { lbl: "S", x: 33, y: 20, aliases: ["S", "FS", "SS"] },
-    { lbl: "S", x: 67, y: 20, aliases: ["S", "FS", "SS"] },
+    { lbl: "S", x: 33, y: 24, aliases: ["S", "FS", "SS"] },
+    { lbl: "S", x: 67, y: 24, aliases: ["S", "FS", "SS"] },
   ];
   const used = new Set();
   const pick = (aliases) => {
@@ -518,7 +518,7 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
         ))}
       </div>
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
-        style={{ paddingBottom: "112%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
+        style={{ paddingBottom: "118%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
         {[16, 32, 48, 64, 80].map((y) => (
           <div key={y} className="absolute left-0 right-0 h-px bg-white/25" style={{ top: y + "%" }} />
         ))}
@@ -600,7 +600,7 @@ function TeamPill({ team }) {
   if (!abbr) return null;
   const logo = TEAM_LOGOS[abbr];
   if (logo) {
-    return <img src={logo} alt={abbr} className="w-8 h-8 rounded-full object-contain bg-slate-100 dark:bg-slate-800 shrink-0" />;
+    return <img src={logo} alt={abbr} className="w-8 h-8 rounded-full object-contain bg-white shrink-0" />;
   }
   return (
     <span className="text-[10px] font-bold text-white px-2 py-1 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }}>
@@ -938,7 +938,7 @@ function TeamsTab({ teams, players, onSelect }) {
             return (
               <button key={t.id} onClick={() => onSelect(t)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
                 {t.logo ? (
-                  <img src={t.logo} alt="" className="w-11 h-11 rounded-full object-contain bg-slate-100 dark:bg-slate-800 shrink-0" />
+                  <img src={t.logo} alt="" className="w-11 h-11 rounded-full object-contain bg-white shrink-0" />
                 ) : (
                   <span className="w-11 h-11 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }} />
                 )}
@@ -1028,7 +1028,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
-            <img src={team.logo} alt="" className="w-16 h-16 rounded-full object-contain bg-white/20 shrink-0" />
+            <img src={team.logo} alt="" className="w-16 h-16 rounded-full object-contain bg-white shrink-0" />
           ) : (
             <span className="text-3xl">🏈</span>
           )}
