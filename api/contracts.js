@@ -47,7 +47,7 @@ const FIELDS = {
   teamPPG: ["PPG", "Points Per Game", "Team PPG", "Offense PPG", "PTS/G"],
   teamOppPPG: ["OPP PPG", "Opp PPG", "PPG Allowed", "Points Allowed", "OPPG", "Defense PPG", "Opp PTS/G"],
   teamLosses: ["L", "Losses"],
-  teamTies: ["T", "Ties"],
+  teamTies: ["T", "Ties", "Tie"],
   teamPF: ["PF", "Points Scored", "Points For", "Total Points", "Pts Scored"],
   teamPA: ["PA", "Points Allowed Total", "Points Against", "Total Points Allowed", "Pts Allowed"],
   teamWinsPrev: ["Last Season Wins", "Prev Wins", "2025 Wins", "LY Wins", "Last Year Wins"],
