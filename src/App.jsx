@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 
 // ═══════════════ THEME (edit these to restyle the app) ═══════════
 // Player detail header color:
@@ -115,14 +115,19 @@ function matchesQuery(p, q) {
 // ═══════════════ SHARED PIECES ═══════════════════════════════════
 function Avatar({ p, size }) {
   const px = size === "lg" ? "w-20 h-20 text-2xl" : "w-11 h-11 text-sm";
-  if (p.photo) {
-    return <img src={p.photo} alt={p.name} className={px + " rounded-full object-cover object-top bg-white shrink-0"} />;
-  }
+  const url = photoOf(p);
   const no = cleanNo(p.no);
   const label = no ? "#" + no : p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
+  // Initials render underneath; the img sits on top and removes itself if the
+  // CDN 404s, so a bad fallback URL degrades to initials instead of a broken icon.
   return (
-    <div className={px + " rounded-full bg-slate-200 text-slate-500 dark:text-slate-400 dark:bg-slate-700 dark:text-slate-300 font-bold flex items-center justify-center shrink-0"}>
+    <div className={px + " relative rounded-full bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 font-bold flex items-center justify-center shrink-0 overflow-hidden"}>
       {label}
+      {url && (
+        <img src={url} alt={p.name} loading="lazy"
+          className="absolute inset-0 w-full h-full object-cover object-top bg-white"
+          onError={(e) => e.currentTarget.remove()} />
+      )}
     </div>
   );
 }
@@ -424,6 +429,17 @@ function injFor(name, teamAbbr) {
   }
   return list[0];
 }
+// Automated headshots: if Airtable has no photo, fall back to Sleeper's CDN
+// (keyed by the player_id we already matched for injuries). Covers every
+// rostered player with zero manual uploads.
+function photoOf(p, teamAbbr) {
+  if (p.photo) return p.photo;
+  const inj = injFor(p.name, teamAbbr || toAbbr(teamOfPlayer(p) || p.teamName || ""));
+  return inj && inj.player_id
+    ? `https://sleepercdn.com/content/nfl/players/${inj.player_id}.jpg`
+    : null;
+}
+
 // Badge only when NOT plain healthy-active (keeps rows quiet)
 function InjBadge({ p, team, lg = false }) {
   const inj = injFor(p.name, team);
@@ -459,8 +475,9 @@ const isStarter = (p) => {
   return d <= (STARTER_DEPTH[String(p.pos || "").toUpperCase()] || 1);
 };
 
-function FormationView({ roster, abbr, onSelectPlayer }) {
-  const [unit, setUnit] = useState("offense");
+// unit state lives in TeamDetail now so the stat tiles up top can react to
+// the Offense/Defense toggle. lineRank = this team's OL/DL league ranks.
+function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }) {
   const SLOTS = unit === "offense" ? [
     { lbl: "WR", x: 11, y: 24, aliases: ["WR"] },
     { lbl: "WR", x: 89, y: 24, aliases: ["WR"] },
@@ -495,13 +512,18 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
     if (hit) used.add(hit.id);
     return hit;
   };
+  // Ring scheme (no yellow — it collided with the gold 90+ OVR chip):
+  //   emerald = Sleeper confirms healthy · orange = Questionable
+  //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
+  const injOf = (p) => (p ? injFor(p.name, abbr) : null);
+  const isOut = (inj) => !!inj && (inj.injury_status === "Out" || /injured reserve|pup|non football/i.test(String(inj.status || "")));
   const ringCls = (p) => {
     if (!p) return "border-white/40";
-    const inj = injFor(p.name, abbr);
-    const is2 = inj && inj.injury_status;
-    if (is2 === "Out" || (inj && /injured reserve|pup|non football/i.test(String(inj.status || "")))) return "border-rose-500";
-    if (is2 === "Doubtful") return "border-orange-500";
-    if (is2 === "Questionable") return "border-amber-400";
+    const inj = injOf(p);
+    if (!inj) return "border-slate-400";
+    if (isOut(inj)) return "border-red-600";
+    if (inj.injury_status === "Doubtful") return "border-red-500";
+    if (inj.injury_status === "Questionable") return "border-orange-400";
     return "border-emerald-500";
   };
   return (
@@ -518,10 +540,60 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
         ))}
       </div>
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
-        style={{ paddingBottom: "118%", background: "linear-gradient(180deg,#166534 0%,#15803d 55%,#166534 100%)" }}>
-        {[16, 32, 48, 64, 80].map((y) => (
-          <div key={y} className="absolute left-0 right-0 h-px bg-white/25" style={{ top: y + "%" }} />
+        style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
+        {/* subtle top-down light so it reads as turf, not a flat panel */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.10) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0.18) 100%)" }} />
+        {/* end zone in team color */}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-center"
+          style={{ height: "9%", background: teamColor(abbr), boxShadow: "inset 0 -6px 12px rgba(0,0,0,0.25)" }}>
+          <span className="text-white/60 font-black text-[11px] tracking-[0.5em] pl-[0.5em] uppercase">{abbr}</span>
+        </div>
+        <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
+        {/* faint team logo watermark at midfield */}
+        {TEAM_LOGOS[abbr] && (
+          <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
+        )}
+        {/* yard lines with numbers every other line */}
+        {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y, i) => (
+          <React.Fragment key={y}>
+            <div className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
+            {i % 2 === 1 && (
+              <>
+                <span className="absolute left-2 text-white/35 text-[9px] font-extrabold tabular-nums" style={{ top: y + "%", transform: "translateY(-50%)" }}>
+                  {[10, 20, 30, 40][(i - 1) / 2]}
+                </span>
+                <span className="absolute right-2 text-white/35 text-[9px] font-extrabold tabular-nums" style={{ top: y + "%", transform: "translateY(-50%)" }}>
+                  {[10, 20, 30, 40][(i - 1) / 2]}
+                </span>
+              </>
+            )}
+          </React.Fragment>
         ))}
+        {/* hash marks */}
+        {Array.from({ length: 19 }, (_, i) => 11.3 + i * 4.5).map((y) => (
+          <React.Fragment key={y}>
+            <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "39%", top: y + "%" }} />
+            <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "59.5%", top: y + "%" }} />
+          </React.Fragment>
+        ))}
+        {/* sidelines */}
+        <div className="absolute inset-y-0 left-0 w-[3px] bg-white/60" />
+        <div className="absolute inset-y-0 right-0 w-[3px] bg-white/60" />
+        {/* line-unit rank pill: OL on offense, DL on defense */}
+        {(() => {
+          const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
+          if (!lr || lr.rank == null) return null;
+          const tier = lr.rank <= 8 ? "bg-emerald-500 text-white"
+            : lr.rank <= 20 ? "bg-slate-900/80 text-white"
+            : "bg-rose-600 text-white";
+          return (
+            <div className={"absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 text-[10px] font-extrabold shadow-md " + tier}>
+              <span className="uppercase tracking-wide">{unit === "offense" ? "OL" : "DL"}</span>
+              <span className="tabular-nums">#{lr.rank}</span>
+              <span className="opacity-70 tabular-nums font-bold">{lr.avg.toFixed(1)} OVR</span>
+            </div>
+          );
+        })()}
         {SLOTS.map((s, i) => {
           const p = pick(s.aliases);
           return (
@@ -529,8 +601,9 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
               className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
               style={{ left: s.x + "%", top: s.y + "%" }}>
               <span className="relative">
-                {p && p.photo ? (
-                  <img src={p.photo} alt="" className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)} loading="lazy" />
+                {p && photoOf(p, abbr) ? (
+                  <img src={photoOf(p, abbr)} alt="" loading="lazy"
+                    className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p) + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
                 ) : (
                   <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
                     {s.lbl}
@@ -563,7 +636,7 @@ function FormationView({ roster, abbr, onSelectPlayer }) {
           );
         })}
       </div>
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Ring = health (green ok · yellow Questionable · orange Doubtful · red Out/IR) · chip = OVR · dashed = no player at spot in Airtable · tap for profile</div>
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Ring = health (green ok · orange Questionable · red Doubtful · red+faded Out/IR · gray no data) · chip = OVR · pill = line rank vs NFL · tap for profile</div>
     </div>
   );
 }
@@ -1001,10 +1074,42 @@ function seasonsAhead(n) {
 }
 const LINE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#f59e0b", "#0891b2"];
 
+// League-wide OL/DL rankings from Madden OVRs: average of the top-5 offensive
+// linemen and top-4 defensive linemen per team (typical starting fronts).
+// Needs 3+ rated players to count — thin data shouldn't produce a fake rank.
+const OL_POS = new Set(["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OC", "OL"]);
+const DL_POS = new Set(["DE", "DT", "NT", "EDGE", "DL"]);
+function computeLineRanks(players, teams) {
+  const per = {};
+  for (const t of teams || []) {
+    const a = t.abbr || toAbbr(t.name);
+    if (!a) continue;
+    const roster = players.filter((p) => (p.teamId && p.teamId === t.id) || teamOfPlayer(p) === a);
+    const avgTop = (posSet, n) => {
+      const rated = roster
+        .filter((p) => posSet.has(String(p.pos || "").toUpperCase()) && p.rating2k != null)
+        .map((p) => Number(p.rating2k))
+        .sort((x, y) => y - x)
+        .slice(0, n);
+      return rated.length >= 3 ? rated.reduce((s, v) => s + v, 0) / rated.length : null;
+    };
+    per[a] = { ol: { avg: avgTop(OL_POS, 5) }, dl: { avg: avgTop(DL_POS, 4) } };
+  }
+  for (const key of ["ol", "dl"]) {
+    const ranked = Object.entries(per)
+      .filter(([, v]) => v[key].avg != null)
+      .sort((x, y) => y[1][key].avg - x[1][key].avg);
+    ranked.forEach(([a], i) => { per[a][key].rank = i + 1; });
+  }
+  return per;
+}
+
 function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const abbr = team.abbr || toAbbr(team.name);
   const [seg, setSeg] = useState("roster");
+  const [unit, setUnit] = useState("offense"); // lifted from FormationView so tiles can react
+  const lineRanks = useMemo(() => computeLineRanks(players, teams), [players, teams]);
   const [roleFilter, setRoleFilter] = useState(null);
   const [chartMode, setChartMode] = useState("cap");
   const [capSeason, setCapSeason] = useState(null);
@@ -1033,7 +1138,17 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             <span className="text-3xl">🏈</span>
           )}
           <div className="min-w-0">
-            <div className="text-2xl font-extrabold leading-tight truncate">{team.name}</div>
+            <div className="text-2xl font-extrabold leading-tight truncate">
+              {team.name}
+              {(() => {
+                // Record lives next to the name now (freed the tile up top).
+                // teamRec already drops the tie unless there is one.
+                const r = teamRec(team, seasonStarted(teams));
+                return (r.w + r.l + r.t) > 0
+                  ? <span className="ml-2 text-base font-bold opacity-80 tabular-nums align-middle">({r.str})</span>
+                  : null;
+              })()}
+            </div>
             <div className="text-sm opacity-80 font-medium mt-0.5 truncate">
               {(() => {
                 if (!team.division) return [team.conference].filter(Boolean).join(" · ") || "—";
@@ -1052,15 +1167,38 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         <div className="grid grid-cols-3 gap-2">
           {(() => {
             const started = seasonStarted(teams);
-            const r = teamRec(team, started);
             const pts = teamPts(team, started);
+            const sx = team.stx || {}; // per-team stats merged from /api/standings
+            // Rank suffix, colored by tier so good/bad reads at a glance
+            const rk = (rank) => rank == null ? null
+              : <span className={rank <= 10 ? "text-green-600 dark:text-green-400" : rank <= 22 ? "text-slate-400" : "text-red-500 dark:text-red-400"}>#{rank} NFL</span>;
+            if (seg === "formation" && unit === "offense") {
+              return (
+                <>
+                  <Tile value={sx.passYpg != null ? sx.passYpg.toFixed(1) : "—"} label="Pass Yds/G" sub={rk(sx.passYpgRank)} />
+                  <Tile value={sx.rushYpg != null ? sx.rushYpg.toFixed(1) : "—"} label="Rush Yds/G" sub={rk(sx.rushYpgRank)} />
+                  <Tile value={sx.offTd != null ? sx.offTd : "—"} label="Off TDs" sub={rk(sx.offTdRank)} />
+                </>
+              );
+            }
+            if (seg === "formation" && unit === "defense") {
+              return (
+                <>
+                  <Tile value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Yds/G Alwd" sub={rk(sx.passYpgAllowedRank)} />
+                  <Tile value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Yds/G Alwd" sub={rk(sx.rushYpgAllowedRank)} />
+                  <Tile value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rk(sx.paRank)} />
+                </>
+              );
+            }
+            const diff = pts.pf != null && pts.pa != null ? Math.round(pts.pf - pts.pa) : null;
             return (
               <>
-                <Tile value={r.str} label={started ? "Record" : "Record ('25)"} />
                 <Tile value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored"
                   sub={team.ppg != null ? team.ppg.toFixed(1) + "/gm" : null} />
                 <Tile value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed"
                   sub={team.oppPpg != null ? team.oppPpg.toFixed(1) + "/gm" : null} />
+                <Tile value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff"
+                  valueClass={diff == null ? null : diff > 0 ? "text-emerald-600 dark:text-emerald-400" : diff < 0 ? "text-red-600 dark:text-red-400" : null} />
               </>
             );
           })()}
@@ -1152,7 +1290,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             </div>
           </div>
         ))}
-        {seg === "formation" && <FormationView roster={roster} abbr={abbr} onSelectPlayer={onSelectPlayer} />}
+        {seg === "formation" && <FormationView roster={roster} abbr={abbr} unit={unit} setUnit={setUnit} onSelectPlayer={onSelectPlayer} lineRank={lineRanks[abbr]} />}
         {seg === "contracts" && (
           <>
             <div className="flex items-baseline justify-between mt-6 mb-2 px-1">
@@ -1584,13 +1722,38 @@ export default function App() {
   const [sel, setSel] = useState(null);
   const [players, setPlayers] = useState(null);
   const [teams, setTeams] = useState([]);
+  const [stand, setStand] = useState(null); // records + stat ranks from /api/standings
+
+  // Automated records/stats: merge ESPN data into the Airtable teams by abbr.
+  // Airtable values still win when present; ESPN fills the blanks (and stx).
+  const mergedTeams = useMemo(() => {
+    if (!stand || !stand.teams) return teams;
+    const find = (abbr) => stand.teams.find((s) => injTeamEq(s.abbr, abbr));
+    return teams.map((t) => {
+      const s = find(t.abbr || toAbbr(t.name));
+      if (!s) return t;
+      const stx = {
+        passYpg: s.passYpg, passYpgRank: s.passYpgRank,
+        rushYpg: s.rushYpg, rushYpgRank: s.rushYpgRank,
+        offTd: s.offTd, offTdRank: s.offTdRank,
+        passYpgAllowed: s.passYpgAllowed, passYpgAllowedRank: s.passYpgAllowedRank,
+        rushYpgAllowed: s.rushYpgAllowed, rushYpgAllowedRank: s.rushYpgAllowedRank,
+        paRank: s.paRank,
+      };
+      return stand.isCurrent
+        ? { ...t, wins: t.wins ?? s.wins, losses: t.losses ?? s.losses, ties: t.ties ?? s.ties, pf: t.pf ?? s.pf, pa: t.pa ?? s.pa, stx }
+        : { ...t, winsPrev: t.winsPrev ?? s.wins, lossesPrev: t.lossesPrev ?? s.losses, tiesPrev: t.tiesPrev ?? s.ties, pfPrev: t.pfPrev ?? s.pf, paPrev: t.paPrev ?? s.pa, stx };
+    });
+  }, [teams, stand]);
   const [selTeam, setSelTeam] = useState(null);
   const [error, setError] = useState(null);
 
   const [, setInjTick] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch("https://api.sleeper.app/v1/players/nfl?active=true")
+    // No ?active=true — that filter excluded IR/PUP players, which is why
+    // injured players were showing green rings (no match = assumed healthy).
+    fetch("https://api.sleeper.app/v1/players/nfl")
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
@@ -1612,6 +1775,13 @@ export default function App() {
         setPlayers(d.players); setTeams(d.teams || []);
       } })
       .catch((e) => setError(String(e)));
+  }, []);
+  useEffect(() => {
+    // Non-fatal: if ESPN is down the app just shows Airtable's numbers.
+    fetch("/api/standings")
+      .then((r) => r.json())
+      .then((d) => { if (d && d.teams) setStand(d); })
+      .catch(() => {});
   }, []);
 
   if (sel) {
@@ -1635,11 +1805,11 @@ export default function App() {
       {!players && !error && <div className="text-center text-sm text-slate-400 pt-24">Loading…</div>}
 
       {players && tab === "teams" && !selTeam && (
-        <TeamsTab teams={teams} players={players} onSelect={setSelTeam} />
+        <TeamsTab teams={mergedTeams} players={players} onSelect={setSelTeam} />
       )}
       {players && tab === "teams" && selTeam && (
         <TeamDetail
-          team={selTeam} teams={teams}
+          team={mergedTeams.find((t) => t.id === selTeam.id) || selTeam} teams={mergedTeams}
           players={players}
           onBack={() => setSelTeam(null)}
           onSelectPlayer={setSel}
