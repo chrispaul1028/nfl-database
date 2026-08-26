@@ -22,11 +22,18 @@ const CONFIG = {
   minPlayers: 500, // a real pull is ~2500+; fewer means the feed shape changed
 };
 
-const nrm = (x) => String(x || "")
-  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-  .replace(/\./g, "")
-  .replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "")
-  .replace(/\s+/g, " ").trim().toLowerCase();
+// Common roster nickname drift (your "Pat Surtain" vs EA's "Patrick Surtain")
+const NICKNAMES = { pat: "patrick", kenny: "kenneth", ken: "kenneth", mike: "michael", rob: "robert", bob: "robert", josh: "joshua", alex: "alexander", cam: "cameron", matt: "matthew", dan: "daniel", danny: "daniel", chris: "christopher", zach: "zachary", nick: "nicholas", jake: "jacob", will: "william", tony: "anthony", drew: "andrew", jeff: "jeffrey", greg: "gregory", sam: "samuel", ben: "benjamin", joe: "joseph", jim: "james", tom: "thomas", steve: "stephen", dave: "david" };
+const nrm = (x) => {
+  const s = String(x || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.'’`]/g, "")
+    .replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "")
+    .replace(/\s+/g, " ").trim().toLowerCase();
+  const parts = s.split(" ");
+  if (parts.length > 1 && NICKNAMES[parts[0]]) parts[0] = NICKNAMES[parts[0]];
+  return parts.join(" ");
+};
 
 const ABBR_ALIASES = [["WAS", "WSH"], ["JAX", "JAC"], ["LAR", "LA"], ["ARI", "ARZ"], ["BAL", "BLT"], ["CLE", "CLV"], ["HOU", "HST"]];
 const teamEq = (a, b) => {

@@ -389,6 +389,14 @@ export default async function handler(req, res) {
         archetype: asText(getField(p.fields, FIELDS.playerArchetype)),
         role: asText(getField(p.fields, FIELDS.playerRole)),
         sort: sortRank(getField(p.fields, FIELDS.playerSort)),
+        // Raw depth-chart label ("RG1", "WR2") so the formation view can map
+        // players to slots by YOUR sort priority, not just the Position field.
+        sortLabel: (() => {
+          const v = getField(p.fields, FIELDS.playerSort);
+          if (v == null) return null;
+          const s = String(Array.isArray(v) ? v[0] : v).trim().toUpperCase();
+          return s || null;
+        })(),
         draft: asText(getField(p.fields, FIELDS.playerDraft)).replace(/^\s*\d{4}\s*[:\u00b7\-]?\s*/, ""),
         draftYear: coerceNum(getField(p.fields, FIELDS.playerDraftYear)),
         birthplace: asText(getField(p.fields, FIELDS.playerBirthplace)),
