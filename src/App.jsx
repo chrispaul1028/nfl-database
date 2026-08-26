@@ -478,6 +478,13 @@ const isStarter = (p) => {
 // unit state lives in TeamDetail now so the stat tiles up top can react to
 // the Offense/Defense toggle. lineRank = this team's OL/DL league ranks.
 function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }) {
+  // Scheme detection: if the roster has a nickel back (Sort Priority "NB1",
+  // "NCB1", "SLOT1", or Position NB/NCB), the defense renders in nickel —
+  // 2 LBs and a fifth DB over the slot — instead of a base 4-3. Driven
+  // entirely by Airtable, so different teams can line up differently.
+  const hasNickel = roster.some((p) =>
+    /^(NB|NCB|SLOT)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
+    ["NB", "NCB"].includes(String(p.pos || "").toUpperCase()));
   const SLOTS = unit === "offense" ? [
     { lbl: "WR", x: 11, y: 24, aliases: ["WR"] },
     { lbl: "WR", x: 89, y: 24, aliases: ["WR"] },
@@ -495,11 +502,19 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     { lbl: "DT", x: 38, y: 72, aliases: ["DT", "NT", "DL"] },
     { lbl: "DT", x: 62, y: 72, aliases: ["DT", "NT", "DL"] },
     { lbl: "DE", x: 86, y: 72, aliases: ["DE", "EDGE"] },
-    { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
-    { lbl: "LB", x: 50, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
-    { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    ...(hasNickel ? [
+      { lbl: "LB", x: 33, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+      { lbl: "LB", x: 67, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    ] : [
+      { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+      { lbl: "LB", x: 50, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+      { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+    ]),
     { lbl: "CB", x: 11, y: 40, aliases: ["CB", "DB"] },
     { lbl: "CB", x: 89, y: 40, aliases: ["CB", "DB"] },
+    // NB slot sits after the CBs so CB1/CB2 claim the corners before the
+    // nickel falls back to the position field.
+    ...(hasNickel ? [{ lbl: "NB", x: 50, y: 40, aliases: ["NB", "NCB", "SLOT", "CB"] }] : []),
     { lbl: "S", x: 33, y: 24, aliases: ["S", "FS", "SS"] },
     { lbl: "S", x: 67, y: 24, aliases: ["S", "FS", "SS"] },
   ];
@@ -512,9 +527,13 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   const pick = (aliases) => {
     const lbl = (p) => String(p.sortLabel || "").toUpperCase();
     const depthNo = (p) => { const m = lbl(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
+    // Which alias does this player's label match? Order matters: for the RB
+    // slot ["RB","HB","FB"], RB1 must beat FB1 (fixes fullbacks outranking
+    // the starting back on an alphabetical tiebreak).
+    const aliasIdx = (p) => aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lbl(p)));
     const byLabel = roster
-      .filter((p) => !used.has(p.id) && aliases.some((a) => new RegExp("^" + a + "\\d*$").test(lbl(p))))
-      .sort((a, b) => depthNo(a) - depthNo(b));
+      .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1)
+      .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
     const byPos = roster
       .filter((p) => !used.has(p.id) && aliases.includes(String(p.pos || "").toUpperCase()))
       .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
@@ -634,12 +653,18 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                   {p && p.rating2k != null ? (Math.round(p.rating2k) >= 90 ? "⭐" : "") + Math.round(p.rating2k) : s.lbl}
                 </span>
               </span>
-              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[70px] truncate drop-shadow">
+              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[84px] truncate drop-shadow">
                 {p ? (() => {
                   const parts = p.name.split(" ");
-                  return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                  const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
                     ? parts.slice(-2).join(" ")
                     : parts.slice(-1)[0];
+                  return (
+                    <>
+                      {last}
+                      {p.pos ? <span className="text-white/55 font-semibold"> · {String(p.pos).toUpperCase()}</span> : null}
+                    </>
+                  );
                 })() : ""}
               </span>
             </button>
