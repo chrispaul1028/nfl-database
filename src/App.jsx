@@ -504,11 +504,21 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     { lbl: "S", x: 67, y: 24, aliases: ["S", "FS", "SS"] },
   ];
   const used = new Set();
+  // Slot filling, in priority order:
+  //   1. Sort Priority label from Airtable ("RG1" -> RG slot, "WR2" -> 2nd WR
+  //      slot) — this is the depth chart as the user maintains it, and it
+  //      works even when Position says something generic like "OL".
+  //   2. Position field, lowest sort value first (original behavior).
   const pick = (aliases) => {
-    const cands = roster
-      .filter((p) => aliases.includes(String(p.pos || "").toUpperCase()) && !used.has(p.id))
+    const lbl = (p) => String(p.sortLabel || "").toUpperCase();
+    const depthNo = (p) => { const m = lbl(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
+    const byLabel = roster
+      .filter((p) => !used.has(p.id) && aliases.some((a) => new RegExp("^" + a + "\\d*$").test(lbl(p))))
+      .sort((a, b) => depthNo(a) - depthNo(b));
+    const byPos = roster
+      .filter((p) => !used.has(p.id) && aliases.includes(String(p.pos || "").toUpperCase()))
       .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
-    const hit = cands[0] || null;
+    const hit = byLabel[0] || byPos[0] || null;
     if (hit) used.add(hit.id);
     return hit;
   };
