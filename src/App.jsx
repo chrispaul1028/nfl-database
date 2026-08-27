@@ -457,9 +457,17 @@ function InjBadge({ p, team, lg = false }) {
     else if (/inactive/i.test(st)) { label = "INACTIVE"; cls = "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"; }
   }
   if (!label) return null;
+  const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
-    <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
-      {label}
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
+        {label}
+      </span>
+      {note && (
+        <span className={"text-slate-400 dark:text-slate-500 font-semibold truncate " + (lg ? "text-[11px]" : "text-[9px]")}>
+          {note}
+        </span>
+      )}
     </span>
   );
 }
@@ -498,25 +506,25 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     { lbl: "QB", x: 50, y: 72, aliases: ["QB"] },
     { lbl: "RB", x: 50, y: 90, aliases: ["RB", "HB", "FB"] },
   ] : [
-    { lbl: "DE", x: 14, y: 72, aliases: ["DE", "EDGE"] },
-    { lbl: "DT", x: 38, y: 72, aliases: ["DT", "NT", "DL"] },
-    { lbl: "DT", x: 62, y: 72, aliases: ["DT", "NT", "DL"] },
-    { lbl: "DE", x: 86, y: 72, aliases: ["DE", "EDGE"] },
+    { lbl: "LDE", x: 14, y: 72, aliases: ["LDE", "DE", "EDGE", "LOLB"] },
+    { lbl: "DT", x: 38, y: 72, aliases: ["LDT", "DT", "NT", "DL"] },
+    { lbl: "DT", x: 62, y: 72, aliases: ["RDT", "DT", "NT", "DL"] },
+    { lbl: "RDE", x: 86, y: 72, aliases: ["RDE", "DE", "EDGE", "ROLB"] },
     ...(hasNickel ? [
-      { lbl: "LB", x: 33, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
-      { lbl: "LB", x: 67, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+      { lbl: "LB", x: 33, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 67, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
     ] : [
-      { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
-      { lbl: "LB", x: 50, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
-      { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB"] },
+      { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 50, y: 56, aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
     ]),
-    { lbl: "CB", x: 11, y: 40, aliases: ["CB", "DB"] },
-    { lbl: "CB", x: 89, y: 40, aliases: ["CB", "DB"] },
+    { lbl: "CB", x: 11, y: 40, aliases: ["LCB", "CB", "DB"] },
+    { lbl: "CB", x: 89, y: 40, aliases: ["RCB", "CB", "DB"] },
     // NB slot sits after the CBs so CB1/CB2 claim the corners before the
     // nickel falls back to the position field.
     ...(hasNickel ? [{ lbl: "NB", x: 50, y: 40, aliases: ["NB", "NCB", "SLOT", "CB"] }] : []),
-    { lbl: "S", x: 33, y: 24, aliases: ["S", "FS", "SS"] },
-    { lbl: "S", x: 67, y: 24, aliases: ["S", "FS", "SS"] },
+    { lbl: "FS", x: 33, y: 24, aliases: ["FS", "S", "SS"] },
+    { lbl: "SS", x: 67, y: 24, aliases: ["SS", "S", "FS"] },
   ];
   const used = new Set();
   // Slot filling, in priority order:
@@ -578,9 +586,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           <span className="text-white/60 font-black text-[11px] tracking-[0.5em] pl-[0.5em] uppercase">{abbr}</span>
         </div>
         <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
-        {/* faint team logo watermark at midfield */}
+        {/* midfield logo painted on a faint disc — white-heavy logos (Jets,
+            Colts) vanish at raw low opacity on green, the disc keeps them visible */}
         {TEAM_LOGOS[abbr] && (
-          <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[38%] aspect-square rounded-full bg-white/15 flex items-center justify-center pointer-events-none select-none">
+            <img src={TEAM_LOGOS[abbr]} alt="" className="w-[78%] opacity-40" />
+          </div>
         )}
         {/* yard lines with numbers every other line */}
         {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y, i) => (
@@ -643,30 +654,27 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     #{cleanNo(p.no)}
                   </span>
                 )}
-                <span className={"absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold tabular-nums shadow " +
-                  (p && p.rating2k != null
-                    ? (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
-                      : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
-                      : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
-                      : "bg-rose-600 text-white")
-                    : "bg-slate-900/85 text-white")}>
-                  {p && p.rating2k != null ? (Math.round(p.rating2k) >= 90 ? "⭐" : "") + Math.round(p.rating2k) : s.lbl}
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold shadow bg-slate-900/85 text-white">
+                  {s.lbl}
                 </span>
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[84px] truncate drop-shadow">
                 {p ? (() => {
                   const parts = p.name.split(" ");
-                  const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                  return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
                     ? parts.slice(-2).join(" ")
                     : parts.slice(-1)[0];
-                  return (
-                    <>
-                      {last}
-                      {p.pos ? <span className="text-white/55 font-semibold"> · {String(p.pos).toUpperCase()}</span> : null}
-                    </>
-                  );
                 })() : ""}
               </span>
+              {p && p.rating2k != null && (
+                <span className={"text-[9px] font-extrabold tabular-nums drop-shadow " +
+                  (Math.round(p.rating2k) >= 90 ? "text-amber-300"
+                    : Math.round(p.rating2k) >= 85 ? "text-emerald-300"
+                    : Math.round(p.rating2k) >= 70 ? "text-white/80"
+                    : "text-rose-300")}>
+                  {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)} OVR
+                </span>
+              )}
             </button>
           );
         })}
@@ -1199,20 +1207,21 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
       </div>
 
       <div className="px-4 -mt-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className={"grid gap-2 " + (seg === "formation" ? "grid-cols-2" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
             const pts = teamPts(team, started);
             const sx = team.stx || {}; // per-team stats merged from /api/standings
-            // Rank suffix, colored by tier so good/bad reads at a glance
+            // Rank line under each stat: top 10 green, 11-20 yellow, bottom 12 red
             const rk = (rank) => rank == null ? null
-              : <span className={rank <= 10 ? "text-green-600 dark:text-green-400" : rank <= 22 ? "text-slate-400" : "text-red-500 dark:text-red-400"}>#{rank} NFL</span>;
+              : <span className={rank <= 10 ? "text-green-600 dark:text-green-400" : rank <= 20 ? "text-yellow-600 dark:text-yellow-400" : "text-red-500 dark:text-red-400"}>#{rank} NFL</span>;
             if (seg === "formation" && unit === "offense") {
               return (
                 <>
                   <Tile value={sx.passYpg != null ? sx.passYpg.toFixed(1) : "—"} label="Pass Yds/G" sub={rk(sx.passYpgRank)} />
+                  <Tile value={sx.passTd != null ? sx.passTd : "—"} label="Pass TDs" sub={rk(sx.passTdRank)} />
                   <Tile value={sx.rushYpg != null ? sx.rushYpg.toFixed(1) : "—"} label="Rush Yds/G" sub={rk(sx.rushYpgRank)} />
-                  <Tile value={sx.offTd != null ? sx.offTd : "—"} label="Off TDs" sub={rk(sx.offTdRank)} />
+                  <Tile value={sx.rushTd != null ? sx.rushTd : "—"} label="Rush TDs" sub={rk(sx.rushTdRank)} />
                 </>
               );
             }
@@ -1220,8 +1229,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
               return (
                 <>
                   <Tile value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Yds/G Alwd" sub={rk(sx.passYpgAllowedRank)} />
+                  <Tile value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="Pass TDs Alwd" sub={rk(sx.passTdAllowedRank)} />
                   <Tile value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Yds/G Alwd" sub={rk(sx.rushYpgAllowedRank)} />
-                  <Tile value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rk(sx.paRank)} />
+                  <Tile value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="Rush TDs Alwd" sub={rk(sx.rushTdAllowedRank)} />
                 </>
               );
             }
@@ -1771,8 +1781,12 @@ export default function App() {
         passYpg: s.passYpg, passYpgRank: s.passYpgRank,
         rushYpg: s.rushYpg, rushYpgRank: s.rushYpgRank,
         offTd: s.offTd, offTdRank: s.offTdRank,
+        passTd: s.passTd, passTdRank: s.passTdRank,
+        rushTd: s.rushTd, rushTdRank: s.rushTdRank,
         passYpgAllowed: s.passYpgAllowed, passYpgAllowedRank: s.passYpgAllowedRank,
         rushYpgAllowed: s.rushYpgAllowed, rushYpgAllowedRank: s.rushYpgAllowedRank,
+        passTdAllowed: s.passTdAllowed, passTdAllowedRank: s.passTdAllowedRank,
+        rushTdAllowed: s.rushTdAllowed, rushTdAllowedRank: s.rushTdAllowedRank,
         paRank: s.paRank,
       };
       return stand.isCurrent
