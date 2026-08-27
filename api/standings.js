@@ -12,10 +12,14 @@ const CANDIDATES = {
   passYpg: ["netPassingYardsPerGame", "passingYardsPerGame"],
   rushYpg: ["rushingYardsPerGame"],
   offTd: ["totalTouchdowns", "offensiveTouchdowns"],
+  passTd: ["passingTouchdowns"],
+  rushTd: ["rushingTouchdowns"],
   // Defense-allowed names are the least stable across ESPN seasons; if these
   // all miss, the fields come back null and ?debug=1 shows what to add here.
   passYpgAllowed: ["netPassingYardsAllowedPerGame", "passingYardsAllowedPerGame", "opponentNetPassingYardsPerGame", "oppPassingYardsPerGame", "netPassingYardsAllowed"],
   rushYpgAllowed: ["rushingYardsAllowedPerGame", "opponentRushingYardsPerGame", "oppRushingYardsPerGame", "rushingYardsAllowed"],
+  passTdAllowed: ["passingTouchdownsAllowed", "opponentPassingTouchdowns", "oppPassingTouchdowns"],
+  rushTdAllowed: ["rushingTouchdownsAllowed", "opponentRushingTouchdowns", "oppRushingTouchdowns"],
 };
 
 function seasonYear() {
@@ -97,8 +101,12 @@ export default async function handler(req, res) {
     addRanks(teams, "passYpg", "desc");
     addRanks(teams, "rushYpg", "desc");
     addRanks(teams, "offTd", "desc");
+    addRanks(teams, "passTd", "desc");
+    addRanks(teams, "rushTd", "desc");
     addRanks(teams, "passYpgAllowed", "asc");
     addRanks(teams, "rushYpgAllowed", "asc");
+    addRanks(teams, "passTdAllowed", "asc");
+    addRanks(teams, "rushTdAllowed", "asc");
     addRanks(teams, "pa", "asc");
 
     res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=7200");
