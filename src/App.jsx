@@ -154,11 +154,11 @@ function ordinal(n) {
   return n + suffix;
 }
 
-function Tile({ value, label, sub, accent, valueClass }) {
+function Tile({ value, label, sub, accent, valueClass, compact }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-2 py-4 text-center shadow-sm flex flex-col items-center justify-center">
-      <div className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase mb-1">{label}</div>
-      <div className={"text-2xl font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}</div>
+    <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}>
+      <div className={"font-semibold text-slate-400 tracking-widest uppercase mb-1 " + (compact ? "text-[8px]" : "text-[10px]")}>{label}</div>
+      <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}</div>
       {sub && (
         <div className={"text-[10px] font-bold mt-0.5 " + (typeof sub === "object" && sub.cls ? sub.cls : "text-blue-600 dark:text-blue-400")}>
           {typeof sub === "object" ? sub.label : sub}
@@ -580,18 +580,29 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
         {/* subtle top-down light so it reads as turf, not a flat panel */}
         <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.10) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0.18) 100%)" }} />
-        {/* end zone in team color */}
+        {/* end zone in team color — line rank pill lives here so it's visible
+            without scrolling, for offense (OL) and defense (DL) alike */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-center"
           style={{ height: "9%", background: teamColor(abbr), boxShadow: "inset 0 -6px 12px rgba(0,0,0,0.25)" }}>
           <span className="text-white/60 font-black text-[11px] tracking-[0.5em] pl-[0.5em] uppercase">{abbr}</span>
+          {(() => {
+            const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
+            if (!lr || lr.rank == null) return null;
+            const tier = lr.rank <= 10 ? "bg-emerald-500 text-white"
+              : lr.rank <= 20 ? "bg-yellow-400 text-slate-900"
+              : "bg-rose-600 text-white";
+            return (
+              <span className={"absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold shadow " + tier}>
+                <span>{unit === "offense" ? "OL" : "DL"}</span>
+                <span className="tabular-nums">#{lr.rank}</span>
+              </span>
+            );
+          })()}
         </div>
         <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
-        {/* midfield logo painted on a faint disc — white-heavy logos (Jets,
-            Colts) vanish at raw low opacity on green, the disc keeps them visible */}
+        {/* faint team logo watermark at midfield */}
         {TEAM_LOGOS[abbr] && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[38%] aspect-square rounded-full bg-white/15 flex items-center justify-center pointer-events-none select-none">
-            <img src={TEAM_LOGOS[abbr]} alt="" className="w-[78%] opacity-40" />
-          </div>
+          <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
         )}
         {/* yard lines with numbers every other line */}
         {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y, i) => (
@@ -619,21 +630,6 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         {/* sidelines */}
         <div className="absolute inset-y-0 left-0 w-[3px] bg-white/60" />
         <div className="absolute inset-y-0 right-0 w-[3px] bg-white/60" />
-        {/* line-unit rank pill: OL on offense, DL on defense */}
-        {(() => {
-          const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
-          if (!lr || lr.rank == null) return null;
-          const tier = lr.rank <= 8 ? "bg-emerald-500 text-white"
-            : lr.rank <= 20 ? "bg-slate-900/80 text-white"
-            : "bg-rose-600 text-white";
-          return (
-            <div className={"absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 text-[10px] font-extrabold shadow-md " + tier}>
-              <span className="uppercase tracking-wide">{unit === "offense" ? "OL" : "DL"}</span>
-              <span className="tabular-nums">#{lr.rank}</span>
-              <span className="opacity-70 tabular-nums font-bold">{lr.avg.toFixed(1)} OVR</span>
-            </div>
-          );
-        })()}
         {SLOTS.map((s, i) => {
           const p = pick(s.aliases);
           return (
@@ -667,12 +663,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                 })() : ""}
               </span>
               {p && p.rating2k != null && (
-                <span className={"text-[9px] font-extrabold tabular-nums drop-shadow " +
-                  (Math.round(p.rating2k) >= 90 ? "text-amber-300"
-                    : Math.round(p.rating2k) >= 85 ? "text-emerald-300"
-                    : Math.round(p.rating2k) >= 70 ? "text-white/80"
-                    : "text-rose-300")}>
-                  {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)} OVR
+                <span className={"mt-0.5 px-1.5 rounded-full text-[9px] font-extrabold tabular-nums shadow " +
+                  (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
+                    : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
+                    : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
+                    : "bg-rose-600 text-white")}>
+                  {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)}
                 </span>
               )}
             </button>
@@ -1121,8 +1117,14 @@ const LINE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#f59e0b", "#08
 // linemen and top-4 defensive linemen per team (typical starting fronts).
 // Needs 3+ rated players to count — thin data shouldn't produce a fake rank.
 const OL_POS = new Set(["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OC", "OL"]);
-const DL_POS = new Set(["DE", "DT", "NT", "EDGE", "DL"]);
+const DL_POS = new Set(["DE", "DT", "NT", "EDGE", "DL", "LDE", "RDE", "LDT", "RDT"]);
 function computeLineRanks(players, teams) {
+  // A player counts toward a line by Position OR by depth label — so an
+  // "LDE1" whose Position field says LB still counts as a defensive lineman.
+  const baseLabel = (p) => {
+    const m = String(p.sortLabel || "").toUpperCase().match(/^([A-Z]+)/);
+    return m ? m[1] : null;
+  };
   const per = {};
   for (const t of teams || []) {
     const a = t.abbr || toAbbr(t.name);
@@ -1130,7 +1132,7 @@ function computeLineRanks(players, teams) {
     const roster = players.filter((p) => (p.teamId && p.teamId === t.id) || teamOfPlayer(p) === a);
     const avgTop = (posSet, n) => {
       const rated = roster
-        .filter((p) => posSet.has(String(p.pos || "").toUpperCase()) && p.rating2k != null)
+        .filter((p) => (posSet.has(String(p.pos || "").toUpperCase()) || posSet.has(baseLabel(p))) && p.rating2k != null)
         .map((p) => Number(p.rating2k))
         .sort((x, y) => y - x)
         .slice(0, n);
@@ -1207,31 +1209,38 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
       </div>
 
       <div className="px-4 -mt-3">
-        <div className={"grid gap-2 " + (seg === "formation" ? "grid-cols-2" : "grid-cols-3")}>
+        <div className={"grid gap-2 " + (seg === "formation" ? "grid-cols-4" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
             const pts = teamPts(team, started);
             const sx = team.stx || {}; // per-team stats merged from /api/standings
-            // Rank line under each stat: top 10 green, 11-20 yellow, bottom 12 red
-            const rk = (rank) => rank == null ? null
-              : <span className={rank <= 10 ? "text-green-600 dark:text-green-400" : rank <= 20 ? "text-yellow-600 dark:text-yellow-400" : "text-red-500 dark:text-red-400"}>#{rank} NFL</span>;
+            // Rank line under each stat: top 10 green, 11-20 yellow, bottom 12 red.
+            // (Passed as {label, cls} — the format Tile's sub actually renders;
+            // a JSX element here silently displays nothing, which is why ranks
+            // were invisible before.)
+            const rk = (rank) => rank == null ? null : {
+              label: "#" + rank,
+              cls: rank <= 10 ? "text-green-600 dark:text-green-400"
+                : rank <= 20 ? "text-yellow-600 dark:text-yellow-400"
+                : "text-red-500 dark:text-red-400",
+            };
             if (seg === "formation" && unit === "offense") {
               return (
                 <>
-                  <Tile value={sx.passYpg != null ? sx.passYpg.toFixed(1) : "—"} label="Pass Yds/G" sub={rk(sx.passYpgRank)} />
-                  <Tile value={sx.passTd != null ? sx.passTd : "—"} label="Pass TDs" sub={rk(sx.passTdRank)} />
-                  <Tile value={sx.rushYpg != null ? sx.rushYpg.toFixed(1) : "—"} label="Rush Yds/G" sub={rk(sx.rushYpgRank)} />
-                  <Tile value={sx.rushTd != null ? sx.rushTd : "—"} label="Rush TDs" sub={rk(sx.rushTdRank)} />
+                  <Tile compact value={sx.passYpg != null ? sx.passYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.passYpgRank)} />
+                  <Tile compact value={sx.passTd != null ? sx.passTd : "—"} label="Pass TD" sub={rk(sx.passTdRank)} />
+                  <Tile compact value={sx.rushYpg != null ? sx.rushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.rushYpgRank)} />
+                  <Tile compact value={sx.rushTd != null ? sx.rushTd : "—"} label="Rush TD" sub={rk(sx.rushTdRank)} />
                 </>
               );
             }
             if (seg === "formation" && unit === "defense") {
               return (
                 <>
-                  <Tile value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Yds/G Alwd" sub={rk(sx.passYpgAllowedRank)} />
-                  <Tile value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="Pass TDs Alwd" sub={rk(sx.passTdAllowedRank)} />
-                  <Tile value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Yds/G Alwd" sub={rk(sx.rushYpgAllowedRank)} />
-                  <Tile value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="Rush TDs Alwd" sub={rk(sx.rushTdAllowedRank)} />
+                  <Tile compact value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Alwd" sub={rk(sx.passYpgAllowedRank)} />
+                  <Tile compact value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="P·TD Alwd" sub={rk(sx.passTdAllowedRank)} />
+                  <Tile compact value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Alwd" sub={rk(sx.rushYpgAllowedRank)} />
+                  <Tile compact value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="R·TD Alwd" sub={rk(sx.rushTdAllowedRank)} />
                 </>
               );
             }
