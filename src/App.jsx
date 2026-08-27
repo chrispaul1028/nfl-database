@@ -154,6 +154,13 @@ function ordinal(n) {
   return n + suffix;
 }
 
+// 1 -> "1st", 22 -> "22nd", 13 -> "13th"
+function ordinal(n) {
+  const v = Math.abs(Number(n)), t = v % 10, h = v % 100;
+  const sfx = h >= 11 && h <= 13 ? "th" : t === 1 ? "st" : t === 2 ? "nd" : t === 3 ? "rd" : "th";
+  return n + sfx;
+}
+
 function Tile({ value, label, sub, accent, valueClass, compact }) {
   return (
     <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}>
@@ -588,13 +595,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           {(() => {
             const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
             if (!lr || lr.rank == null) return null;
+            // Same tiers as the stat tiles: top 10 green, 11-20 yellow, bottom 12 red
             const tier = lr.rank <= 10 ? "bg-emerald-500 text-white"
               : lr.rank <= 20 ? "bg-yellow-400 text-slate-900"
               : "bg-rose-600 text-white";
             return (
               <span className={"absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold shadow " + tier}>
                 <span>{unit === "offense" ? "OL" : "DL"}</span>
-                <span className="tabular-nums">#{lr.rank}</span>
+                <span className="tabular-nums">{ordinal(lr.rank)}</span>
               </span>
             );
           })()}
@@ -650,9 +658,23 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     #{cleanNo(p.no)}
                   </span>
                 )}
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold shadow bg-slate-900/85 text-white">
-                  {s.lbl}
-                </span>
+                {/* position rides above the circle; rating takes the prime
+                    spot at the photo's bottom edge — one clean row of name
+                    below, no more stacking into the next line of players */}
+                {p && (
+                  <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[8px] font-extrabold shadow bg-slate-900/85 text-white">
+                    {s.lbl}
+                  </span>
+                )}
+                {p && p.rating2k != null && (
+                  <span className={"absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[9px] font-extrabold tabular-nums shadow " +
+                    (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
+                      : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
+                      : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
+                      : "bg-rose-600 text-white")}>
+                    {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)}
+                  </span>
+                )}
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[84px] truncate drop-shadow">
                 {p ? (() => {
@@ -662,15 +684,6 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     : parts.slice(-1)[0];
                 })() : ""}
               </span>
-              {p && p.rating2k != null && (
-                <span className={"mt-0.5 px-1.5 rounded-full text-[9px] font-extrabold tabular-nums shadow " +
-                  (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
-                    : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
-                    : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
-                    : "bg-rose-600 text-white")}>
-                  {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)}
-                </span>
-              )}
             </button>
           );
         })}
@@ -1219,7 +1232,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             // a JSX element here silently displays nothing, which is why ranks
             // were invisible before.)
             const rk = (rank) => rank == null ? null : {
-              label: "#" + rank,
+              label: "(" + ordinal(rank) + ")",
               cls: rank <= 10 ? "text-green-600 dark:text-green-400"
                 : rank <= 20 ? "text-yellow-600 dark:text-yellow-400"
                 : "text-red-500 dark:text-red-400",
