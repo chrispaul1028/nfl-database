@@ -154,13 +154,6 @@ function ordinal(n) {
   return n + suffix;
 }
 
-// 1 -> "1st", 22 -> "22nd", 13 -> "13th"
-function ordinal(n) {
-  const v = Math.abs(Number(n)), t = v % 10, h = v % 100;
-  const sfx = h >= 11 && h <= 13 ? "th" : t === 1 ? "st" : t === 2 ? "nd" : t === 3 ? "rd" : "th";
-  return n + sfx;
-}
-
 function Tile({ value, label, sub, accent, valueClass, compact }) {
   return (
     <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}>
