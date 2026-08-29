@@ -646,16 +646,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     {s.lbl}
                   </span>
                 )}
-                {p && cleanNo(p.no) && (
-                  <span className="absolute top-1/2 -translate-y-1/2 -left-2.5 px-1 rounded text-[8px] font-extrabold bg-white/85 text-slate-700 tabular-nums shadow">
-                    #{cleanNo(p.no)}
-                  </span>
-                )}
-                {/* position rides above the circle; rating takes the prime
-                    spot at the photo's bottom edge — one clean row of name
-                    below, no more stacking into the next line of players */}
+                {/* Layout: position = left-edge tag (quietest info, proven
+                    spot), rating = bottom pill (the scan target), number
+                    merged into the single name line below. One row of text,
+                    nothing above the head. */}
                 {p && (
-                  <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full text-[8px] font-extrabold shadow bg-slate-900/85 text-white">
+                  <span className="absolute top-1/2 -translate-y-1/2 -left-3 px-1 rounded text-[8px] font-extrabold bg-white/85 text-slate-700 shadow">
                     {s.lbl}
                   </span>
                 )}
@@ -669,12 +665,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                   </span>
                 )}
               </span>
-              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[84px] truncate drop-shadow">
+              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[92px] truncate drop-shadow">
                 {p ? (() => {
                   const parts = p.name.split(" ");
-                  return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                  const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
                     ? parts.slice(-2).join(" ")
                     : parts.slice(-1)[0];
+                  const no = cleanNo(p.no);
+                  return (no ? "#" + no + " " : "") + last;
                 })() : ""}
               </span>
             </button>
