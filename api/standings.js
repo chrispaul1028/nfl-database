@@ -14,12 +14,12 @@ const CANDIDATES = {
   offTd: ["totalTouchdowns", "offensiveTouchdowns"],
   passTd: ["passingTouchdowns"],
   rushTd: ["rushingTouchdowns"],
-  // Defense-allowed names are the least stable across ESPN seasons; if these
-  // all miss, the fields come back null and ?debug=1 shows what to add here.
-  passYpgAllowed: ["netPassingYardsAllowedPerGame", "passingYardsAllowedPerGame", "opponentNetPassingYardsPerGame", "oppPassingYardsPerGame", "netPassingYardsAllowed"],
-  rushYpgAllowed: ["rushingYardsAllowedPerGame", "opponentRushingYardsPerGame", "oppRushingYardsPerGame", "rushingYardsAllowed"],
-  passTdAllowed: ["passingTouchdownsAllowed", "opponentPassingTouchdowns", "oppPassingTouchdowns"],
-  rushTdAllowed: ["rushingTouchdownsAllowed", "opponentRushingTouchdowns", "oppRushingTouchdowns"],
+  // Defense: ESPN's team feed has no pass/rush-allowed splits (verified via
+  // ?debug=1 stat dump) — these four ARE in the feed and rank cleanly.
+  yardsAllowed: ["yardsAllowed"],
+  ptsAllowed: ["pointsAllowed"],
+  sacks: ["sacks"],
+  takeaways: ["totalTakeaways"],
 };
 
 function seasonYear() {
@@ -103,10 +103,10 @@ export default async function handler(req, res) {
     addRanks(teams, "offTd", "desc");
     addRanks(teams, "passTd", "desc");
     addRanks(teams, "rushTd", "desc");
-    addRanks(teams, "passYpgAllowed", "asc");
-    addRanks(teams, "rushYpgAllowed", "asc");
-    addRanks(teams, "passTdAllowed", "asc");
-    addRanks(teams, "rushTdAllowed", "asc");
+    addRanks(teams, "yardsAllowed", "asc");
+    addRanks(teams, "ptsAllowed", "asc");
+    addRanks(teams, "sacks", "desc");
+    addRanks(teams, "takeaways", "desc");
     addRanks(teams, "pa", "asc");
 
     res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=7200");
