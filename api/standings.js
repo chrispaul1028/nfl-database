@@ -14,12 +14,13 @@ const CANDIDATES = {
   offTd: ["totalTouchdowns", "offensiveTouchdowns"],
   passTd: ["passingTouchdowns"],
   rushTd: ["rushingTouchdowns"],
-  // Defense: ESPN's team feed has no pass/rush-allowed splits (verified via
-  // ?debug=1 stat dump) — these four ARE in the feed and rank cleanly.
-  yardsAllowed: ["yardsAllowed"],
-  ptsAllowed: ["pointsAllowed"],
+  // Defense: ESPN's team feed has no pass/rush-allowed splits, and its
+  // pointsAllowed/yardsAllowed fields exist but return 0 for every team.
+  // These three are genuinely populated; points allowed comes from the
+  // standings feed instead (same source as the record).
   sacks: ["sacks"],
   takeaways: ["totalTakeaways"],
+  toDiff: ["turnOverDifferential"],
 };
 
 function seasonYear() {
@@ -103,10 +104,9 @@ export default async function handler(req, res) {
     addRanks(teams, "offTd", "desc");
     addRanks(teams, "passTd", "desc");
     addRanks(teams, "rushTd", "desc");
-    addRanks(teams, "yardsAllowed", "asc");
-    addRanks(teams, "ptsAllowed", "asc");
     addRanks(teams, "sacks", "desc");
     addRanks(teams, "takeaways", "desc");
+    addRanks(teams, "toDiff", "desc");
     addRanks(teams, "pa", "asc");
 
     res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=7200");
