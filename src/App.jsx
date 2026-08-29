@@ -1239,10 +1239,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             if (seg === "formation" && unit === "defense") {
               return (
                 <>
-                  <Tile compact value={sx.ptsAllowed != null ? Math.round(sx.ptsAllowed) : (pts.pa != null ? Math.round(pts.pa) : "—")} label="Pts Allowed" sub={rk(sx.ptsAllowedRank ?? sx.paRank)} />
-                  <Tile compact value={sx.yardsAllowed != null ? Math.round(sx.yardsAllowed).toLocaleString() : "—"} label="Yds Allowed" sub={rk(sx.yardsAllowedRank)} />
+                  <Tile compact value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Pts Allowed" sub={rk(sx.paRank)} />
                   <Tile compact value={sx.sacks != null ? Math.round(sx.sacks) : "—"} label="Sacks" sub={rk(sx.sacksRank)} />
                   <Tile compact value={sx.takeaways != null ? Math.round(sx.takeaways) : "—"} label="Takeaways" sub={rk(sx.takeawaysRank)} />
+                  <Tile compact value={sx.toDiff != null ? (sx.toDiff > 0 ? "+" + Math.round(sx.toDiff) : String(Math.round(sx.toDiff))) : "—"} label="TO Diff" sub={rk(sx.toDiffRank)} />
                 </>
               );
             }
@@ -1794,10 +1794,9 @@ export default function App() {
         offTd: s.offTd, offTdRank: s.offTdRank,
         passTd: s.passTd, passTdRank: s.passTdRank,
         rushTd: s.rushTd, rushTdRank: s.rushTdRank,
-        yardsAllowed: s.yardsAllowed, yardsAllowedRank: s.yardsAllowedRank,
-        ptsAllowed: s.ptsAllowed, ptsAllowedRank: s.ptsAllowedRank,
         sacks: s.sacks, sacksRank: s.sacksRank,
         takeaways: s.takeaways, takeawaysRank: s.takeawaysRank,
+        toDiff: s.toDiff, toDiffRank: s.toDiffRank,
         paRank: s.paRank,
       };
       return stand.isCurrent
