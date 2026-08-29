@@ -1239,10 +1239,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             if (seg === "formation" && unit === "defense") {
               return (
                 <>
-                  <Tile compact value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Yd Allowed" sub={rk(sx.passYpgAllowedRank)} />
-                  <Tile compact value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="Pass TD Allowed" sub={rk(sx.passTdAllowedRank)} />
-                  <Tile compact value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Yd Allowed" sub={rk(sx.rushYpgAllowedRank)} />
-                  <Tile compact value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="Rush TD Allowed" sub={rk(sx.rushTdAllowedRank)} />
+                  <Tile compact value={sx.ptsAllowed != null ? Math.round(sx.ptsAllowed) : (pts.pa != null ? Math.round(pts.pa) : "—")} label="Pts Allowed" sub={rk(sx.ptsAllowedRank ?? sx.paRank)} />
+                  <Tile compact value={sx.yardsAllowed != null ? Math.round(sx.yardsAllowed).toLocaleString() : "—"} label="Yds Allowed" sub={rk(sx.yardsAllowedRank)} />
+                  <Tile compact value={sx.sacks != null ? Math.round(sx.sacks) : "—"} label="Sacks" sub={rk(sx.sacksRank)} />
+                  <Tile compact value={sx.takeaways != null ? Math.round(sx.takeaways) : "—"} label="Takeaways" sub={rk(sx.takeawaysRank)} />
                 </>
               );
             }
@@ -1794,10 +1794,10 @@ export default function App() {
         offTd: s.offTd, offTdRank: s.offTdRank,
         passTd: s.passTd, passTdRank: s.passTdRank,
         rushTd: s.rushTd, rushTdRank: s.rushTdRank,
-        passYpgAllowed: s.passYpgAllowed, passYpgAllowedRank: s.passYpgAllowedRank,
-        rushYpgAllowed: s.rushYpgAllowed, rushYpgAllowedRank: s.rushYpgAllowedRank,
-        passTdAllowed: s.passTdAllowed, passTdAllowedRank: s.passTdAllowedRank,
-        rushTdAllowed: s.rushTdAllowed, rushTdAllowedRank: s.rushTdAllowedRank,
+        yardsAllowed: s.yardsAllowed, yardsAllowedRank: s.yardsAllowedRank,
+        ptsAllowed: s.ptsAllowed, ptsAllowedRank: s.ptsAllowedRank,
+        sacks: s.sacks, sacksRank: s.sacksRank,
+        takeaways: s.takeaways, takeawaysRank: s.takeawaysRank,
         paRank: s.paRank,
       };
       return stand.isCurrent
