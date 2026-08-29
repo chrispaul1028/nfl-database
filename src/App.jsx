@@ -498,11 +498,11 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     { lbl: "WR", x: 89, y: 24, aliases: ["WR"] },
     { lbl: "WR", x: 22, y: 40, aliases: ["WR"] },
     { lbl: "TE", x: 82, y: 40, aliases: ["TE"] },
-    { lbl: "LT", x: 16, y: 56, aliases: ["LT", "OT", "T"] },
-    { lbl: "LG", x: 33, y: 56, aliases: ["LG", "G", "OG"] },
+    { lbl: "LT", x: 10, y: 56, aliases: ["LT", "OT", "T"] },
+    { lbl: "LG", x: 30, y: 56, aliases: ["LG", "G", "OG"] },
     { lbl: "C", x: 50, y: 56, aliases: ["C", "OC"] },
-    { lbl: "RG", x: 67, y: 56, aliases: ["RG", "G", "OG"] },
-    { lbl: "RT", x: 84, y: 56, aliases: ["RT", "OT", "T"] },
+    { lbl: "RG", x: 70, y: 56, aliases: ["RG", "G", "OG"] },
+    { lbl: "RT", x: 90, y: 56, aliases: ["RT", "OT", "T"] },
     { lbl: "QB", x: 50, y: 72, aliases: ["QB"] },
     { lbl: "RB", x: 50, y: 90, aliases: ["RB", "HB", "FB"] },
   ] : [
@@ -580,46 +580,36 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
         {/* subtle top-down light so it reads as turf, not a flat panel */}
         <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.10) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0.18) 100%)" }} />
-        {/* end zone in team color — line rank pill lives here so it's visible
-            without scrolling, for offense (OL) and defense (DL) alike */}
-        <div className="absolute inset-x-0 top-0 flex items-center justify-center"
-          style={{ height: "9%", background: teamColor(abbr), boxShadow: "inset 0 -6px 12px rgba(0,0,0,0.25)" }}>
-          <span className="text-white/60 font-black text-[11px] tracking-[0.5em] pl-[0.5em] uppercase">{abbr}</span>
-          {(() => {
-            const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
-            if (!lr || lr.rank == null) return null;
-            // Same tiers as the stat tiles: top 10 green, 11-20 yellow, bottom 12 red
-            const tier = lr.rank <= 10 ? "bg-emerald-500 text-white"
-              : lr.rank <= 20 ? "bg-yellow-400 text-slate-900"
-              : "bg-rose-600 text-white";
-            return (
-              <span className={"absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold shadow " + tier}>
-                <span>{unit === "offense" ? "OL" : "DL"}</span>
-                <span className="tabular-nums">{ordinal(lr.rank)}</span>
-              </span>
-            );
-          })()}
+        {/* end zone: team color with painted diagonal texture and big
+            stenciled letters — reads like turf paint, not a UI header */}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
+          style={{ height: "9%", background: teamColor(abbr) }}>
+          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 10px, transparent 10px 20px)" }} />
+          <span className="font-black text-xl tracking-[0.4em] pl-[0.4em] uppercase text-white/30 select-none">{abbr}</span>
         </div>
         <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
+        {/* line rank: frosted broadcast-style tag tucked under the goal line */}
+        {(() => {
+          const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
+          if (!lr || lr.rank == null) return null;
+          const tierText = lr.rank <= 10 ? "text-emerald-300"
+            : lr.rank <= 20 ? "text-yellow-300"
+            : "text-rose-300";
+          return (
+            <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
+              style={{ top: "11%" }}>
+              {unit === "offense" ? "OL" : "DL"}
+              <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
+            </span>
+          );
+        })()}
         {/* faint team logo watermark at midfield */}
         {TEAM_LOGOS[abbr] && (
           <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
         )}
-        {/* yard lines with numbers every other line */}
-        {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y, i) => (
-          <React.Fragment key={y}>
-            <div className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
-            {i % 2 === 1 && (
-              <>
-                <span className="absolute left-2 text-white/35 text-[9px] font-extrabold tabular-nums" style={{ top: y + "%", transform: "translateY(-50%)" }}>
-                  {[10, 20, 30, 40][(i - 1) / 2]}
-                </span>
-                <span className="absolute right-2 text-white/35 text-[9px] font-extrabold tabular-nums" style={{ top: y + "%", transform: "translateY(-50%)" }}>
-                  {[10, 20, 30, 40][(i - 1) / 2]}
-                </span>
-              </>
-            )}
-          </React.Fragment>
+        {/* yard lines (no side numbers — quieter field) */}
+        {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y) => (
+          <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
         ))}
         {/* hash marks */}
         {Array.from({ length: 19 }, (_, i) => 11.3 + i * 4.5).map((y) => (
@@ -1223,7 +1213,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             // a JSX element here silently displays nothing, which is why ranks
             // were invisible before.)
             const rk = (rank) => rank == null ? null : {
-              label: "(" + ordinal(rank) + ")",
+              label: ordinal(rank),
               cls: rank <= 10 ? "text-green-600 dark:text-green-400"
                 : rank <= 20 ? "text-yellow-600 dark:text-yellow-400"
                 : "text-red-500 dark:text-red-400",
