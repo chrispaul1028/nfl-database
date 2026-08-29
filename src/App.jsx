@@ -588,7 +588,8 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           <span className="font-black text-xl tracking-[0.4em] pl-[0.4em] uppercase text-white/30 select-none">{abbr}</span>
         </div>
         <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
-        {/* line rank: frosted broadcast-style tag tucked under the goal line */}
+        {/* line rank: frosted tag sitting just below the line it grades —
+            under the OL row on offense, under the DL front on defense */}
         {(() => {
           const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
           if (!lr || lr.rank == null) return null;
@@ -597,7 +598,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
             : "text-rose-300";
           return (
             <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
-              style={{ top: "11%" }}>
+              style={{ top: unit === "offense" ? "63.5%" : "79.5%" }}>
               {unit === "offense" ? "OL" : "DL"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -1110,7 +1111,7 @@ const LINE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#f59e0b", "#08
 // League-wide OL/DL rankings from Madden OVRs: average of the top-5 offensive
 // linemen and top-4 defensive linemen per team (typical starting fronts).
 // Needs 3+ rated players to count — thin data shouldn't produce a fake rank.
-const OL_POS = new Set(["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OC", "OL"]);
+const OL_POS = new Set(["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "T", "OC", "OL"]);
 const DL_POS = new Set(["DE", "DT", "NT", "EDGE", "DL", "LDE", "RDE", "LDT", "RDT"]);
 function computeLineRanks(players, teams) {
   // A player counts toward a line by Position OR by depth label — so an
@@ -1123,7 +1124,14 @@ function computeLineRanks(players, teams) {
   for (const t of teams || []) {
     const a = t.abbr || toAbbr(t.name);
     if (!a) continue;
-    const roster = players.filter((p) => (p.teamId && p.teamId === t.id) || teamOfPlayer(p) === a);
+    // IDENTICAL matching to TeamDetail's roster — including the full
+    // team-name fallback. Without it, teams whose players only match by
+    // name (e.g. Buffalo) render a formation but compute no line rank.
+    const roster = players.filter((p) => {
+      if (p.teamId && p.teamId === t.id) return true;
+      const tm = teamOfPlayer(p);
+      return tm && (tm === a || String(p.teamName || "").toLowerCase() === String(t.name || "").toLowerCase());
+    });
     const avgTop = (posSet, n) => {
       const rated = roster
         .filter((p) => (posSet.has(String(p.pos || "").toUpperCase()) || posSet.has(baseLabel(p))) && p.rating2k != null)
@@ -1231,10 +1239,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             if (seg === "formation" && unit === "defense") {
               return (
                 <>
-                  <Tile compact value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Alwd" sub={rk(sx.passYpgAllowedRank)} />
-                  <Tile compact value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="P·TD Alwd" sub={rk(sx.passTdAllowedRank)} />
-                  <Tile compact value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Alwd" sub={rk(sx.rushYpgAllowedRank)} />
-                  <Tile compact value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="R·TD Alwd" sub={rk(sx.rushTdAllowedRank)} />
+                  <Tile compact value={sx.passYpgAllowed != null ? sx.passYpgAllowed.toFixed(1) : "—"} label="Pass Yd Allowed" sub={rk(sx.passYpgAllowedRank)} />
+                  <Tile compact value={sx.passTdAllowed != null ? sx.passTdAllowed : "—"} label="Pass TD Allowed" sub={rk(sx.passTdAllowedRank)} />
+                  <Tile compact value={sx.rushYpgAllowed != null ? sx.rushYpgAllowed.toFixed(1) : "—"} label="Rush Yd Allowed" sub={rk(sx.rushYpgAllowedRank)} />
+                  <Tile compact value={sx.rushTdAllowed != null ? sx.rushTdAllowed : "—"} label="Rush TD Allowed" sub={rk(sx.rushTdAllowedRank)} />
                 </>
               );
             }
