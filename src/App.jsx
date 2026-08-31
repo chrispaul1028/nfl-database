@@ -564,9 +564,21 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     if (b && (DL_POS.has(b) || ["LB", "ILB", "OLB", "MLB", "CB", "S", "FS", "SS", "DB", "NB", "NCB"].includes(b))) return "defense";
     return null;
   };
+  // Sideline order: by positional importance (the question a bench answers
+  // is "who's behind my starter at X"), then depth number within position.
+  // Offense: QB > RB > WR > TE > line. Defense: edge > interior > LB > CB > S.
+  const SIDELINE_ORDER = unit === "offense"
+    ? ["QB", "RB", "HB", "FB", "WR", "TE", "LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OC", "OL"]
+    : ["DE", "LDE", "RDE", "EDGE", "DT", "LDT", "RDT", "NT", "DL", "LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB", "CB", "LCB", "RCB", "NB", "NCB", "DB", "S", "FS", "SS"];
+  const posRank = (p) => {
+    const m = lblOf(p).match(/^([A-Z]+)/);
+    const base = (m && SIDELINE_ORDER.includes(m[1])) ? m[1] : String(p.pos || "").toUpperCase();
+    const i = SIDELINE_ORDER.indexOf(base);
+    return i === -1 ? 99 : i;
+  };
   const bench = roster
     .filter((p) => !used.has(p.id) && sideOf(p) === unit)
-    .sort((a, b) => (b.rating2k ?? -1) - (a.rating2k ?? -1) || String(a.name).localeCompare(String(b.name)));
+    .sort((a, b) => posRank(a) - posRank(b) || depthNo(a) - depthNo(b) || (b.rating2k ?? -1) - (a.rating2k ?? -1));
   // Ring scheme (no yellow — it collided with the gold 90+ OVR chip):
   //   emerald = Sleeper confirms healthy · orange = Questionable
   //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
@@ -722,9 +734,11 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                 <span className="mt-1.5 text-[8px] font-bold text-slate-600 dark:text-slate-300 max-w-full truncate">
                   {(() => {
                     const parts = String(p.name).split(" ");
-                    return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                    const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
                       ? parts.slice(-2).join(" ")
                       : parts.slice(-1)[0];
+                    const no = cleanNo(p.no);
+                    return (no ? "#" + no + " " : "") + last;
                   })()}
                 </span>
                 <span className="text-[8px] font-semibold text-slate-400 uppercase">{p.sortLabel || p.pos || ""}</span>
