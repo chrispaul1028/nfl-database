@@ -494,61 +494,79 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     /^(NB|NCB|SLOT)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
     ["NB", "NCB"].includes(String(p.pos || "").toUpperCase()));
   const SLOTS = unit === "offense" ? [
-    { lbl: "WR", x: 11, y: 24, aliases: ["WR"] },
-    { lbl: "WR", x: 89, y: 24, aliases: ["WR"] },
-    { lbl: "WR", x: 22, y: 40, aliases: ["WR"] },
-    { lbl: "TE", x: 82, y: 40, aliases: ["TE"] },
-    { lbl: "LT", x: 10, y: 56, aliases: ["LT", "OT", "T"] },
-    { lbl: "LG", x: 30, y: 56, aliases: ["LG", "G", "OG"] },
-    { lbl: "C", x: 50, y: 56, aliases: ["C", "OC"] },
-    { lbl: "RG", x: 70, y: 56, aliases: ["RG", "G", "OG"] },
-    { lbl: "RT", x: 90, y: 56, aliases: ["RT", "OT", "T"] },
-    { lbl: "QB", x: 50, y: 72, aliases: ["QB"] },
-    { lbl: "RB", x: 50, y: 90, aliases: ["RB", "HB", "FB"] },
+    { lbl: "WR", x: 11, y: 24, exact: ["WR1"], aliases: ["WR"] },
+    { lbl: "WR", x: 89, y: 24, exact: ["WR2"], aliases: ["WR"] },
+    { lbl: "WR", x: 22, y: 40, exact: ["WR3"], aliases: ["WR"] },
+    { lbl: "TE", x: 82, y: 40, exact: ["TE1"], aliases: ["TE"] },
+    { lbl: "LT", x: 10, y: 56, exact: ["LT1"], aliases: ["LT", "OT", "T"] },
+    { lbl: "LG", x: 30, y: 56, exact: ["LG1"], aliases: ["LG", "G", "OG"] },
+    { lbl: "C", x: 50, y: 56, exact: ["C1"], aliases: ["C", "OC"] },
+    { lbl: "RG", x: 70, y: 56, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
+    { lbl: "RT", x: 90, y: 56, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
+    { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
+    { lbl: "RB", x: 50, y: 90, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
   ] : [
-    { lbl: "LDE", x: 14, y: 72, aliases: ["LDE", "DE", "EDGE", "LOLB"] },
-    { lbl: "DT", x: 38, y: 72, aliases: ["LDT", "DT", "NT", "DL"] },
-    { lbl: "DT", x: 62, y: 72, aliases: ["RDT", "DT", "NT", "DL"] },
-    { lbl: "RDE", x: 86, y: 72, aliases: ["RDE", "DE", "EDGE", "ROLB"] },
+    { lbl: "LDE", x: 14, y: 72, exact: ["LDE1", "DE1", "EDGE1"], aliases: ["LDE", "DE", "EDGE", "LOLB"] },
+    { lbl: "DT", x: 38, y: 72, exact: ["LDT1", "DT1", "NT1"], aliases: ["LDT", "DT", "NT", "DL"] },
+    { lbl: "DT", x: 62, y: 72, exact: ["RDT1", "DT2"], aliases: ["RDT", "DT", "NT", "DL"] },
+    { lbl: "RDE", x: 86, y: 72, exact: ["RDE1", "DE2", "EDGE2"], aliases: ["RDE", "DE", "EDGE", "ROLB"] },
     ...(hasNickel ? [
-      { lbl: "LB", x: 33, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 67, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 33, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 67, y: 56, exact: ["LB2", "MLB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
     ] : [
-      { lbl: "LB", x: 26, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 50, y: 56, aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 74, y: 56, aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 26, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 50, y: 56, exact: ["MLB1", "LB2"], aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LB", x: 74, y: 56, exact: ["LB3"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
     ]),
-    { lbl: "CB", x: 11, y: 40, aliases: ["LCB", "CB", "DB"] },
-    { lbl: "CB", x: 89, y: 40, aliases: ["RCB", "CB", "DB"] },
+    { lbl: "CB", x: 11, y: 40, exact: ["LCB1", "CB1"], aliases: ["LCB", "CB", "DB"] },
+    { lbl: "CB", x: 89, y: 40, exact: ["RCB1", "CB2"], aliases: ["RCB", "CB", "DB"] },
     // NB slot sits after the CBs so CB1/CB2 claim the corners before the
     // nickel falls back to the position field.
-    ...(hasNickel ? [{ lbl: "NB", x: 50, y: 40, aliases: ["NB", "NCB", "SLOT", "CB"] }] : []),
-    { lbl: "FS", x: 33, y: 24, aliases: ["FS", "S", "SS"] },
-    { lbl: "SS", x: 67, y: 24, aliases: ["SS", "S", "FS"] },
+    ...(hasNickel ? [{ lbl: "NB", x: 50, y: 40, exact: ["NB1", "NCB1", "SLOT1", "CB3"], aliases: ["NB", "NCB", "SLOT", "CB"] }] : []),
+    { lbl: "FS", x: 33, y: 24, exact: ["FS1", "S1"], aliases: ["FS", "S", "SS"] },
+    { lbl: "SS", x: 67, y: 24, exact: ["SS1", "S2"], aliases: ["SS", "S", "FS"] },
   ];
+  // Two-pass slot assignment.
+  //   Pass 1 — exact depth labels claim their exact slot: "WR3" lands at the
+  //   3rd WR spot even if no WR2 exists, leaving the WR2 slot visibly open.
+  //   A dashed circle now means a real hole in YOUR depth chart.
+  //   Pass 2 — remaining slots fill in depth order by label, then Position.
+  const lblOf = (p) => String(p.sortLabel || "").toUpperCase();
+  const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
+  const assigned = new Array(SLOTS.length).fill(null);
   const used = new Set();
-  // Slot filling, in priority order:
-  //   1. Sort Priority label from Airtable ("RG1" -> RG slot, "WR2" -> 2nd WR
-  //      slot) — this is the depth chart as the user maintains it, and it
-  //      works even when Position says something generic like "OL".
-  //   2. Position field, lowest sort value first (original behavior).
-  const pick = (aliases) => {
-    const lbl = (p) => String(p.sortLabel || "").toUpperCase();
-    const depthNo = (p) => { const m = lbl(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
-    // Which alias does this player's label match? Order matters: for the RB
-    // slot ["RB","HB","FB"], RB1 must beat FB1 (fixes fullbacks outranking
-    // the starting back on an alphabetical tiebreak).
-    const aliasIdx = (p) => aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lbl(p)));
+  SLOTS.forEach((s, i) => {
+    for (const want of s.exact || []) {
+      const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
+      if (hit) { assigned[i] = hit; used.add(hit.id); break; }
+    }
+  });
+  SLOTS.forEach((s, i) => {
+    if (assigned[i]) return;
+    const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
     const byLabel = roster
       .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1)
       .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
     const byPos = roster
-      .filter((p) => !used.has(p.id) && aliases.includes(String(p.pos || "").toUpperCase()))
+      .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()))
       .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
     const hit = byLabel[0] || byPos[0] || null;
-    if (hit) used.add(hit.id);
-    return hit;
+    if (hit) { assigned[i] = hit; used.add(hit.id); }
+  });
+  // Sideline: everyone on this side of the ball who didn't crack the 11.
+  const sideOf = (p) => {
+    const u = unitOf(p);
+    if (u === "Offense" || u === "Offensive Line") return "offense";
+    if (u === "Defense" || u === "Defensive Line") return "defense";
+    const m = lblOf(p).match(/^([A-Z]+)/);
+    const b = m ? m[1] : null;
+    if (b && (OL_POS.has(b) || ["QB", "RB", "FB", "HB", "WR", "TE"].includes(b))) return "offense";
+    if (b && (DL_POS.has(b) || ["LB", "ILB", "OLB", "MLB", "CB", "S", "FS", "SS", "DB", "NB", "NCB"].includes(b))) return "defense";
+    return null;
   };
+  const bench = roster
+    .filter((p) => !used.has(p.id) && sideOf(p) === unit)
+    .sort((a, b) => (b.rating2k ?? -1) - (a.rating2k ?? -1) || String(a.name).localeCompare(String(b.name)));
   // Ring scheme (no yellow — it collided with the gold 90+ OVR chip):
   //   emerald = Sleeper confirms healthy · orange = Questionable
   //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
@@ -623,7 +641,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         <div className="absolute inset-y-0 left-0 w-[3px] bg-white/60" />
         <div className="absolute inset-y-0 right-0 w-[3px] bg-white/60" />
         {SLOTS.map((s, i) => {
-          const p = pick(s.aliases);
+          const p = assigned[i];
           return (
             <button key={unit + i} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
               className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
@@ -670,6 +688,51 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           );
         })}
       </div>
+      {/* The sideline: everyone on this side of the ball who isn't in the 11.
+          Horizontal scroll, best-rated first — depth at a glance without
+          stealing space from the formation. */}
+      {bench.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-2 pb-1">
+          <div className="flex items-baseline justify-between px-1 mb-1.5">
+            <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline</span>
+            <span className="text-[9px] font-bold text-slate-400 tabular-nums">{bench.length}</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1.5 px-1">
+            {bench.map((p) => (
+              <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center shrink-0 w-14">
+                <span className="relative">
+                  {photoOf(p, abbr) ? (
+                    <img src={photoOf(p, abbr)} alt="" loading="lazy"
+                      className={"w-10 h-10 rounded-full object-cover bg-white border-2 " + ringCls(p) + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
+                  ) : (
+                    <span className={"w-10 h-10 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-2 " + ringCls(p)}>
+                      {String(p.pos || "").toUpperCase() || "—"}
+                    </span>
+                  )}
+                  {p.rating2k != null && (
+                    <span className={"absolute -bottom-1 left-1/2 -translate-x-1/2 px-1 rounded-full text-[8px] font-extrabold tabular-nums shadow " +
+                      (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
+                        : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
+                        : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
+                        : "bg-rose-600 text-white")}>
+                      {Math.round(p.rating2k)}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1.5 text-[8px] font-bold text-slate-600 dark:text-slate-300 max-w-full truncate">
+                  {(() => {
+                    const parts = String(p.name).split(" ");
+                    return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
+                      ? parts.slice(-2).join(" ")
+                      : parts.slice(-1)[0];
+                  })()}
+                </span>
+                <span className="text-[8px] font-semibold text-slate-400 uppercase">{p.sortLabel || p.pos || ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="text-[9px] text-slate-400 mt-2 px-1">Ring = health (green ok · orange Questionable · red Doubtful · red+faded Out/IR · gray no data) · chip = OVR · pill = line rank vs NFL · tap for profile</div>
     </div>
   );
