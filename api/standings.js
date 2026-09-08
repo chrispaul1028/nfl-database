@@ -60,12 +60,20 @@ function addRanks(teams, key, dir) {
 
 export default async function handler(req, res) {
   try {
-    const yr = seasonYear();
-    const isCurrent = yr === new Date().getFullYear();
+    let yr = seasonYear();
+    let isCurrent = yr === new Date().getFullYear();
 
-    // 1. Records + PF/PA from standings
-    const standings = await getJson(`https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${yr}`);
-    const entries = (standings.children || []).flatMap((c) => c?.standings?.entries || []);
+    // 1. Records + PF/PA from standings. If the target season hasn't been
+    //    played yet (all 0-0 — e.g. September before Week 1), fall back to
+    //    last season so the app never shows a wall of zeros.
+    let standings = await getJson(`https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${yr}`);
+    let entries = (standings.children || []).flatMap((c) => c?.standings?.entries || []);
+    const played = (ents) => ents.some((e) => (e.stats || []).some((x) => (x.name === "wins" || x.name === "losses") && Number(x.value) > 0));
+    if (entries.length < 30 || !played(entries)) {
+      yr = yr - 1; isCurrent = false;
+      standings = await getJson(`https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${yr}`);
+      entries = (standings.children || []).flatMap((c) => c?.standings?.entries || []);
+    }
     if (entries.length < 30) throw new Error(`Standings returned only ${entries.length} teams — season ${yr} shape changed`);
 
     const teams = entries.map((e) => {
