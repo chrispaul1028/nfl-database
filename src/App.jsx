@@ -493,6 +493,13 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   const hasNickel = roster.some((p) =>
     /^(NB|NCB|SLOT)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
     ["NB", "NCB"].includes(String(p.pos || "").toUpperCase()));
+  // 3-4 front: a nose tackle or outside linebackers on the depth chart
+  // (Sort Priority "NT1", "LOLB1"/"ROLB1", or Position NT) switches the
+  // front to 3 down linemen + 4 LBs (3 LBs in nickel). Same idea: the
+  // Airtable depth chart decides the scheme, not a hardcoded template.
+  const has34 = roster.some((p) =>
+    /^(NT|LOLB|ROLB)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
+    String(p.pos || "").toUpperCase() === "NT");
   const SLOTS = unit === "offense" ? [
     { lbl: "WR", x: 11, y: 24, exact: ["WR1"], aliases: ["WR"] },
     { lbl: "WR", x: 89, y: 24, exact: ["WR2"], aliases: ["WR"] },
@@ -506,18 +513,37 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
     { lbl: "RB", x: 50, y: 90, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
   ] : [
-    { lbl: "LDE", x: 14, y: 72, exact: ["LDE1", "DE1", "EDGE1"], aliases: ["LDE", "DE", "EDGE", "LOLB"] },
-    { lbl: "DT", x: 38, y: 72, exact: ["LDT1", "DT1", "NT1"], aliases: ["LDT", "DT", "NT", "DL"] },
-    { lbl: "DT", x: 62, y: 72, exact: ["RDT1", "DT2"], aliases: ["RDT", "DT", "NT", "DL"] },
-    { lbl: "RDE", x: 86, y: 72, exact: ["RDE1", "DE2", "EDGE2"], aliases: ["RDE", "DE", "EDGE", "ROLB"] },
-    ...(hasNickel ? [
-      { lbl: "LB", x: 33, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 67, y: 56, exact: ["LB2", "MLB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+    // ── Front ──────────────────────────────────────────────────────
+    ...(has34 ? [
+      { lbl: "LDE", x: 28, y: 72, exact: ["LDE1", "DE1"], aliases: ["LDE", "DE", "DL", "DT"] },
+      { lbl: "NT", x: 50, y: 72, exact: ["NT1", "DT1"], aliases: ["NT", "DT", "DL"] },
+      { lbl: "RDE", x: 72, y: 72, exact: ["RDE1", "DE2"], aliases: ["RDE", "DE", "DL", "DT"] },
     ] : [
-      { lbl: "LB", x: 26, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 50, y: 56, exact: ["MLB1", "LB2"], aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      { lbl: "LB", x: 74, y: 56, exact: ["LB3"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      { lbl: "LDE", x: 14, y: 72, exact: ["LDE1", "DE1", "EDGE1"], aliases: ["LDE", "DE", "EDGE", "LOLB"] },
+      { lbl: "DT", x: 38, y: 72, exact: ["LDT1", "DT1", "NT1"], aliases: ["LDT", "DT", "NT", "DL"] },
+      { lbl: "DT", x: 62, y: 72, exact: ["RDT1", "DT2"], aliases: ["RDT", "DT", "NT", "DL"] },
+      { lbl: "RDE", x: 86, y: 72, exact: ["RDE1", "DE2", "EDGE2"], aliases: ["RDE", "DE", "EDGE", "ROLB"] },
     ]),
+    // ── Second level ───────────────────────────────────────────────
+    ...(has34
+      ? (hasNickel ? [
+        { lbl: "OLB", x: 12, y: 58, exact: ["LOLB1", "OLB1", "EDGE1"], aliases: ["LOLB", "OLB", "EDGE", "LB"] },
+        { lbl: "ILB", x: 50, y: 56, exact: ["ILB1", "LB1", "MLB1"], aliases: ["ILB", "MLB", "LB"] },
+        { lbl: "OLB", x: 88, y: 58, exact: ["ROLB1", "OLB2", "EDGE2"], aliases: ["ROLB", "OLB", "EDGE", "LB"] },
+      ] : [
+        { lbl: "OLB", x: 12, y: 58, exact: ["LOLB1", "OLB1", "EDGE1"], aliases: ["LOLB", "OLB", "EDGE", "LB"] },
+        { lbl: "ILB", x: 38, y: 56, exact: ["ILB1", "LB1", "MLB1"], aliases: ["ILB", "MLB", "LB"] },
+        { lbl: "ILB", x: 62, y: 56, exact: ["ILB2", "LB2", "MLB2"], aliases: ["ILB", "MLB", "LB"] },
+        { lbl: "OLB", x: 88, y: 58, exact: ["ROLB1", "OLB2", "EDGE2"], aliases: ["ROLB", "OLB", "EDGE", "LB"] },
+      ])
+      : (hasNickel ? [
+        { lbl: "LB", x: 33, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+        { lbl: "LB", x: 67, y: 56, exact: ["LB2", "MLB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      ] : [
+        { lbl: "LB", x: 26, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+        { lbl: "LB", x: 50, y: 56, exact: ["MLB1", "LB2"], aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+        { lbl: "LB", x: 74, y: 56, exact: ["LB3"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
+      ])),
     { lbl: "CB", x: 11, y: 40, exact: ["LCB1", "CB1"], aliases: ["LCB", "CB", "DB"] },
     { lbl: "CB", x: 89, y: 40, exact: ["RCB1", "CB2"], aliases: ["RCB", "CB", "DB"] },
     // NB slot sits after the CBs so CB1/CB2 claim the corners before the
@@ -621,7 +647,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         {/* line rank: frosted tag sitting just below the line it grades —
             under the OL row on offense, under the DL front on defense */}
         {(() => {
-          const lr = unit === "offense" ? lineRank?.ol : lineRank?.dl;
+          const lr = unit === "offense" ? lineRank?.ol : lineRank?.def;
           if (!lr || lr.rank == null) return null;
           const tierText = lr.rank <= 10 ? "text-emerald-300"
             : lr.rank <= 20 ? "text-yellow-300"
@@ -629,7 +655,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           return (
             <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
               style={{ top: unit === "offense" ? "63.5%" : "79.5%" }}>
-              {unit === "offense" ? "OL" : "DL"}
+              {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
           );
@@ -1190,6 +1216,7 @@ const LINE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#f59e0b", "#08
 // Needs 3+ rated players to count — thin data shouldn't produce a fake rank.
 const OL_POS = new Set(["LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "T", "OC", "OL"]);
 const DL_POS = new Set(["DE", "DT", "NT", "EDGE", "DL", "LDE", "RDE", "LDT", "RDT"]);
+const DEF_POS = new Set([...DL_POS, "LB", "ILB", "OLB", "MLB", "LOLB", "ROLB", "LLB", "RLB", "WLB", "SLB", "CB", "LCB", "RCB", "NB", "NCB", "SLOT", "DB", "S", "FS", "SS"]);
 function computeLineRanks(players, teams) {
   // A player counts toward a line by Position OR by depth label — so an
   // "LDE1" whose Position field says LB still counts as a defensive lineman.
@@ -1209,17 +1236,19 @@ function computeLineRanks(players, teams) {
       const tm = teamOfPlayer(p);
       return tm && (tm === a || String(p.teamName || "").toLowerCase() === String(t.name || "").toLowerCase());
     });
-    const avgTop = (posSet, n) => {
+    const avgTop = (posSet, n, min = 3) => {
       const rated = roster
         .filter((p) => (posSet.has(String(p.pos || "").toUpperCase()) || posSet.has(baseLabel(p))) && p.rating2k != null)
         .map((p) => Number(p.rating2k))
         .sort((x, y) => y - x)
         .slice(0, n);
-      return rated.length >= 3 ? rated.reduce((s, v) => s + v, 0) / rated.length : null;
+      return rated.length >= min ? rated.reduce((s, v) => s + v, 0) / rated.length : null;
     };
-    per[a] = { ol: { avg: avgTop(OL_POS, 5) }, dl: { avg: avgTop(DL_POS, 4) } };
+    // def = whole defense: top-11 rated defenders, needs 7+ to count.
+    // Scheme-agnostic on purpose — a 3-4 and a 4-3 team compare fairly.
+    per[a] = { ol: { avg: avgTop(OL_POS, 5) }, dl: { avg: avgTop(DL_POS, 4) }, def: { avg: avgTop(DEF_POS, 11, 7) } };
   }
-  for (const key of ["ol", "dl"]) {
+  for (const key of ["ol", "dl", "def"]) {
     const ranked = Object.entries(per)
       .filter(([, v]) => v[key].avg != null)
       .sort((x, y) => y[1][key].avg - x[1][key].avg);
@@ -1842,7 +1871,153 @@ function ComingSoon({ icon, title, blurb }) {
 }
 
 // ═══════════════ APP SHELL ═══════════════════════════════════════
+// ═══════════════ TD BOARD ════════════════════════════════════════
+// Weekly anytime-TD targets, laid out like the MLB HR Targets card:
+//   rank · headshot · team · POS Name · vs OPP
+//   ROLE | RZ SHARE · OPP SHARE · IMP TOTAL · OPP TD/G |  big TD%
+//   venue / spread / weather line
+// Reads /api/td-board. Until that endpoint is live (Week 1), it renders a
+// clearly-labeled PREVIEW using your Airtable starters with sample values,
+// so the design can be judged before the data exists.
+const tdTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 dark:bg-slate-800"
+  : val >= good ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+  : val >= ok ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+  : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
+
+function TdBoardTab({ players, teams, onSelect }) {
+  const [board, setBoard] = useState(null);
+  const [seg, setSeg] = useState("board");
+  useEffect(() => {
+    fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [] }));
+  }, []);
+
+  // Preview cards: RB1 / WR1-3 / TE1 from Airtable, sample values seeded from
+  // Madden rating so the layout reads realistically. Replaced by real data.
+  const preview = useMemo(() => {
+    const starters = players.filter((p) => /^(RB1|WR[123]|TE1)$/.test(String(p.sortLabel || "").toUpperCase()));
+    return starters.map((p) => {
+      const r = Number(p.rating2k ?? 72);
+      const expTd = Math.max(0.15, Math.min(1.1, (r - 62) / 30));
+      return {
+        _p: p, name: p.name, team: toAbbr(teamOfPlayer(p) || p.teamName || ""), pos: String(p.pos || "").toUpperCase(),
+        role: String(p.sortLabel || "").toUpperCase(), opp: null, home: true, spread: null, implTotal: 20 + (r - 70) * 0.35,
+        rzShare: Math.min(0.45, 0.08 + (r - 60) * 0.011), oppShare: Math.min(0.35, 0.06 + (r - 60) * 0.008),
+        oppTdAllowedPg: null, oppTdRank: null, expTd, tdPct: 1 - Math.exp(-expTd), venue: null, dome: false, weather: null,
+        injury: (injFor(p.name, toAbbr(teamOfPlayer(p) || "")) || {}).injury_status || null,
+      };
+    }).sort((a, b) => b.tdPct - a.tdPct).slice(0, 20);
+  }, [players]);
+
+  const live = board && board.ready;
+  const cards = live ? board.cards : preview;
+  const findPlayer = (c) => c._p || players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(c.name));
+  const week = board?.week ?? 1;
+
+  return (
+    <div>
+      <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h1 className="text-3xl font-extrabold text-white">TD Targets <span className="text-blue-200">(Wk {week})</span></h1>
+          <span className="text-[11px] font-semibold text-blue-200">{board?.version || "v1"} · {live ? "data " + new Date(board.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "preview"}</span>
+        </div>
+      </div>
+      <div className="px-4 pt-3">
+        <div className="flex gap-2 mb-3">
+          {[["board", "TD Targets"], ["history", "History"]].map(([k, lbl]) => (
+            <button key={k} onClick={() => setSeg(k)}
+              className={"flex-1 py-2 rounded-full text-sm font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+
+        {seg === "history" ? (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center">
+            <div className="text-sm font-bold text-slate-700 dark:text-slate-200">No history yet</div>
+            <div className="text-xs text-slate-400 mt-1">Each week's board gets logged against actual touchdowns starting Week 1 — the calibration loop, same as the HR board.</div>
+          </div>
+        ) : (
+          <>
+            {!live && (
+              <div className="mb-3 rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                PREVIEW · sample values seeded from Madden ratings. Live board activates with Week 1 data — opponents, Vegas totals, and red-zone shares arrive automatically.
+              </div>
+            )}
+            <div className="text-[11px] font-semibold tracking-widest uppercase text-slate-400 mb-2">🎯 TD Targets</div>
+            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {cards.length === 0 && (
+                <div className="p-6 text-center text-xs text-slate-400">No starters found — label RB1, WR1–WR3, and TE1 in Airtable Sort Priority to seed the board.</div>
+              )}
+              {cards.map((c, i) => {
+                const p = findPlayer(c);
+                const pct = Math.round((c.tdPct || 0) * 100);
+                return (
+                  <button key={(c.name || "") + i} onClick={p ? () => onSelect(p) : undefined}
+                    className="w-full text-left px-3 py-3 active:bg-slate-50 dark:active:bg-slate-800/60">
+                    {/* row 1: rank · headshot · team · name · opponent */}
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-5 text-sm font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
+                      {p ? <Avatar p={p} /> : <div className="w-11 h-11 rounded-full bg-slate-200 dark:bg-slate-700" />}
+                      {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-6 h-6 rounded-full bg-white object-contain shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[15px] font-extrabold text-slate-900 dark:text-white truncate">
+                          <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
+                          {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-amber-500">{c.injury}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-300 shrink-0">
+                        {c.opp && TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-5 h-5 rounded-full bg-white object-contain" />}
+                        <span>{c.opp ? (c.home ? "vs " : "@ ") + c.opp : "vs —"}</span>
+                      </div>
+                    </div>
+                    {/* row 2: role | component tiles | TD% */}
+                    <div className="mt-2.5 flex items-end gap-1.5">
+                      <div className="w-12 text-center shrink-0">
+                        <div className="text-[9px] font-semibold text-slate-400 tracking-wider">ROLE</div>
+                        <div className="text-sm font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
+                      </div>
+                      <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                      <div className="flex-1 grid grid-cols-4 gap-1.5">
+                        {[
+                          ["RZ SHARE", c.rzShare != null ? Math.round(c.rzShare * 100) + "%" : "—", tdTile(c.rzShare, 0.25, 0.15)],
+                          ["OPP SHARE", c.oppShare != null ? Math.round(c.oppShare * 100) + "%" : "—", tdTile(c.oppShare, 0.22, 0.14)],
+                          ["IMP TOTAL", c.implTotal != null ? c.implTotal.toFixed(1) : "—", tdTile(c.implTotal, 24, 20)],
+                          ["OPP TD/G", c.oppTdAllowedPg != null ? c.oppTdAllowedPg.toFixed(1) : "—", tdTile(c.oppTdAllowedPg, 1.2, 0.8)],
+                        ].map(([lbl, val, cls]) => (
+                          <div key={lbl} className="text-center">
+                            <div className="text-[8px] font-semibold text-slate-400 tracking-wider">{lbl}</div>
+                            <div className={"mt-0.5 rounded-md py-0.5 text-[12px] font-extrabold tabular-nums " + cls}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="w-14 text-right shrink-0">
+                        <div className="text-[9px] font-semibold text-slate-400 tracking-wider">TD%</div>
+                        <div className={"text-xl font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
+                      </div>
+                    </div>
+                    {/* row 3: venue · spread · weather */}
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="truncate">{c.venue || "Venue TBD"}{c.spread != null && <span className="ml-1.5 font-bold text-slate-500 dark:text-slate-300">{c.spread > 0 ? "+" + c.spread : c.spread}</span>}</span>
+                      <span className="shrink-0 ml-2">{c.dome ? "🏟 Dome" : c.weather || "—"}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[9px] text-slate-400 mt-2 px-1">RZ share = share of team red-zone chances · Opp share = share of touches/targets · Imp total = Vegas implied team points · Opp TD/G = TDs the opponent allows per game to this position · TD% = anytime-TD probability</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+// name normalizer local to the board (falls back gracefully if hrbNrm isn't in scope)
+function hrbNrmSafe(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.'’]/g, "").replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "").trim().toLowerCase();
+}
+
 const TABS = [
+  { id: "targets", label: "TD Board", icon: "🎯" },
   { id: "teams", label: "Teams", icon: "🏈" },
   { id: "players", label: "Players", icon: "👤" },
   { id: "stats", label: "Stats", icon: "📊" },
@@ -1951,6 +2126,7 @@ export default function App() {
           onSelectPlayer={setSel}
         />
       )}
+      {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} />}
       {players && tab === "players" && <PlayersTab players={players} onSelect={setSel} />}
       {players && tab === "contracts" && <ContractsTab players={players} onSelect={setSel} />}
       {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} />}
