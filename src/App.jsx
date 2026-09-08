@@ -490,7 +490,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
   const baseOf = (p) => { const m = lblOf(p).match(/^([A-Z]+)/); return m ? m[1] : null; };
   const used = new Set();
-  let SLOTS, assigned;
+  let SLOTS, assigned, formationLabel = unit === "offense" ? "11 Personnel" : null;
 
   if (unit === "offense") {
     // Offense keeps the 11-man template — it's stable across the league.
@@ -597,18 +597,22 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     const xFor = (r, n, i) => (XS[r] && XS[r][n] ? XS[r][n][i] : spread(n, i));
     const Y = { dl: 72, lb: 56, db: 40, s: 24 };
     SLOTS = []; assigned = [];
+    // Personnel label from what's actually on the field: "4-3 · Nickel"
+    const dbN = rows.db.filter((x) => x.p).length + rows.s.filter((x) => x.p).length;
+    formationLabel = `${rows.dl.filter((x) => x.p).length}-${rows.lb.filter((x) => x.p).length}` +
+      (dbN >= 7 ? " · Quarter" : dbN >= 6 ? " · Dime" : dbN >= 5 ? " · Nickel" : " · Base");
     for (const r of ["dl", "lb", "db", "s"]) {
       const n = rows[r].length;
       rows[r].forEach((it, i) => {
         let x = xFor(r, n, i), y = Y[r];
         if (r === "db") {
-          // corners on the edges, interior DBs (nickel/dime) spread between
-          // and dropped a touch closer to the line of scrimmage
+          // corners pinned to the sidelines, interior DBs (nickel/dime)
+          // spread between them on the same row — never on top of a LB
           const inner = n - 2;
           if (i === 0) x = 11;
           else if (i === n - 1) x = 89;
-          else { x = inner === 1 ? 50 : 35 + (30 * (i - 1)) / (inner - 1); y = 46; }
-          if (n === 1) { x = 50; y = 40; }
+          else x = inner === 1 ? 50 : 32 + (36 * (i - 1)) / (inner - 1);
+          if (n === 1) x = 50;
         }
         SLOTS.push({ lbl: it.lbl, x, y });
         assigned.push(it.p);
@@ -700,6 +704,13 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         {TEAM_LOGOS[abbr] && (
           <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
         )}
+        {/* personnel tag: what's on the field right now */}
+        {formationLabel && (
+          <span className="absolute left-2 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm" style={{ top: "11%" }}>
+            {formationLabel}
+          </span>
+        )}
+        <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`}</style>
         {/* yard lines (no side numbers — quieter field) */}
         {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y) => (
           <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
@@ -717,9 +728,9 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
         {SLOTS.map((s, i) => {
           const p = assigned[i];
           return (
-            <button key={unit + i} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
-              className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-              style={{ left: s.x + "%", top: s.y + "%" }}>
+            <button key={unit + i + (p ? p.id : "")} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
+              className="absolute flex flex-col items-center"
+              style={{ left: s.x + "%", top: s.y + "%", transform: "translate(-50%, -50%)", animation: `hrbPop .35s ease-out ${i * 30}ms both` }}>
               <span className="relative">
                 {p && photoOf(p, abbr) ? (
                   <img src={photoOf(p, abbr)} alt="" loading="lazy"
