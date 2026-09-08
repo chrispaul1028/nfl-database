@@ -486,99 +486,98 @@ const isStarter = (p) => {
 // unit state lives in TeamDetail now so the stat tiles up top can react to
 // the Offense/Defense toggle. lineRank = this team's OL/DL league ranks.
 function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }) {
-  // Scheme detection: if the roster has a nickel back (Sort Priority "NB1",
-  // "NCB1", "SLOT1", or Position NB/NCB), the defense renders in nickel —
-  // 2 LBs and a fifth DB over the slot — instead of a base 4-3. Driven
-  // entirely by Airtable, so different teams can line up differently.
-  const hasNickel = roster.some((p) =>
-    /^(NB|NCB|SLOT)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
-    ["NB", "NCB"].includes(String(p.pos || "").toUpperCase()));
-  // 3-4 front: a nose tackle or outside linebackers on the depth chart
-  // (Sort Priority "NT1", "LOLB1"/"ROLB1", or Position NT) switches the
-  // front to 3 down linemen + 4 LBs (3 LBs in nickel). Same idea: the
-  // Airtable depth chart decides the scheme, not a hardcoded template.
-  const has34 = roster.some((p) =>
-    /^(NT|LOLB|ROLB)\d*$/.test(String(p.sortLabel || "").toUpperCase()) ||
-    String(p.pos || "").toUpperCase() === "NT");
-  const SLOTS = unit === "offense" ? [
-    { lbl: "WR", x: 11, y: 24, exact: ["WR1"], aliases: ["WR"] },
-    { lbl: "WR", x: 89, y: 24, exact: ["WR2"], aliases: ["WR"] },
-    { lbl: "WR", x: 22, y: 40, exact: ["WR3"], aliases: ["WR"] },
-    { lbl: "TE", x: 82, y: 40, exact: ["TE1"], aliases: ["TE"] },
-    { lbl: "LT", x: 10, y: 56, exact: ["LT1"], aliases: ["LT", "OT", "T"] },
-    { lbl: "LG", x: 30, y: 56, exact: ["LG1"], aliases: ["LG", "G", "OG"] },
-    { lbl: "C", x: 50, y: 56, exact: ["C1"], aliases: ["C", "OC"] },
-    { lbl: "RG", x: 70, y: 56, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
-    { lbl: "RT", x: 90, y: 56, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
-    { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
-    { lbl: "RB", x: 50, y: 90, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
-  ] : [
-    // ── Front ──────────────────────────────────────────────────────
-    ...(has34 ? [
-      { lbl: "LDE", x: 28, y: 72, exact: ["LDE1", "DE1"], aliases: ["LDE", "DE", "DL", "DT"] },
-      { lbl: "NT", x: 50, y: 72, exact: ["NT1", "DT1"], aliases: ["NT", "DT", "DL"] },
-      { lbl: "RDE", x: 72, y: 72, exact: ["RDE1", "DE2"], aliases: ["RDE", "DE", "DL", "DT"] },
-    ] : [
-      { lbl: "LDE", x: 14, y: 72, exact: ["LDE1", "DE1", "EDGE1"], aliases: ["LDE", "DE", "EDGE", "LOLB"] },
-      { lbl: "DT", x: 38, y: 72, exact: ["LDT1", "DT1", "NT1"], aliases: ["LDT", "DT", "NT", "DL"] },
-      { lbl: "DT", x: 62, y: 72, exact: ["RDT1", "DT2"], aliases: ["RDT", "DT", "NT", "DL"] },
-      { lbl: "RDE", x: 86, y: 72, exact: ["RDE1", "DE2", "EDGE2"], aliases: ["RDE", "DE", "EDGE", "ROLB"] },
-    ]),
-    // ── Second level ───────────────────────────────────────────────
-    ...(has34
-      ? (hasNickel ? [
-        { lbl: "OLB", x: 12, y: 58, exact: ["LOLB1", "OLB1", "EDGE1"], aliases: ["LOLB", "OLB", "EDGE", "LB"] },
-        { lbl: "ILB", x: 50, y: 56, exact: ["ILB1", "LB1", "MLB1"], aliases: ["ILB", "MLB", "LB"] },
-        { lbl: "OLB", x: 88, y: 58, exact: ["ROLB1", "OLB2", "EDGE2"], aliases: ["ROLB", "OLB", "EDGE", "LB"] },
-      ] : [
-        { lbl: "OLB", x: 12, y: 58, exact: ["LOLB1", "OLB1", "EDGE1"], aliases: ["LOLB", "OLB", "EDGE", "LB"] },
-        { lbl: "ILB", x: 38, y: 56, exact: ["ILB1", "LB1", "MLB1"], aliases: ["ILB", "MLB", "LB"] },
-        { lbl: "ILB", x: 62, y: 56, exact: ["ILB2", "LB2", "MLB2"], aliases: ["ILB", "MLB", "LB"] },
-        { lbl: "OLB", x: 88, y: 58, exact: ["ROLB1", "OLB2", "EDGE2"], aliases: ["ROLB", "OLB", "EDGE", "LB"] },
-      ])
-      : (hasNickel ? [
-        { lbl: "LB", x: 33, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-        { lbl: "LB", x: 67, y: 56, exact: ["LB2", "MLB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      ] : [
-        { lbl: "LB", x: 26, y: 56, exact: ["LB1"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-        { lbl: "LB", x: 50, y: 56, exact: ["MLB1", "LB2"], aliases: ["MLB", "LB", "ILB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-        { lbl: "LB", x: 74, y: 56, exact: ["LB3"], aliases: ["LB", "ILB", "MLB", "OLB", "LLB", "RLB", "WLB", "SLB"] },
-      ])),
-    { lbl: "CB", x: 11, y: 40, exact: ["LCB1", "CB1"], aliases: ["LCB", "CB", "DB"] },
-    { lbl: "CB", x: 89, y: 40, exact: ["RCB1", "CB2"], aliases: ["RCB", "CB", "DB"] },
-    // NB slot sits after the CBs so CB1/CB2 claim the corners before the
-    // nickel falls back to the position field.
-    ...(hasNickel ? [{ lbl: "NB", x: 50, y: 40, exact: ["NB1", "NCB1", "SLOT1", "CB3"], aliases: ["NB", "NCB", "SLOT", "CB"] }] : []),
-    { lbl: "FS", x: 33, y: 24, exact: ["FS1", "S1"], aliases: ["FS", "S", "SS"] },
-    { lbl: "SS", x: 67, y: 24, exact: ["SS1", "S2"], aliases: ["SS", "S", "FS"] },
-  ];
-  // Two-pass slot assignment.
-  //   Pass 1 — exact depth labels claim their exact slot: "WR3" lands at the
-  //   3rd WR spot even if no WR2 exists, leaving the WR2 slot visibly open.
-  //   A dashed circle now means a real hole in YOUR depth chart.
-  //   Pass 2 — remaining slots fill in depth order by label, then Position.
   const lblOf = (p) => String(p.sortLabel || "").toUpperCase();
   const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
-  const assigned = new Array(SLOTS.length).fill(null);
+  const baseOf = (p) => { const m = lblOf(p).match(/^([A-Z]+)/); return m ? m[1] : null; };
   const used = new Set();
-  SLOTS.forEach((s, i) => {
-    for (const want of s.exact || []) {
-      const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
-      if (hit) { assigned[i] = hit; used.add(hit.id); break; }
+  let SLOTS, assigned;
+
+  if (unit === "offense") {
+    // Offense keeps the 11-man template — it's stable across the league.
+    SLOTS = [
+      { lbl: "WR", x: 11, y: 24, exact: ["WR1"], aliases: ["WR"] },
+      { lbl: "WR", x: 89, y: 24, exact: ["WR2"], aliases: ["WR"] },
+      { lbl: "WR", x: 22, y: 40, exact: ["WR3"], aliases: ["WR"] },
+      { lbl: "TE", x: 82, y: 40, exact: ["TE1"], aliases: ["TE"] },
+      { lbl: "LT", x: 10, y: 56, exact: ["LT1"], aliases: ["LT", "OT", "T"] },
+      { lbl: "LG", x: 30, y: 56, exact: ["LG1"], aliases: ["LG", "G", "OG"] },
+      { lbl: "C", x: 50, y: 56, exact: ["C1"], aliases: ["C", "OC"] },
+      { lbl: "RG", x: 70, y: 56, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
+      { lbl: "RT", x: 90, y: 56, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
+      { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
+      { lbl: "RB", x: 50, y: 90, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
+    ];
+    // Two-pass slot assignment.
+    //   Pass 1 — exact depth labels claim their exact slot: "WR3" lands at the
+    //   3rd WR spot even if no WR2 exists, leaving the WR2 slot visibly open.
+    //   Pass 2 — remaining slots fill in depth order by label, then Position.
+    assigned = new Array(SLOTS.length).fill(null);
+    SLOTS.forEach((s, i) => {
+      for (const want of s.exact || []) {
+        const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
+        if (hit) { assigned[i] = hit; used.add(hit.id); break; }
+      }
+    });
+    SLOTS.forEach((s, i) => {
+      if (assigned[i]) return;
+      const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
+      const byLabel = roster
+        .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1)
+        .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
+      const byPos = roster
+        .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()))
+        .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
+      const hit = byLabel[0] || byPos[0] || null;
+      if (hit) { assigned[i] = hit; used.add(hit.id); }
+    });
+  } else {
+    // ── Defense: NOT a template. Every declared starter takes the field. ──
+    // Real depth charts don't have exactly 11 starters (4 LBs + a nickel is
+    // 12). Each row lays itself out for however many starters it has, so a
+    // 4-3, 3-4, nickel, or 3-4-with-four-LBs all render without dropping
+    // anyone. Rule: "X1" (or a side label like LOLB1) in Airtable = starter.
+    const STARTER_MAX = {
+      LDE: 1, RDE: 1, DE: 2, EDGE: 2, LDT: 1, RDT: 1, DT: 2, NT: 1, DL: 4,
+      LOLB: 1, ROLB: 1, OLB: 2, ILB: 2, MLB: 1, LB: 4, WLB: 1, SLB: 1, LLB: 1, RLB: 1,
+      LCB: 1, RCB: 1, CB: 3, NB: 1, NCB: 1, SLOT: 1, DB: 2, FS: 1, SS: 1, S: 2,
+    };
+    const ROW_OF = (b) => (["LDE", "RDE", "DE", "EDGE", "LDT", "RDT", "DT", "NT", "DL"].includes(b) ? "dl"
+      : ["LOLB", "ROLB", "OLB", "ILB", "MLB", "LB", "WLB", "SLB", "LLB", "RLB"].includes(b) ? "lb"
+      : ["LCB", "RCB", "CB", "NB", "NCB", "SLOT", "DB"].includes(b) ? "db"
+      : ["FS", "SS", "S"].includes(b) ? "s" : null);
+    // Left-to-right ordering inside a row: L-side labels, then "1" of an
+    // edge position, then interior, then "2" of an edge position, then R-side.
+    const EDGE = new Set(["DE", "EDGE", "OLB", "CB", "S"]);
+    const sideKey = (b, d) => b.startsWith("L") && b.length > 2 ? 0
+      : b.startsWith("R") && b.length > 2 ? 4
+      : EDGE.has(b) ? (d <= 1 ? 1 : 3) : 2;
+    const rows = { dl: [], lb: [], db: [], s: [] };
+    roster
+      .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= (STARTER_MAX[b] ?? 1); })
+      .sort((a, b) => sideKey(baseOf(a), depthNo(a)) - sideKey(baseOf(b), depthNo(b)) || depthNo(a) - depthNo(b))
+      .forEach((p) => { rows[ROW_OF(baseOf(p))].push({ p, lbl: baseOf(p) }); used.add(p.id); });
+    // Fallback for rosters without depth labels: fill each row by Position.
+    const FALLBACK = { dl: ["DE", "DT", "NT", "EDGE", "DL"], lb: ["LB", "ILB", "OLB", "MLB"], db: ["CB", "NB", "DB"], s: ["S", "FS", "SS"] };
+    const MIN_ROW = { dl: 3, lb: 2, db: 2, s: 2 };
+    const BASE_ROW = { dl: 4, lb: 3, db: 2, s: 2 };
+    for (const r of Object.keys(rows)) {
+      if (rows[r].length === 0) {
+        roster.filter((p) => !used.has(p.id) && FALLBACK[r].includes(String(p.pos || "").toUpperCase()))
+          .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999)).slice(0, BASE_ROW[r])
+          .forEach((p) => { rows[r].push({ p, lbl: String(p.pos || "").toUpperCase() }); used.add(p.id); });
+      }
+      while (rows[r].length < MIN_ROW[r]) rows[r].push({ p: null, lbl: r.toUpperCase() === "S" ? "S" : r === "db" ? "CB" : r.toUpperCase() });
     }
-  });
-  SLOTS.forEach((s, i) => {
-    if (assigned[i]) return;
-    const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
-    const byLabel = roster
-      .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1)
-      .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
-    const byPos = roster
-      .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()))
-      .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
-    const hit = byLabel[0] || byPos[0] || null;
-    if (hit) { assigned[i] = hit; used.add(hit.id); }
-  });
+    const spread = (n, i) => (n === 1 ? 50 : 10 + (80 * i) / (n - 1));
+    const Y = { dl: 72, lb: 56, db: 40, s: 24 };
+    SLOTS = []; assigned = [];
+    for (const r of ["dl", "lb", "db", "s"]) {
+      rows[r].forEach((it, i) => {
+        SLOTS.push({ lbl: it.lbl, x: spread(rows[r].length, i), y: Y[r] });
+        assigned.push(it.p);
+      });
+    }
+  }
   // Sideline: everyone on this side of the ball who didn't crack the 11.
   const sideOf = (p) => {
     const u = unitOf(p);
