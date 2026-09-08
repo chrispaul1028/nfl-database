@@ -536,24 +536,40 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     // 12). Each row lays itself out for however many starters it has, so a
     // 4-3, 3-4, nickel, or 3-4-with-four-LBs all render without dropping
     // anyone. Rule: "X1" (or a side label like LOLB1) in Airtable = starter.
-    const STARTER_MAX = {
-      LDE: 1, RDE: 1, DE: 2, EDGE: 2, LDT: 1, RDT: 1, DT: 2, NT: 1, DL: 4,
-      LOLB: 1, ROLB: 1, OLB: 2, ILB: 2, MLB: 1, LB: 4, WLB: 1, SLB: 1, LLB: 1, RLB: 1,
-      LCB: 1, RCB: 1, CB: 3, NB: 1, NCB: 1, SLOT: 1, DB: 2, FS: 1, SS: 1, S: 2,
+    // Base label normalized: strip a side prefix (LILB -> ILB, RDE -> DE) so
+    // any naming style classifies into the right row. Nicknames included
+    // (MIKE/WILL/SAM/JACK/BUCK/MACK for LBs, STAR/DIME/NICKEL for DBs).
+    const norm = (b) => (b.length > 2 && /^[LR]/.test(b) && !["LB", "RB"].includes(b) ? b.slice(1) : b);
+    const ROW_OF = (b0) => {
+      const b = norm(b0);
+      if (/^(DE|DT|NT|EDGE|DL)$/.test(b)) return "dl";
+      if (/^(OLB|ILB|MLB|LB|WLB|SLB|MIKE|WILL|SAM|JACK|BUCK|MACK)$/.test(b)) return "lb";
+      if (/^(CB|NB|NCB|SLOT|DB|STAR|DIME|NICKEL)$/.test(b)) return "db";
+      if (/^(S|FS|SS)$/.test(b)) return "s";
+      return null;
     };
-    const ROW_OF = (b) => (["LDE", "RDE", "DE", "EDGE", "LDT", "RDT", "DT", "NT", "DL"].includes(b) ? "dl"
-      : ["LOLB", "ROLB", "OLB", "ILB", "MLB", "LB", "WLB", "SLB", "LLB", "RLB"].includes(b) ? "lb"
-      : ["LCB", "RCB", "CB", "NB", "NCB", "SLOT", "DB"].includes(b) ? "db"
-      : ["FS", "SS", "S"].includes(b) ? "s" : null);
-    // Left-to-right ordering inside a row: L-side labels, then "1" of an
-    // edge position, then interior, then "2" of an edge position, then R-side.
-    const EDGE = new Set(["DE", "EDGE", "OLB", "CB", "S"]);
-    const sideKey = (b, d) => b.startsWith("L") && b.length > 2 ? 0
-      : b.startsWith("R") && b.length > 2 ? 4
-      : EDGE.has(b) ? (d <= 1 ? 1 : 3) : 2;
+    // How many depth numbers count as "starter" per label. Side-prefixed
+    // labels (LDE, RILB) are one-per-side, so they're always depth 1.
+    const STARTER_MAX = {
+      DE: 2, DT: 2, NT: 1, EDGE: 2, DL: 4,
+      OLB: 2, ILB: 2, MLB: 2, LB: 4, WLB: 1, SLB: 1, MIKE: 1, WILL: 1, SAM: 1, JACK: 1, BUCK: 1, MACK: 1,
+      CB: 3, NB: 1, NCB: 1, SLOT: 1, DB: 2, STAR: 1, DIME: 1, NICKEL: 1, FS: 1, SS: 1, S: 2,
+    };
+    const maxFor = (b0) => (b0 !== norm(b0) ? 1 : (STARTER_MAX[b0] ?? 1));
+    // Left-to-right ordering inside a row: L-side labels, then the "1" of an
+    // edge position (SAM/WILL/OLB1/DE1/CB1), interior, "2" of an edge, R-side.
+    const EDGE_BASES = new Set(["DE", "EDGE", "OLB", "CB", "S"]);
+    const LEFT_NAMES = new Set(["SAM", "SLB"]), RIGHT_NAMES = new Set(["WILL", "WLB"]);
+    const sideKey = (b0, d) => {
+      const b = norm(b0);
+      if (b0 !== b) return b0.startsWith("L") ? 0 : 4;
+      if (LEFT_NAMES.has(b)) return 0;
+      if (RIGHT_NAMES.has(b)) return 4;
+      return EDGE_BASES.has(b) ? (d <= 1 ? 1 : 3) : 2;
+    };
     const rows = { dl: [], lb: [], db: [], s: [] };
     roster
-      .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= (STARTER_MAX[b] ?? 1); })
+      .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= maxFor(b); })
       .sort((a, b) => sideKey(baseOf(a), depthNo(a)) - sideKey(baseOf(b), depthNo(b)) || depthNo(a) - depthNo(b))
       .forEach((p) => { rows[ROW_OF(baseOf(p))].push({ p, lbl: baseOf(p) }); used.add(p.id); });
     // Fallback for rosters without depth labels: fill each row by Position.
@@ -566,14 +582,35 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999)).slice(0, BASE_ROW[r])
           .forEach((p) => { rows[r].push({ p, lbl: String(p.pos || "").toUpperCase() }); used.add(p.id); });
       }
-      while (rows[r].length < MIN_ROW[r]) rows[r].push({ p: null, lbl: r.toUpperCase() === "S" ? "S" : r === "db" ? "CB" : r.toUpperCase() });
+      while (rows[r].length < MIN_ROW[r]) rows[r].push({ p: null, lbl: r === "s" ? "S" : r === "db" ? "CB" : r.toUpperCase() });
     }
+    // Row geometry mirrors real alignments instead of even columns:
+    //   DL hugs the box, LBs sit inside the ends (OLBs wide in a 3-4),
+    //   corners pin to the sidelines with the nickel tucked closer to the
+    //   line, safeties split the deep middle.
+    const XS = {
+      dl: { 3: [25, 50, 75], 4: [14, 38, 62, 86], 5: [10, 30, 50, 70, 90] },
+      lb: { 2: [33, 67], 3: [26, 50, 74], 4: [12, 38, 62, 88], 5: [10, 30, 50, 70, 90] },
+      s: { 1: [50], 2: [33, 67], 3: [25, 50, 75] },
+    };
     const spread = (n, i) => (n === 1 ? 50 : 10 + (80 * i) / (n - 1));
+    const xFor = (r, n, i) => (XS[r] && XS[r][n] ? XS[r][n][i] : spread(n, i));
     const Y = { dl: 72, lb: 56, db: 40, s: 24 };
     SLOTS = []; assigned = [];
     for (const r of ["dl", "lb", "db", "s"]) {
+      const n = rows[r].length;
       rows[r].forEach((it, i) => {
-        SLOTS.push({ lbl: it.lbl, x: spread(rows[r].length, i), y: Y[r] });
+        let x = xFor(r, n, i), y = Y[r];
+        if (r === "db") {
+          // corners on the edges, interior DBs (nickel/dime) spread between
+          // and dropped a touch closer to the line of scrimmage
+          const inner = n - 2;
+          if (i === 0) x = 11;
+          else if (i === n - 1) x = 89;
+          else { x = inner === 1 ? 50 : 35 + (30 * (i - 1)) / (inner - 1); y = 46; }
+          if (n === 1) { x = 50; y = 40; }
+        }
+        SLOTS.push({ lbl: it.lbl, x, y });
         assigned.push(it.p);
       });
     }
@@ -586,7 +623,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     const m = lblOf(p).match(/^([A-Z]+)/);
     const b = m ? m[1] : null;
     if (b && (OL_POS.has(b) || ["QB", "RB", "FB", "HB", "WR", "TE"].includes(b))) return "offense";
-    if (b && (DL_POS.has(b) || ["LB", "ILB", "OLB", "MLB", "CB", "S", "FS", "SS", "DB", "NB", "NCB"].includes(b))) return "defense";
+    if (b && /^[LR]?(DE|DT|NT|EDGE|DL|OLB|ILB|MLB|LB|WLB|SLB|MIKE|WILL|SAM|JACK|BUCK|MACK|CB|NB|NCB|SLOT|DB|STAR|DIME|NICKEL|S|FS|SS)$/.test(b)) return "defense";
     return null;
   };
   // Sideline order: by positional importance (the question a bench answers
@@ -1885,9 +1922,18 @@ const tdTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 da
 
 function TdBoardTab({ players, teams, onSelect }) {
   const [board, setBoard] = useState(null);
-  const [seg, setSeg] = useState("board");
+  const [sb, setSb] = useState(null);           // /api/scoreboard
+  const [seg, setSeg] = useState("matchups");
   useEffect(() => {
     fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [] }));
+  }, []);
+  useEffect(() => {
+    // Live scores: refresh every 60s while this tab is open
+    let alive = true;
+    const load = () => fetch("/api/scoreboard").then((r) => r.json()).then((d) => { if (alive && d && d.games) setSb(d); }).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(t); };
   }, []);
 
   // Preview cards: RB1 / WR1-3 / TE1 from Airtable, sample values seeded from
@@ -1910,19 +1956,35 @@ function TdBoardTab({ players, teams, onSelect }) {
   const live = board && board.ready;
   const cards = live ? board.cards : preview;
   const findPlayer = (c) => c._p || players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(c.name));
-  const week = board?.week ?? 1;
+  const week = sb?.week ?? board?.week ?? 1;
+  // Group games by kickoff day for section headers (Thu / Sun / Mon)
+  const gamesByDay = useMemo(() => {
+    const out = [];
+    for (const g of (sb?.games || [])) {
+      const d = new Date(g.date);
+      const key = d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+      let grp = out.find((x) => x.key === key);
+      if (!grp) { grp = { key, games: [] }; out.push(grp); }
+      grp.games.push(g);
+    }
+    return out;
+  }, [sb]);
 
   return (
     <div>
       <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-3xl font-extrabold text-white">TD Targets <span className="text-blue-200">(Wk {week})</span></h1>
-          <span className="text-[11px] font-semibold text-blue-200">{board?.version || "v1"} · {live ? "data " + new Date(board.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "preview"}</span>
+          <h1 className="text-3xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
+          <span className="text-[11px] font-semibold text-blue-200">
+            {board?.version || "v1"} · {seg === "matchups"
+              ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
+              : (live ? "data " + new Date(board.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "preview")}
+          </span>
         </div>
       </div>
       <div className="px-4 pt-3">
         <div className="flex gap-2 mb-3">
-          {[["board", "TD Targets"], ["history", "History"]].map(([k, lbl]) => (
+          {[["matchups", "Matchups"], ["board", "TD Targets"], ["history", "History"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-sm font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
@@ -1930,7 +1992,71 @@ function TdBoardTab({ players, teams, onSelect }) {
           ))}
         </div>
 
-        {seg === "history" ? (
+        {seg === "matchups" ? (
+          <>
+            {!sb && <div className="p-6 text-center text-xs text-slate-400">Loading this week's games…</div>}
+            {sb && sb.games.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>}
+            {gamesByDay.map((grp) => (
+              <div key={grp.key} className="mb-4">
+                <div className="text-[11px] font-semibold tracking-widest uppercase text-slate-400 mb-2">{grp.key}</div>
+                <div className="space-y-2">
+                  {grp.games.map((g) => {
+                    const isLive = g.state === "in", isFinal = g.state === "post";
+                    const kickoff = new Date(g.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                    const Row = ({ t, top }) => {
+                      const hasBall = isLive && g.possession && String(g.possession) === String(t.id);
+                      const lost = isFinal && !t.winner;
+                      return (
+                        <div className="flex items-center gap-2.5">
+                          <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-9 h-9 rounded-full bg-white object-contain shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-1.5">
+                              <span className={"text-[15px] font-extrabold tracking-wide " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</span>
+                              {t.record && <span className="text-[11px] font-semibold text-slate-400 tabular-nums">{t.record}</span>}
+                            </div>
+                            <div className="text-[11px] text-slate-400 truncate">{t.name}</div>
+                          </div>
+                          <div className={"w-10 text-right text-2xl font-extrabold tabular-nums " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>
+                            {g.state === "pre" ? "" : (t.score ?? 0)}
+                            {hasBall && <span className="ml-1 text-[10px] text-rose-500 align-middle">▼</span>}
+                          </div>
+                        </div>
+                      );
+                    };
+                    return (
+                      <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0 space-y-2.5">
+                          <Row t={g.away} top />
+                          <Row t={g.home} />
+                        </div>
+                        <div className="w-24 shrink-0 text-center border-l border-slate-100 dark:border-slate-800 pl-3">
+                          {isLive ? (
+                            <>
+                              <div className="text-sm font-extrabold text-slate-900 dark:text-white uppercase">{g.detail}</div>
+                              {g.downDistance && <div className={"text-[10px] font-semibold mt-0.5 " + (g.redZone ? "text-rose-500" : "text-slate-400")}>{g.downDistance}</div>}
+                            </>
+                          ) : isFinal ? (
+                            <div className="text-sm font-extrabold text-slate-500 dark:text-slate-300">Final</div>
+                          ) : (
+                            <>
+                              <div className="text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">{kickoff}</div>
+                              {g.broadcast && <div className="text-[10px] font-semibold text-slate-400 mt-0.5">{g.broadcast}</div>}
+                            </>
+                          )}
+                          {g.odds && (g.odds.details || g.odds.overUnder != null) && !isFinal && (
+                            <div className="text-[10px] font-semibold text-slate-400 mt-1 tabular-nums">
+                              {g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        ) : seg === "history" ? (
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center">
             <div className="text-sm font-bold text-slate-700 dark:text-slate-200">No history yet</div>
             <div className="text-xs text-slate-400 mt-1">Each week's board gets logged against actual touchdowns starting Week 1 — the calibration loop, same as the HR board.</div>
