@@ -449,6 +449,8 @@ function InjBadge({ p, team, lg = false }) {
   if (is2 === "Questionable") { label = "QUESTIONABLE"; cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"; }
   else if (is2 === "Doubtful") { label = "DOUBTFUL"; cls = "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"; }
   else if (is2 === "Out") { label = "OUT"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
+  // Sleeper also uses short codes in injury_status itself (IR, PUP, NA, Sus, COV)
+  else if (/^(IR|PUP|NA|SUS|COV|DNR|NFI)$/i.test(String(is2 || ""))) { label = String(is2).toUpperCase() === "NA" ? "OUT" : String(is2).toUpperCase(); cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
   else {
     const st = String(inj.status || "");
     if (/injured reserve/i.test(st)) { label = "IR"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
@@ -490,7 +492,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
   const baseOf = (p) => { const m = lblOf(p).match(/^([A-Z]+)/); return m ? m[1] : null; };
   const used = new Set();
-  let SLOTS, assigned, formationLabel = unit === "offense" ? "11 Personnel" : null;
+  let SLOTS, assigned, formationLabel = null; // defense sets this ("4-3 · Nickel"); offense stays clean
 
   if (unit === "offense") {
     // Offense keeps the 11-man template — it's stable across the league.
@@ -649,15 +651,47 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   //   emerald = Sleeper confirms healthy · orange = Questionable
   //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
   const injOf = (p) => (p ? injFor(p.name, abbr) : null);
-  const isOut = (inj) => !!inj && (inj.injury_status === "Out" || /injured reserve|pup|non football/i.test(String(inj.status || "")));
+  // Sleeper's injury_status vocabulary is wider than Q/D/Out — IR, PUP, NA,
+  // Sus, COV, DNR all mean "not playing". Missing any of these = a hurt
+  // player shown as healthy (the Charbonnet bug).
+  const OUT_CODES = new Set(["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR", "NFI", "RET"]);
+  const isOut = (inj) => !!inj && (OUT_CODES.has(String(inj.injury_status || "").toUpperCase()) ||
+    /injured reserve|pup|non football|suspend|inactive/i.test(String(inj.status || "")));
+  // Health state: "out" | "d" | "q" | "ok" | null (no Sleeper match)
+  const healthOf = (p) => {
+    const inj = injOf(p);
+    if (!inj) return null;
+    if (isOut(inj)) return "out";
+    const st = String(inj.injury_status || "").toUpperCase();
+    if (st === "DOUBTFUL") return "d";
+    if (st === "QUESTIONABLE") return "q";
+    return "ok";
+  };
+  // Ring: white = healthy (reads on grass), gray = no data, orange = Q, red = D/Out
   const ringCls = (p) => {
     if (!p) return "border-white/40";
+    const h = healthOf(p);
+    if (h == null) return "border-slate-400";
+    if (h === "out" || h === "d") return "border-red-500";
+    if (h === "q") return "border-orange-400";
+    return "border-white";
+  };
+  // High-contrast status badge at the top-right of the circle — the thing
+  // you actually read, since ring hue alone gets lost against green turf.
+  const HealthBadge = ({ p, small }) => {
+    const h = healthOf(p);
+    if (!h || h === "ok") return null;
     const inj = injOf(p);
-    if (!inj) return "border-slate-400";
-    if (isOut(inj)) return "border-red-600";
-    if (inj.injury_status === "Doubtful") return "border-red-500";
-    if (inj.injury_status === "Questionable") return "border-orange-400";
-    return "border-emerald-500";
+    const txt = h === "q" ? "Q" : h === "d" ? "D"
+      : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
+      : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
+    return (
+      <span className={"absolute -top-1 -right-1.5 px-1 rounded-full font-extrabold text-white border-2 border-white shadow flex items-center justify-center " +
+        (small ? "min-w-[14px] h-[14px] text-[7px] " : "min-w-[17px] h-[17px] text-[8px] ") +
+        (h === "q" ? "bg-orange-500" : "bg-red-600")}>
+        {txt}
+      </span>
+    );
   };
   return (
     <div className="mt-4">
@@ -758,6 +792,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)}
                   </span>
                 )}
+                {p && <HealthBadge p={p} />}
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[92px] truncate drop-shadow">
                 {p ? (() => {
@@ -784,16 +819,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1.5 px-1">
             {bench.map((p) => (
-              <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center shrink-0 w-14">
+              <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center shrink-0 w-[68px]">
                 <span className="relative">
                   {photoOf(p, abbr) ? (
                     <img src={photoOf(p, abbr)} alt="" loading="lazy"
-                      className={"w-10 h-10 rounded-full object-cover bg-white border-2 " + ringCls(p) + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
+                      className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700") + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
                   ) : (
-                    <span className={"w-10 h-10 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-2 " + ringCls(p)}>
+                    <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
                       {String(p.pos || "").toUpperCase() || "—"}
                     </span>
                   )}
+                  <HealthBadge p={p} small />
                   {p.rating2k != null && (
                     <span className={"absolute -bottom-1 left-1/2 -translate-x-1/2 px-1 rounded-full text-[8px] font-extrabold tabular-nums shadow " +
                       (Math.round(p.rating2k) >= 90 ? "bg-amber-400 text-slate-900"
@@ -804,7 +840,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                     </span>
                   )}
                 </span>
-                <span className="mt-1.5 text-[8px] font-bold text-slate-600 dark:text-slate-300 max-w-full truncate">
+                <span className="mt-2 text-[9px] font-bold text-slate-600 dark:text-slate-300 max-w-full truncate">
                   {(() => {
                     const parts = String(p.name).split(" ");
                     const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
@@ -820,7 +856,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           </div>
         </div>
       )}
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Ring = health (green ok · orange Questionable · red Doubtful · red+faded Out/IR · gray no data) · chip = OVR · pill = line rank vs NFL · tap for profile</div>
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Badge = injury (Q · D · OUT · IR, faded = not playing) · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
     </div>
   );
 }
