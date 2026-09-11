@@ -114,7 +114,7 @@ function matchesQuery(p, q) {
 
 // ═══════════════ SHARED PIECES ═══════════════════════════════════
 function Avatar({ p, size }) {
-  const px = size === "lg" ? "w-20 h-20 text-2xl" : "w-11 h-11 text-sm";
+  const px = size === "lg" ? "w-20 h-20 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-11 h-11 text-sm";
   const url = photoOf(p);
   const no = cleanNo(p.no);
   const label = no ? "#" + no : p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
@@ -755,7 +755,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : "text-rose-300";
           return (
             <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
-              style={{ top: unit === "offense" ? "63.5%" : "79.5%" }}>
+              style={{ top: unit === "offense" ? "66.5%" : "82.5%" }}>
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -821,7 +821,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                 )}
                 {p && <HealthBadge p={p} />}
               </span>
-              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[96px] text-center leading-[1.15] whitespace-normal break-words drop-shadow">
+              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[100px] truncate drop-shadow">
                 {p ? (() => {
                   const parts = p.name.split(" ");
                   const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
@@ -2153,14 +2153,14 @@ function TdBoardTab({ players, teams, onSelect }) {
             ))}
           </>
         ) : seg === "history" ? (
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center">
-            <div className="text-sm font-bold text-slate-700 dark:text-slate-200">No history yet</div>
-            <div className="text-xs text-slate-400 mt-1">Each week's board gets logged against actual touchdowns starting Week 1 — the calibration loop, same as the HR board.</div>
+          <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-center">
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">No history yet</div>
+            <div className="text-[11px] text-slate-400 mt-1">Each week's board gets logged against actual touchdowns starting Week 1 — the calibration loop, same as the HR board.</div>
           </div>
         ) : (
           <>
             {!live && (
-              <div className="mb-3 rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              <div className="mb-2 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                 PREVIEW · sample values seeded from Madden ratings. Live board activates with Week 1 data — opponents, Vegas totals, and red-zone shares arrive automatically.
               </div>
             )}
@@ -2174,30 +2174,30 @@ function TdBoardTab({ players, teams, onSelect }) {
                 const pct = Math.round((c.tdPct || 0) * 100);
                 return (
                   <button key={(c.name || "") + i} onClick={p ? () => onSelect(p) : undefined}
-                    className="w-full text-left px-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800/60">
+                    className="w-full text-left px-3 py-2 active:bg-slate-50 dark:active:bg-slate-800/60">
                     {/* row 1: rank · headshot · team · name · opponent */}
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-5 text-sm font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
-                      {p ? <Avatar p={p} /> : <div className="w-11 h-11 rounded-full bg-slate-200 dark:bg-slate-700" />}
-                      {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-6 h-6 rounded-full bg-white object-contain shrink-0" />}
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
+                      {p ? <Avatar p={p} size="sm" /> : <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700" />}
+                      {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">
+                        <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
                           <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
                           {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-amber-500">{c.injury}</span>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-300 shrink-0">
-                        {c.opp && TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-5 h-5 rounded-full bg-white object-contain" />}
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-300 shrink-0">
+                        {c.opp && TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-4 h-4 rounded-full bg-white object-contain" />}
                         <span>{c.opp ? (c.home ? "vs " : "@ ") + c.opp : "vs —"}</span>
                       </div>
                     </div>
                     {/* row 2: role | component tiles | TD% */}
-                    <div className="mt-2 flex items-end gap-1.5">
-                      <div className="w-12 text-center shrink-0">
-                        <div className="text-[9px] font-semibold text-slate-400 tracking-wider">ROLE</div>
-                        <div className="text-sm font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
+                    <div className="mt-1.5 flex items-end gap-1.5">
+                      <div className="w-10 text-center shrink-0">
+                        <div className="text-[8px] font-semibold text-slate-400 tracking-wider">ROLE</div>
+                        <div className="text-xs font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
                       </div>
-                      <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                      <div className="w-px h-7 bg-slate-200 dark:bg-slate-700 mx-0.5" />
                       <div className="flex-1 grid grid-cols-4 gap-1.5">
                         {[
                           ["RZ SHARE", c.rzShare != null ? Math.round(c.rzShare * 100) + "%" : "—", tdTile(c.rzShare, 0.25, 0.15)],
@@ -2206,18 +2206,18 @@ function TdBoardTab({ players, teams, onSelect }) {
                           ["OPP TD/G", c.oppTdAllowedPg != null ? c.oppTdAllowedPg.toFixed(1) : "—", tdTile(c.oppTdAllowedPg, 1.2, 0.8)],
                         ].map(([lbl, val, cls]) => (
                           <div key={lbl} className="text-center">
-                            <div className="text-[8px] font-semibold text-slate-400 tracking-wider">{lbl}</div>
-                            <div className={"mt-0.5 rounded-md py-0.5 text-[11px] font-extrabold tabular-nums " + cls}>{val}</div>
+                            <div className="text-[7px] font-semibold text-slate-400 tracking-wider">{lbl}</div>
+                            <div className={"mt-0.5 rounded-md py-0.5 text-[10px] font-extrabold tabular-nums " + cls}>{val}</div>
                           </div>
                         ))}
                       </div>
-                      <div className="w-14 text-right shrink-0">
-                        <div className="text-[9px] font-semibold text-slate-400 tracking-wider">TD%</div>
-                        <div className={"text-lg font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
+                      <div className="w-12 text-right shrink-0">
+                        <div className="text-[8px] font-semibold text-slate-400 tracking-wider">TD%</div>
+                        <div className={"text-base font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
                       </div>
                     </div>
                     {/* row 3: venue · spread · weather */}
-                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
                       <span className="truncate">{c.venue || "Venue TBD"}{c.spread != null && <span className="ml-1.5 font-bold text-slate-500 dark:text-slate-300">{c.spread > 0 ? "+" + c.spread : c.spread}</span>}</span>
                       <span className="shrink-0 ml-2">{c.dome ? "🏟 Dome" : c.weather || "—"}</span>
                     </div>
