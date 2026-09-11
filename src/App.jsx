@@ -527,12 +527,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     const h = healthOf(p);
     if (!h || h === "ok") return null;
     const inj = injOf(p);
-    const txt = h === "q" ? "QUEST" : h === "d" ? "DOUBT"
+    const txt = h === "q" ? "QUESTIONABLE" : h === "d" ? "DOUBTFUL"
       : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
       : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
     return (
       <span className={"absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
-        (small ? "h-[14px] text-[7px] " : "h-[17px] text-[8px] ")}>
+        (small ? "h-[13px] text-[6px] " : "h-[15px] text-[7px] ")}>
         {txt}
       </span>
     );
@@ -795,7 +795,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               <span className="relative">
                 {p && photoOf(p, abbr) ? (
                   <img src={photoOf(p, abbr)} alt="" loading="lazy"
-                    className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p) + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
+                    className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)} />
                 ) : (
                   <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
                     {s.lbl}
@@ -821,7 +821,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                 )}
                 {p && <HealthBadge p={p} />}
               </span>
-              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[92px] truncate drop-shadow">
+              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[96px] text-center leading-[1.15] whitespace-normal break-words drop-shadow">
                 {p ? (() => {
                   const parts = p.name.split(" ");
                   const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
@@ -850,7 +850,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                 <span className="relative">
                   {photoOf(p, abbr) ? (
                     <img src={photoOf(p, abbr)} alt="" loading="lazy"
-                      className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700") + (isOut(injOf(p)) ? " grayscale opacity-70" : "")} />
+                      className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")} />
                   ) : (
                     <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
                       {String(p.pos || "").toUpperCase() || "—"}
@@ -1515,8 +1515,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
 
         {seg === "roster" && (
           <div className="flex gap-2 mt-3">
-            {[["list", "Roster"], ["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
-              <button key={k} onClick={() => setRosterView(k)}
+            {[["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
+              <button key={k} onClick={() => setRosterView(rosterView === k ? "list" : k)}
                 className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold transition-colors " + (rosterView === k
                   ? "text-white"
                   : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
@@ -2068,9 +2068,9 @@ function TdBoardTab({ players, teams, onSelect }) {
 
   return (
     <div>
-      <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+      <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-2xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
+          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
             {board?.version || "v1"} · {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
@@ -2082,7 +2082,7 @@ function TdBoardTab({ players, teams, onSelect }) {
         <div className="flex gap-2 mb-3">
           {[["matchups", "Matchups"], ["board", "TD Targets"], ["history", "History"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
-              className={"flex-1 py-2 rounded-full text-sm font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
+              className={"flex-1 py-1.5 rounded-full text-xs font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
             </button>
           ))}
@@ -2094,8 +2094,8 @@ function TdBoardTab({ players, teams, onSelect }) {
             {sb && sb.games.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>}
             {gamesByDay.map((grp) => (
               <div key={grp.key} className="mb-4">
-                <div className="text-[11px] font-semibold tracking-widest uppercase text-slate-400 mb-2">{grp.key}</div>
-                <div className="space-y-2">
+                <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">{grp.key}</div>
+                <div className="space-y-1.5">
                   {grp.games.map((g) => {
                     const isLive = g.state === "in", isFinal = g.state === "post";
                     const kickoff = new Date(g.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -2104,15 +2104,15 @@ function TdBoardTab({ players, teams, onSelect }) {
                       const lost = isFinal && !t.winner;
                       return (
                         <div className="flex items-center gap-2.5">
-                          <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-9 h-9 rounded-full bg-white object-contain shrink-0" />
+                          <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-7 h-7 rounded-full bg-white object-contain shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline gap-1.5">
-                              <span className={"text-[15px] font-extrabold tracking-wide " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</span>
-                              {t.record && <span className="text-[11px] font-semibold text-slate-400 tabular-nums">{t.record}</span>}
+                              <span className={"text-[13px] font-extrabold tracking-wide " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</span>
+                              {t.record && <span className="text-[10px] font-semibold text-slate-400 tabular-nums">{t.record}</span>}
                             </div>
-                            <div className="text-[11px] text-slate-400 truncate">{t.name}</div>
+                            <div className="text-[10px] text-slate-400 truncate leading-tight">{t.name}</div>
                           </div>
-                          <div className={"w-10 text-right text-2xl font-extrabold tabular-nums " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>
+                          <div className={"w-8 text-right text-lg font-extrabold tabular-nums " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>
                             {g.state === "pre" ? "" : (t.score ?? 0)}
                             {hasBall && <span className="ml-1 text-[10px] text-rose-500 align-middle">▼</span>}
                           </div>
@@ -2120,27 +2120,27 @@ function TdBoardTab({ players, teams, onSelect }) {
                       );
                     };
                     return (
-                      <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-3 flex items-center gap-3">
-                        <div className="flex-1 min-w-0 space-y-2.5">
+                      <div key={g.id} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2 flex items-center gap-2">
+                        <div className="flex-1 min-w-0 space-y-1.5">
                           <Row t={g.away} top />
                           <Row t={g.home} />
                         </div>
-                        <div className="w-24 shrink-0 text-center border-l border-slate-100 dark:border-slate-800 pl-3">
+                        <div className="w-20 shrink-0 text-center border-l border-slate-100 dark:border-slate-800 pl-2">
                           {isLive ? (
                             <>
-                              <div className="text-sm font-extrabold text-slate-900 dark:text-white uppercase">{g.detail}</div>
+                              <div className="text-xs font-extrabold text-slate-900 dark:text-white uppercase">{g.detail}</div>
                               {g.downDistance && <div className={"text-[10px] font-semibold mt-0.5 " + (g.redZone ? "text-rose-500" : "text-slate-400")}>{g.downDistance}</div>}
                             </>
                           ) : isFinal ? (
-                            <div className="text-sm font-extrabold text-slate-500 dark:text-slate-300">Final</div>
+                            <div className="text-xs font-extrabold text-slate-500 dark:text-slate-300">Final</div>
                           ) : (
                             <>
-                              <div className="text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">{kickoff}</div>
-                              {g.broadcast && <div className="text-[10px] font-semibold text-slate-400 mt-0.5">{g.broadcast}</div>}
+                              <div className="text-xs font-extrabold text-slate-900 dark:text-white tabular-nums">{kickoff}</div>
+                              {g.broadcast && <div className="text-[9px] font-semibold text-slate-400">{g.broadcast}</div>}
                             </>
                           )}
                           {g.odds && (g.odds.details || g.odds.overUnder != null) && !isFinal && (
-                            <div className="text-[10px] font-semibold text-slate-400 mt-1 tabular-nums">
+                            <div className="text-[9px] font-semibold text-slate-400 mt-0.5 tabular-nums">
                               {g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}
                             </div>
                           )}
@@ -2164,7 +2164,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                 PREVIEW · sample values seeded from Madden ratings. Live board activates with Week 1 data — opponents, Vegas totals, and red-zone shares arrive automatically.
               </div>
             )}
-            <div className="text-[11px] font-semibold tracking-widest uppercase text-slate-400 mb-2">🎯 TD Targets</div>
+            <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">🎯 TD Targets</div>
             <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
               {cards.length === 0 && (
                 <div className="p-6 text-center text-xs text-slate-400">No starters found — label RB1, WR1–WR3, and TE1 in Airtable Sort Priority to seed the board.</div>
@@ -2174,14 +2174,14 @@ function TdBoardTab({ players, teams, onSelect }) {
                 const pct = Math.round((c.tdPct || 0) * 100);
                 return (
                   <button key={(c.name || "") + i} onClick={p ? () => onSelect(p) : undefined}
-                    className="w-full text-left px-3 py-3 active:bg-slate-50 dark:active:bg-slate-800/60">
+                    className="w-full text-left px-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800/60">
                     {/* row 1: rank · headshot · team · name · opponent */}
                     <div className="flex items-center gap-2.5">
                       <div className="w-5 text-sm font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
                       {p ? <Avatar p={p} /> : <div className="w-11 h-11 rounded-full bg-slate-200 dark:bg-slate-700" />}
                       {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-6 h-6 rounded-full bg-white object-contain shrink-0" />}
                       <div className="min-w-0 flex-1">
-                        <div className="text-[15px] font-extrabold text-slate-900 dark:text-white truncate">
+                        <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">
                           <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
                           {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-amber-500">{c.injury}</span>}
                         </div>
@@ -2192,7 +2192,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                       </div>
                     </div>
                     {/* row 2: role | component tiles | TD% */}
-                    <div className="mt-2.5 flex items-end gap-1.5">
+                    <div className="mt-2 flex items-end gap-1.5">
                       <div className="w-12 text-center shrink-0">
                         <div className="text-[9px] font-semibold text-slate-400 tracking-wider">ROLE</div>
                         <div className="text-sm font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
@@ -2207,13 +2207,13 @@ function TdBoardTab({ players, teams, onSelect }) {
                         ].map(([lbl, val, cls]) => (
                           <div key={lbl} className="text-center">
                             <div className="text-[8px] font-semibold text-slate-400 tracking-wider">{lbl}</div>
-                            <div className={"mt-0.5 rounded-md py-0.5 text-[12px] font-extrabold tabular-nums " + cls}>{val}</div>
+                            <div className={"mt-0.5 rounded-md py-0.5 text-[11px] font-extrabold tabular-nums " + cls}>{val}</div>
                           </div>
                         ))}
                       </div>
                       <div className="w-14 text-right shrink-0">
                         <div className="text-[9px] font-semibold text-slate-400 tracking-wider">TD%</div>
-                        <div className={"text-xl font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
+                        <div className={"text-lg font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
                       </div>
                     </div>
                     {/* row 3: venue · spread · weather */}
