@@ -39,6 +39,31 @@ export default async function handler(req, res) {
       }
     }
 
+    // Positions: ESPN box scores don't carry them. Take Sleeper's (via espn_id),
+    // else infer from the stat line. Without this every player is position-less
+    // and the TD board filters all of them out.
+    let posByEspn = {};
+    try {
+      const sl = await getJson("https://api.sleeper.app/v1/players/nfl");
+      for (const sp of Object.values(sl || {})) if (sp && sp.espn_id && sp.position) posByEspn[String(sp.espn_id)] = String(sp.position).toUpperCase();
+    } catch {}
+    for (const P of Object.values(players)) {
+      const g = P.games;
+      const att = g.reduce((a, x) => a + (x.att || 0), 0), car = g.reduce((a, x) => a + (x.car || 0), 0), tgt = g.reduce((a, x) => a + (x.tgt || 0), 0), tkl = g.reduce((a, x) => a + (x.tkl || 0), 0);
+      P.pos = P.pos || posByEspn[P.id] || (att >= 5 ? "QB" : car > tgt && car > 0 ? "RB" : tgt > 0 ? "WR" : tkl > 0 ? "DEF" : "");
+      if (P.pos === "HB" || P.pos === "FB") P.pos = "RB";
+    }
+    // Allowed-by-position, rebuilt here now that positions are known
+    for (const T of Object.values(teams)) T.allowed = { RB: { td: 0, yds: 0 }, WR: { td: 0, yds: 0 }, TE: { td: 0, yds: 0 } };
+    for (const P of Object.values(players)) {
+      if (!["RB", "WR", "TE"].includes(P.pos)) continue;
+      for (const g of P.games) {
+        const O = teams[g.opp]; if (!O) continue;
+        O.allowed[P.pos].td += (g.rushTd || 0) + (g.recTd || 0);
+        O.allowed[P.pos].yds += (g.rushYds || 0) + (g.recYds || 0);
+      }
+    }
+
     // Player totals + per-game
     const SUM = ["cmp", "att", "passYds", "passTd", "int", "car", "rushYds", "rushTd", "rec", "tgt", "recYds", "recTd", "tkl", "solo", "sacks", "tfl", "pd", "defTd", "defInt"];
     for (const P of Object.values(players)) {
