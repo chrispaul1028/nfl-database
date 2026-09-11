@@ -763,7 +763,8 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : lr.rank <= 20 ? "text-yellow-300"
             : "text-rose-300";
           return (
-            <span className="absolute right-2 bottom-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm">
+            <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
+              style={{ top: unit === "offense" ? "66.5%" : "82.5%" }}>
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -824,7 +825,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                       : Math.round(p.rating2k) >= 85 ? "bg-emerald-500 text-white"
                       : Math.round(p.rating2k) >= 70 ? "bg-slate-900/85 text-white"
                       : "bg-rose-600 text-white")}>
-                    {(Math.round(p.rating2k) >= 90 ? "⭐" : "")}{Math.round(p.rating2k)}
+                    {Math.round(p.rating2k)}
                   </span>
                 )}
                 {p && <HealthBadge p={p} />}
@@ -901,7 +902,6 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           ))}
         </div>
       )}
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Red = injured (QUEST · DOUBT · OUT · IR) · OUT starters auto-swap to the sideline · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
     </div>
   );
 }
@@ -1045,7 +1045,7 @@ function Rating2kBadge({ r }) {
     : "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300";                    // liability
   return (
     <span className={"shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-extrabold " + cls}>
-      {n >= 90 ? "⭐ " : ""}{n} OVR
+      {n} OVR
     </span>
   );
 }
