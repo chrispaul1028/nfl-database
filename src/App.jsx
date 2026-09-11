@@ -412,6 +412,11 @@ const teamPts = (t, started) => ({
 //   injury_status: Questionable / Doubtful / Out
 //   status: Active / Injured Reserve / PUP / NFI / Inactive
 const INJ_BY_NAME = {}; // normalized name -> [sleeper players] (dupes kept)
+const INJ_BY_LAST = {}; // "TEAM|lastname" -> [sleeper players] — nickname-proof fallback
+const lastNameKey = (name) => {
+  const parts = injNrm(name).split(" ").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+};
 const injNrm = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
 const injTeamEq = (a, b) => {
   const n = (t) => String(t || "").toUpperCase();
@@ -428,13 +433,27 @@ function injIsOut(inj) {
 
 function injFor(name, teamAbbr) {
   const list = INJ_BY_NAME[injNrm(name)];
-  if (!list || !list.length) return null;
-  if (list.length > 1 && teamAbbr) {
-    const hit = list.find((p) => injTeamEq(p.team, teamAbbr));
-    if (hit) return hit;
-    return null; // duplicate name, wrong/unknown team — don't guess
+  if (list && list.length) {
+    if (list.length > 1 && teamAbbr) {
+      const hit = list.find((p) => injTeamEq(p.team, teamAbbr));
+      if (hit) return hit;
+      return null; // duplicate name, wrong/unknown team — don't guess
+    }
+    return list[0];
   }
-  return list[0];
+  // Full name missed (nickname: "Bam Knight" vs Sleeper's "Zonovan Knight").
+  // Fall back to team + last name, but only when exactly one player on that
+  // team has the last name — never guess between two Smiths.
+  if (teamAbbr) {
+    for (const t of Object.keys(INJ_BY_LAST)) {
+      const [team, last] = t.split("|");
+      if (last === lastNameKey(name) && injTeamEq(team, teamAbbr)) {
+        const cands = INJ_BY_LAST[t];
+        if (cands.length === 1) return cands[0];
+      }
+    }
+  }
+  return null;
 }
 // Automated headshots: if Airtable has no photo, fall back to Sleeper's CDN
 // (keyed by the player_id we already matched for injuries). Covers every
@@ -2290,6 +2309,8 @@ export default function App() {
           if (!p || !p.full_name || !p.team) continue;
           const k = injNrm(p.full_name);
           (INJ_BY_NAME[k] = INJ_BY_NAME[k] || []).push(p);
+          const lk = String(p.team).toUpperCase() + "|" + lastNameKey(p.full_name);
+          (INJ_BY_LAST[lk] = INJ_BY_LAST[lk] || []).push(p);
         }
         setInjTick((t) => t + 1);
       })
