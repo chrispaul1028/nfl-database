@@ -419,6 +419,13 @@ const injTeamEq = (a, b) => {
   const AL = [["WAS", "WSH"], ["JAX", "JAC"], ["LAR", "LA"], ["ARI", "ARZ"], ["BAL", "BLT"], ["CLE", "CLV"], ["HOU", "HST"]];
   return AL.some(([x, y]) => (n(a) === x && n(b) === y) || (n(a) === y && n(b) === x));
 };
+// Sleeper's "not playing" vocabulary — shared by the formation and the unit rankings
+const OUT_CODES = new Set(["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR", "NFI", "RET"]);
+function injIsOut(inj) {
+  return !!inj && (OUT_CODES.has(String(inj.injury_status || "").toUpperCase()) ||
+    /injured reserve|pup|non football|suspend|inactive/i.test(String(inj.status || "")));
+}
+
 function injFor(name, teamAbbr) {
   const list = INJ_BY_NAME[injNrm(name)];
   if (!list || !list.length) return null;
@@ -487,7 +494,7 @@ const isStarter = (p) => {
 
 // unit state lives in TeamDetail now so the stat tiles up top can react to
 // the Offense/Defense toggle. lineRank = this team's OL/DL league ranks.
-function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }) {
+function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, team }) {
   const lblOf = (p) => String(p.sortLabel || "").toUpperCase();
   const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
   const baseOf = (p) => { const m = lblOf(p).match(/^([A-Z]+)/); return m ? m[1] : null; };
@@ -495,9 +502,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   // Sleeper's injury_status vocabulary is wider than Q/D/Out — IR, PUP, NA,
   // Sus, COV, DNR all mean "not playing". Missing any of these = a hurt
   // player shown as healthy (the Charbonnet bug).
-  const OUT_CODES = new Set(["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR", "NFI", "RET"]);
-  const isOut = (inj) => !!inj && (OUT_CODES.has(String(inj.injury_status || "").toUpperCase()) ||
-    /injured reserve|pup|non football|suspend|inactive/i.test(String(inj.status || "")));
+  const isOut = injIsOut;
   // Health state: "out" | "d" | "q" | "ok" | null (no Sleeper match)
   const healthOf = (p) => {
     const inj = injOf(p);
@@ -717,7 +722,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
   return (
     <div className="mt-4">
-      <div className="flex gap-2 mb-3">
+      {setUnit && <div className="flex gap-2 mb-3">
         {[["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
           <button key={k} onClick={() => setUnit(k)}
             className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold " + (unit === k
@@ -727,7 +732,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
             {lbl}
           </button>
         ))}
-      </div>
+      </div>}
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
         style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
         {/* subtle top-down light so it reads as turf, not a flat panel */}
@@ -815,11 +820,6 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                   </span>
                 )}
                 {p && <HealthBadge p={p} />}
-                {p && s.nextUp && healthOf(p) !== "out" && (
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 h-[17px] px-1.5 rounded-full text-[8px] font-extrabold text-white bg-emerald-600 border-2 border-white shadow whitespace-nowrap flex items-center">
-                    ▲ NEXT UP
-                  </span>
-                )}
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[92px] truncate drop-shadow">
                 {p ? (() => {
@@ -844,7 +844,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
             <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline</span>
             <span className="text-[9px] font-bold text-slate-400 tabular-nums">{bench.length}</span>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-1.5 px-1">
+          <div className="flex gap-3 overflow-x-auto pt-3 pb-1.5 px-1">
             {bench.map((p) => (
               <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center shrink-0 w-[68px]">
                 <span className="relative">
@@ -883,7 +883,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           </div>
         </div>
       )}
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Red = injured (QUEST · DOUBT · OUT · IR) · OUT starters auto-swap to the sideline, ▲ NEXT UP takes the spot · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
+      {(team && (team.headCoach || team.offCoord || team.defCoord)) && (
+        <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2.5 grid grid-cols-3 gap-2">
+          {[["Head Coach", team.headCoach], ["Off. Coordinator", team.offCoord], ["Def. Coordinator", team.defCoord]].map(([k, v]) => (
+            <div key={k} className="min-w-0">
+              <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
+              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Red = injured (QUEST · DOUBT · OUT · IR) · OUT starters auto-swap to the sideline · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
     </div>
   );
 }
@@ -898,7 +908,7 @@ function LiveStatus({ p, team }) {
     : <StatusBadge status={p.status} />;
 }
 
-function ListHeader({ title, q, setQ, placeholder }) {
+function ListHeader({ title, q, setQ, placeholder, pills }) {
   return (
     <div className="bg-blue-600 px-5 pb-5 text-white sticky top-0 z-10 shadow-md" style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.5rem)" }}>
       <div className="text-2xl font-extrabold tracking-tight">{title}</div>
@@ -908,6 +918,7 @@ function ListHeader({ title, q, setQ, placeholder }) {
         placeholder={placeholder || "Search players or teams…"}
         className="mt-3 w-full rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-200 bg-white/95 dark:bg-slate-900/80 placeholder-slate-400 outline-none"
       />
+      {pills}
     </div>
   );
 }
@@ -930,9 +941,27 @@ function TeamPill({ team }) {
 }
 
 // ═══════════════ TAB: PLAYER HUB ═════════════════════════════════
-function PlayersTab({ players, onSelect }) {
+// Hub for the Players bottom tab: one place for players, injuries, contracts, draft
+function PlayersHub({ players, onSelect }) {
+  const [view, setView] = useState("players");
+  const pills = (
+    <div className="flex gap-2 mt-3 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      {[["players", "Players"], ["injury", "🏥 Injury Report"], ["contracts", "Contracts"], ["draft", "Draft"]].map(([k, lbl]) => (
+        <button key={k} onClick={() => setView(k)}
+          className={"shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-extrabold " + (view === k ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100 active:bg-blue-500")}>
+          {lbl}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === "contracts") return <ContractsTab players={players} onSelect={onSelect} pills={pills} />;
+  if (view === "draft") return <DraftTab players={players} onSelect={onSelect} pills={pills} />;
+  return <PlayersTab players={players} onSelect={onSelect} pills={pills} forceInj={view === "injury"} key={view} />;
+}
+
+function PlayersTab({ players, onSelect, pills, forceInj }) {
   const [q, setQ] = useState("");
-  const [injOnly, setInjOnly] = useState(false);
+  const injOnly = !!forceInj;
   const list = useMemo(
     () => players
       .filter((p) => matchesQuery(p, q))
@@ -944,15 +973,7 @@ function PlayersTab({ players, onSelect }) {
   );
   return (
     <div>
-      <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} />
-      <div className="flex px-4 mt-3">
-        <button onClick={() => setInjOnly((v) => !v)}
-          className={"py-1.5 px-4 rounded-full text-[11px] font-extrabold " + (injOnly
-            ? "bg-rose-600 text-white"
-            : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-800")}>
-          🏥 Injury Report
-        </button>
-      </div>
+      <ListHeader title={<>{injOnly ? "Injury Report" : "Players"} <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
@@ -979,8 +1000,8 @@ function PlayersTab({ players, onSelect }) {
               <TeamPill team={teamOfPlayer(p) || p.teamName || activeOf(p)?.team} />
             </button>
           ))}
-          {list.length === 0 && faOnly && <div className="text-center text-sm text-slate-400 py-12 px-6">No events for the {startYear(CURRENT_SEASON) + 1} offseason yet. Add UFA/RFA rows or option years in Contract Years.</div>}
-          {list.length === 0 && !faOnly && <div className="text-center text-sm text-slate-400 py-12">No players match "{q}".</div>}
+          {list.length === 0 && injOnly && <div className="text-center text-sm text-slate-400 py-12 px-6">No injuries reported right now.</div>}
+          {list.length === 0 && !injOnly && <div className="text-center text-sm text-slate-400 py-12">No players match "{q}".</div>}
         </div>
       </div>
     </div>
@@ -1073,7 +1094,7 @@ function nextSeason(s) {
   return (Number(m[1]) + 1) + "-" + (Number(m[2]) + 1);
 }
 
-function ContractsTab({ players, onSelect }) {
+function ContractsTab({ players, onSelect, pills }) {
   const [q, setQ] = useState("");
   const [faOnly, setFaOnly] = useState(false);
   const list = useMemo(
@@ -1102,7 +1123,7 @@ function ContractsTab({ players, onSelect }) {
   );
   return (
     <div>
-      <ListHeader title="Contracts" q={q} setQ={setQ} />
+      <ListHeader title="Contracts" q={q} setQ={setQ} pills={pills} />
       <div className="px-4 mt-3 flex gap-2">
         {[["All", false], ["Free Agency " + (startYear(CURRENT_SEASON) + 1), true]].map(([lbl, v]) => (
           <button key={lbl} onClick={() => setFaOnly(v)}
@@ -1347,8 +1368,10 @@ function computeLineRanks(players, teams) {
       return tm && (tm === a || String(p.teamName || "").toLowerCase() === String(t.name || "").toLowerCase());
     });
     const avgTop = (posSet, n, min = 3) => {
+      // Injury-aware: a starter on IR/OUT doesn't count toward the unit's grade,
+      // so a team that loses its 95-OVR corner sees its DEF rank drop.
       const rated = roster
-        .filter((p) => (posSet.has(String(p.pos || "").toUpperCase()) || posSet.has(baseLabel(p))) && p.rating2k != null)
+        .filter((p) => (posSet.has(String(p.pos || "").toUpperCase()) || posSet.has(baseLabel(p))) && p.rating2k != null && !injIsOut(injFor(p.name, a)))
         .map((p) => Number(p.rating2k))
         .sort((x, y) => y - x)
         .slice(0, n);
@@ -1371,7 +1394,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const abbr = team.abbr || toAbbr(team.name);
   const [seg, setSeg] = useState("roster");
-  const [unit, setUnit] = useState("offense"); // lifted from FormationView so tiles can react
+  // Inside Roster: "list" (full roster), "offense" or "defense" (formation)
+  const [rosterView, setRosterView] = useState("list");
+  const unit = rosterView === "list" ? null : rosterView;
   const lineRanks = useMemo(() => computeLineRanks(players, teams), [players, teams]);
   const [roleFilter, setRoleFilter] = useState(null);
   const [chartMode, setChartMode] = useState("cap");
@@ -1427,7 +1452,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
       </div>
 
       <div className="px-4 -mt-3">
-        <div className={"grid gap-2 " + (seg === "formation" ? "grid-cols-4" : "grid-cols-3")}>
+        <div className={"grid gap-2 " + (seg === "roster" && unit ? "grid-cols-4" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
             const pts = teamPts(team, started);
@@ -1442,7 +1467,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
                 : rank <= 20 ? "text-yellow-600 dark:text-yellow-400"
                 : "text-red-500 dark:text-red-400",
             };
-            if (seg === "formation" && unit === "offense") {
+            if (seg === "roster" && unit === "offense") {
               return (
                 <>
                   <Tile compact value={sx.passYpg != null ? sx.passYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.passYpgRank)} />
@@ -1452,7 +1477,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
                 </>
               );
             }
-            if (seg === "formation" && unit === "defense") {
+            if (seg === "roster" && unit === "defense") {
               return (
                 <>
                   <Tile compact value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Pts Allowed" sub={rk(sx.paRank)} />
@@ -1477,7 +1502,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         </div>
 
         <div className="flex gap-2 mt-4">
-          {[["roster", "Roster"], ["formation", "Formation"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
+          {[["roster", "Roster"], ["contracts", "Contracts"], ["charts", "Charts"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
                 ? "text-white"
@@ -1489,19 +1514,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
         </div>
 
         {seg === "roster" && (
-          <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar">
-            {ROLE_ORDER.map((r) => (
-              <button key={r} onClick={() => setRoleFilter(roleFilter === r ? null : r)}
-                className={"px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors " + (roleFilter === r
+          <div className="flex gap-2 mt-3">
+            {[["list", "Roster"], ["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
+              <button key={k} onClick={() => setRosterView(k)}
+                className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold transition-colors " + (rosterView === k
                   ? "text-white"
                   : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
-                style={roleFilter === r ? { backgroundColor: teamColor(abbr) } : undefined}>
-                {r}
+                style={rosterView === k ? { backgroundColor: teamColor(abbr) } : undefined}>
+                {lbl}
               </button>
             ))}
           </div>
         )}
-        {seg === "roster" && orderedRoles.filter((role) => !roleFilter || role === roleFilter).map((role) => (
+        {seg === "roster" && unit && <FormationView roster={roster} abbr={abbr} unit={unit} onSelectPlayer={onSelectPlayer} lineRank={lineRanks[abbr]} team={team} />}
+        {seg === "roster" && !unit && orderedRoles.map((role) => (
           <div key={role}>
             <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{role}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
@@ -1562,7 +1588,6 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             </div>
           </div>
         ))}
-        {seg === "formation" && <FormationView roster={roster} abbr={abbr} unit={unit} setUnit={setUnit} onSelectPlayer={onSelectPlayer} lineRank={lineRanks[abbr]} />}
         {seg === "contracts" && (
           <>
             <div className="flex items-baseline justify-between mt-6 mb-2 px-1">
@@ -1759,7 +1784,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
           );
         })()}
 
-        {seg === "roster" && roster.length === 0 && (
+        {seg === "roster" && !unit && roster.length === 0 && (
           <div className="text-center text-sm text-slate-400 mt-16">
             No players linked to {team.name} yet.
           </div>
@@ -1885,7 +1910,7 @@ function StatsTab({ players, onSelect }) {
   );
 }
 
-function DraftTab({ players, onSelect }) {
+function DraftTab({ players, onSelect, pills }) {
   const byYear = {};
   const noData = [];
   for (const p of players) {
@@ -1898,21 +1923,18 @@ function DraftTab({ players, onSelect }) {
   return (
     <div>
       <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
-        <h1 className="text-3xl font-extrabold text-white mb-3">Draft</h1>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
-          {years.map((y) => (
-            <button
-              key={y}
-              onClick={() => setSelYear(y)}
-              className={
-                "shrink-0 px-4 py-1.5 rounded-full text-sm font-bold transition-colors " +
-                (y === yr ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100 active:bg-blue-500")
-              }
-            >
-              {y}
-            </button>
-          ))}
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-extrabold text-white">Draft</h1>
+          {/* one dropdown instead of a scroll of years — native picker on iOS */}
+          <label className="relative">
+            <select value={yr ?? ""} onChange={(e) => setSelYear(Number(e.target.value))}
+              className="appearance-none bg-white text-blue-700 font-extrabold text-sm rounded-full pl-4 pr-8 py-1.5 outline-none">
+              {years.map((y) => <option key={y} value={y}>{y} Class ({byYear[y].length})</option>)}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-700 text-xs">▾</span>
+          </label>
         </div>
+        {pills}
       </div>
       <div className="px-4 pb-28 mt-4">
         {[yr].filter((y) => y != null).map((yr) => {
@@ -2048,7 +2070,7 @@ function TdBoardTab({ players, teams, onSelect }) {
     <div>
       <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-3xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
+          <h1 className="text-2xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
             {board?.version || "v1"} · {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
@@ -2216,12 +2238,10 @@ function hrbNrmSafe(s) {
 }
 
 const TABS = [
-  { id: "targets", label: "TD Board", icon: "🎯" },
+  { id: "targets", label: "Week", icon: "🎯" }, // label becomes "Week N" from the live scoreboard
   { id: "teams", label: "Teams", icon: "🏈" },
   { id: "players", label: "Players", icon: "👤" },
   { id: "stats", label: "Stats", icon: "📊" },
-  { id: "contracts", label: "Contracts", icon: "💰" },
-  { id: "draft", label: "Draft", icon: "🎓" },
 ];
 
 export default function App() {
@@ -2230,6 +2250,7 @@ export default function App() {
   const [players, setPlayers] = useState(null);
   const [teams, setTeams] = useState([]);
   const [stand, setStand] = useState(null); // records + stat ranks from /api/standings
+  const [nflWeek, setNflWeek] = useState(null); // current week, for the bottom-nav label
 
   // Automated records/stats: merge ESPN data into the Airtable teams by abbr.
   // Airtable values still win when present; ESPN fills the blanks (and stx).
@@ -2287,6 +2308,9 @@ export default function App() {
       .catch((e) => setError(String(e)));
   }, []);
   useEffect(() => {
+    fetch("/api/scoreboard").then((r) => r.json()).then((d) => { if (d && d.week) setNflWeek(d.week); }).catch(() => {});
+  }, []);
+  useEffect(() => {
     // Non-fatal: if ESPN is down the app just shows Airtable's numbers.
     fetch("/api/standings")
       .then((r) => r.json())
@@ -2299,7 +2323,7 @@ export default function App() {
       <PlayerDetail
         p={sel}
         onBack={() => setSel(null)}
-        backLabel={tab === "contracts" ? "Contracts" : tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
+        backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
         mode="full"
       />
     );
@@ -2326,10 +2350,8 @@ export default function App() {
         />
       )}
       {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} />}
-      {players && tab === "players" && <PlayersTab players={players} onSelect={setSel} />}
-      {players && tab === "contracts" && <ContractsTab players={players} onSelect={setSel} />}
+      {players && tab === "players" && <PlayersHub players={players} onSelect={setSel} />}
       {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} />}
-      {players && tab === "draft" && <DraftTab players={players} onSelect={setSel} />}
 
       <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)] z-20">
         {TABS.map((t) => (
@@ -2339,7 +2361,7 @@ export default function App() {
             className={"flex-1 py-2.5 text-center " + (tab === t.id ? "text-blue-600" : "text-slate-400")}
           >
             <div className="text-lg leading-none">{t.icon}</div>
-            <div className="text-[10px] font-bold mt-1">{t.label}</div>
+            <div className="text-[10px] font-bold mt-1">{t.id === "targets" && nflWeek ? "Week " + nflWeek : t.label}</div>
           </button>
         ))}
       </div>
