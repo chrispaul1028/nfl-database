@@ -1,5 +1,8 @@
 {
   "crons": [
     { "path": "/api/sync-ratings", "schedule": "0 12 * * 5" }
-  ]
+  ],
+  "functions": {
+    "api/td-board.js": { "maxDuration": 60, "memory": 1024 }
+  }
 }
