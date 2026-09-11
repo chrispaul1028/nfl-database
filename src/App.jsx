@@ -347,49 +347,39 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
                 {[cleanNo(p.no) ? "#" + cleanNo(p.no) : "", p.pos].filter(Boolean).join(" · ")}
               </span>
               {injHasFlag(p, toAbbr(teamOfPlayer(p) || p.teamName || ""))
-                ? <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg />
+                ? <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg noNote />
                 : <StatusBadge status={p.status} />}
             </div>
-            {(() => {
-              const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
-              const live = inj && (inj.injury_body_part || inj.injury_notes)
-                ? [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" — ") : null;
-              const note = live || p.injuryNotes;
-              return note ? <div className="text-xs font-semibold text-red-200 mt-1 truncate">{note}</div> : null;
-            })()}
+            <InjuryLine p={p} />
           </div>
         </div>
       </div>
 
       <div className="px-4 -mt-3">
-        <div className="grid grid-cols-3 gap-2">
-          <Tile
-            value={p.rating2k != null ? Math.round(p.rating2k) : "—"}
-            label="Madden"
-            valueClass={p.rating2k == null ? null
-              : Math.round(p.rating2k) >= 90 ? "text-amber-500 dark:text-amber-400"
-              : Math.round(p.rating2k) >= 80 ? "text-slate-500 dark:text-slate-300"
-              : "text-orange-700 dark:text-orange-400"}
-          />
-          <Tile value={currentSalary(p) > 0 ? fmtM(currentSalary(p)) : "—"} label={CURRENT_SEASON + " Salary"} />
-          {(() => {
-            const ev = nextEvent(p);
-            const labels = { PO: "Player Option", TO: "Team Option", UFA: "Free Agent", RFA: "Restricted FA" };
-            const colors = {
-              PO: "text-emerald-600 dark:text-emerald-400",
-              TO: "text-red-600 dark:text-red-400",
-              UFA: "text-slate-500 dark:text-slate-400",
-              RFA: "text-purple-600 dark:text-purple-400",
-            };
-            return (
-              <Tile
-                value={ev ? seasonTick({ season: ev.season }) : "—"}
-                label={ev ? labels[ev.kind] : "Free Agent"}
-                valueClass={ev ? colors[ev.kind] : null}
-              />
-            );
-          })()}
-        </div>
+        {(() => {
+          // Three season tiles by position; nothing for positions without box-score stats (OL, K, P).
+          const pos = String(p.pos || "").toUpperCase();
+          const rowOf = () => {
+            if (!seasonStats || !seasonStats.players) return null;
+            const nm = hrbNrmSafe(p.name), abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
+            const c = Object.values(seasonStats.players).filter((q) => hrbNrmSafe(q.name) === nm);
+            return c.length > 1 ? c.find((q) => injTeamEq(q.team, abbr)) || c[0] : c[0] || null;
+          };
+          const S = rowOf(); const T = S ? S.totals : null;
+          const v = (k) => (T ? T[k] : "—");
+          const yr = seasonStats ? seasonStats.season : "";
+          let tiles = null;
+          if (["WR", "TE"].includes(pos)) tiles = [["Rec", v("rec")], ["Rec Yds", v("recYds")], ["Rec TD", v("recTd")]];
+          else if (["RB", "HB", "FB"].includes(pos)) tiles = [["Carries", v("car")], ["Rush Yds", v("rushYds")], ["Rush TD", v("rushTd")]];
+          else if (pos === "QB") tiles = [["Pass Yds", v("passYds")], ["Pass TD", v("passTd")], ["INT", v("int")]];
+          else if (/^(DE|DT|NT|EDGE|DL|LB|ILB|OLB|MLB|CB|S|FS|SS|DB|NB|LDE|RDE|LDT|RDT|LOLB|ROLB)$/.test(pos)) tiles = [["Tackles", v("tkl")], ["Sacks", v("sacks")], ["INT", v("defInt")]];
+          if (!tiles) return null;
+          return (
+            <div className="grid grid-cols-3 gap-2">
+              {tiles.map(([lbl, val]) => <Tile key={lbl} value={val ?? "—"} label={yr ? yr + " " + lbl : lbl} />)}
+            </div>
+          );
+        })()}
 
         {mode === "full" && (p.height || p.weight || p.age || p.draft || p.birthplace || p.draftYear) && (
           <>
@@ -544,7 +534,30 @@ function photoOf(p, teamAbbr) {
 }
 
 // Badge only when NOT plain healthy-active (keeps rows quiet)
-function InjBadge({ p, team, lg = false }) {
+// Player-page injury line: "Ankle sprain · Est. return Oct 20". Body part +
+// type from Sleeper (instant); return date from ESPN when the team gave one.
+function InjuryLine({ p }) {
+  const [espn, setEspn] = useState(null);
+  const abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
+  const inj = injFor(p.name, abbr);
+  useEffect(() => {
+    setEspn(null);
+    if (!inj || !inj.espn_id || !injHasFlag(p, abbr)) return;
+    let alive = true;
+    fetch(`/api/player-injury?espn=${inj.espn_id}`).then((r) => r.json()).then((d) => { if (alive) setEspn(d && d.injury ? d.injury : null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [inj && inj.espn_id, p.id]);
+  if (!inj || !injHasFlag(p, abbr)) return p.injuryNotes ? <div className="text-xs font-semibold text-red-200 mt-1 truncate">{p.injuryNotes}</div> : null;
+  const part = inj.injury_body_part || (espn && (espn.location || espn.type)) || "";
+  const kind = (espn && espn.detail) || (inj.injury_notes && !/^\s*$/.test(inj.injury_notes) ? inj.injury_notes : "") || (espn && espn.type) || "";
+  const label = [part, kind && kind.toLowerCase() !== String(part).toLowerCase() ? kind.toLowerCase() : ""].filter(Boolean).join(" ");
+  const ret = espn && espn.returnDate ? new Date(espn.returnDate) : null;
+  const retTxt = ret && !isNaN(ret) ? " · Est. return " + ret.toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+  if (!label && !retTxt) return null;
+  return <div className="text-xs font-semibold text-red-200 mt-1 truncate">{label ? label[0].toUpperCase() + label.slice(1) : "Injury"}{retTxt}</div>;
+}
+
+function InjBadge({ p, team, lg = false, noNote = false }) {
   const inj = injFor(p.name, team);
   if (!inj) return null;
   let label = null, cls = "";
@@ -568,7 +581,7 @@ function InjBadge({ p, team, lg = false }) {
       <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
         {label}
       </span>
-      {note && (
+      {note && !noNote && (
         <span className={"text-slate-400 dark:text-slate-500 font-semibold truncate " + (lg ? "text-[11px]" : "text-[9px]")}>
           {note}
         </span>
@@ -1395,7 +1408,7 @@ function TeamsTab({ teams, players, onSelect }) {
                 </span>
                 {(() => { const r = teamRec(t, seasonStarted(teams)); return (r.w + r.l + r.t) >= 0; })() && (
                   <span className="flex gap-2.5 shrink-0">
-                    {(() => { const r = teamRec(t, seasonStarted(teams)); return [["W", r.w], ["L", r.l], ["T", r.t]]; })().map(([lbl, v]) => (
+                    {(() => { const r = teamRec(t, seasonStarted(teams)); return [["W", r.w], ["L", r.l], ...(r.t > 0 ? [["T", r.t]] : [])]; })().map(([lbl, v]) => (
                       <span key={lbl} className="w-7 text-center">
                         <span className="block text-[8px] font-bold text-slate-400 uppercase">{lbl}</span>
                         <span className="block text-xs font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{v}</span>
