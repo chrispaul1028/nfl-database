@@ -553,7 +553,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       { lbl: "RG", x: 70, y: 56, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
       { lbl: "RT", x: 90, y: 56, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
       { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
-      { lbl: "RB", x: 50, y: 90, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
+      { lbl: "RB", x: 50, y: 88, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
     ];
     // Two-pass slot assignment.
     //   Pass 1 — exact depth labels claim their exact slot: "WR3" lands at the
@@ -661,7 +661,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     //   corners pin to the sidelines with the nickel tucked closer to the
     //   line, safeties split the deep middle.
     const XS = {
-      dl: { 3: [25, 50, 75], 4: [14, 38, 62, 86], 5: [10, 30, 50, 70, 90] },
+      dl: { 3: [22, 50, 78], 4: [10, 36.7, 63.3, 90], 5: [10, 30, 50, 70, 90] },
       lb: { 2: [33, 67], 3: [26, 50, 74], 4: [12, 38, 62, 88], 5: [10, 30, 50, 70, 90] },
       s: { 1: [50], 2: [33, 67], 3: [25, 50, 75] },
     };
@@ -741,8 +741,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             stenciled letters — reads like turf paint, not a UI header */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
           style={{ height: "9%", background: teamColor(abbr) }}>
-          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 10px, transparent 10px 20px)" }} />
-          <span className="font-black text-xl tracking-[0.4em] pl-[0.4em] uppercase text-white/30 select-none">{abbr}</span>
+          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px)" }} />
+          <div className="absolute inset-x-0 top-[18%] h-px bg-white/25" />
+          <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/25" />
+          {/* painted end-zone lettering: team nickname, outlined like turf paint */}
+          <span className="font-black text-[22px] tracking-[0.3em] pl-[0.3em] uppercase text-white select-none"
+            style={{ WebkitTextStroke: "1px rgba(0,0,0,0.35)", textShadow: "0 2px 0 rgba(0,0,0,0.25), 0 0 12px rgba(0,0,0,0.25)", opacity: 0.92 }}>
+            {(team && team.name ? String(team.name).trim().split(" ").pop() : abbr)}
+          </span>
         </div>
         <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "9%" }} />
         {/* line rank: frosted tag sitting just below the line it grades —
@@ -754,8 +760,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : lr.rank <= 20 ? "text-yellow-300"
             : "text-rose-300";
           return (
-            <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
-              style={{ top: unit === "offense" ? "66.5%" : "82.5%" }}>
+            <span className="absolute right-2 bottom-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm">
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -773,11 +778,11 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
         )}
         <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`}</style>
         {/* yard lines (no side numbers — quieter field) */}
-        {[18, 27, 36, 45, 54, 63, 72, 81, 90].map((y) => (
+        {[16, 24, 32, 40, 48, 56, 64, 72, 80, 88].map((y) => (
           <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
         ))}
         {/* hash marks */}
-        {Array.from({ length: 19 }, (_, i) => 11.3 + i * 4.5).map((y) => (
+        {Array.from({ length: 21 }, (_, i) => 12 + i * 4).map((y) => (
           <React.Fragment key={y}>
             <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "39%", top: y + "%" }} />
             <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "59.5%", top: y + "%" }} />
@@ -2178,7 +2183,9 @@ function TdBoardTab({ players, teams, onSelect }) {
                     {/* row 1: rank · headshot · team · name · opponent */}
                     <div className="flex items-center gap-2">
                       <div className="w-4 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
-                      {p ? <Avatar p={p} size="sm" /> : <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700" />}
+                      {p ? <Avatar p={p} size="sm" /> : c.headshot
+                        ? <img src={c.headshot} alt="" className="w-9 h-9 rounded-full object-cover object-top bg-white" onError={(e) => e.currentTarget.remove()} />
+                        : <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700" />}
                       {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
                       <div className="min-w-0 flex-1">
                         <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
@@ -2200,7 +2207,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                       <div className="w-px h-7 bg-slate-200 dark:bg-slate-700 mx-0.5" />
                       <div className="flex-1 grid grid-cols-4 gap-1.5">
                         {[
-                          ["RZ SHARE", c.rzShare != null ? Math.round(c.rzShare * 100) + "%" : "—", tdTile(c.rzShare, 0.25, 0.15)],
+                          ["TD SHARE", c.rzShare != null ? Math.round(c.rzShare * 100) + "%" : "—", tdTile(c.rzShare, 0.25, 0.15)],
                           ["OPP SHARE", c.oppShare != null ? Math.round(c.oppShare * 100) + "%" : "—", tdTile(c.oppShare, 0.22, 0.14)],
                           ["IMP TOTAL", c.implTotal != null ? c.implTotal.toFixed(1) : "—", tdTile(c.implTotal, 24, 20)],
                           ["OPP TD/G", c.oppTdAllowedPg != null ? c.oppTdAllowedPg.toFixed(1) : "—", tdTile(c.oppTdAllowedPg, 1.2, 0.8)],
@@ -2225,7 +2232,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                 );
               })}
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 px-1">RZ share = share of team red-zone chances · Opp share = share of touches/targets · Imp total = Vegas implied team points · Opp TD/G = TDs the opponent allows per game to this position · TD% = anytime-TD probability</div>
+            <div className="text-[9px] text-slate-400 mt-2 px-1">TD share = share of team touchdowns (last season, blending toward this season weekly) · Opp share = share of touches/targets · Imp total = Vegas implied team points · Opp TD/G = TDs the opponent allows per game to this position · TD% = anytime-TD probability</div>
           </>
         )}
       </div>
