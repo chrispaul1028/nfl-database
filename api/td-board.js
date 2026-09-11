@@ -196,10 +196,15 @@ export default async function handler(req, res) {
       if (["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR"].includes(injSt) || /injured reserve|pup|suspend/i.test(String(sp.status || ""))) { excluded++; continue; }
       if (bp.games < 4) continue;
 
-      const bt = B.teams[bp.team] || { tds: 1, carries: 1, targets: 1, games: 1 };
+      // Team denominators. nflverse gives real per-team totals; Sleeper season
+      // stats carry no team splits, so fall back to league-average team volume
+      // (≈38 skill-position TDs and ≈1000 carries+targets per team-season).
+      // Without this, a player with 7 TDs reads as "100% of his team's TDs".
+      const bt = (baseSource === "nflverse" && B.teams[bp.team] && B.teams[bp.team].tds >= 15)
+        ? B.teams[bp.team] : { tds: 38, carries: 450, targets: 550 };
       const reg = Math.min(1, bp.games / 12);
-      const tdShareB = reg * (bt.tds ? bp.tds / bt.tds : 0) + (1 - reg) * posAvg[bp.pos].td;
-      const oppShareB = reg * ((bp.carries + bp.targets) / Math.max(1, bt.carries + bt.targets)) + (1 - reg) * posAvg[bp.pos].opp;
+      const tdShareB = Math.min(0.45, reg * (bp.tds / bt.tds) + (1 - reg) * posAvg[bp.pos].td);
+      const oppShareB = Math.min(0.40, reg * ((bp.carries + bp.targets) / Math.max(1, bt.carries + bt.targets)) + (1 - reg) * posAvg[bp.pos].opp);
       const cp = C.players[id], ct = cp ? C.teams[cp.team] : null;
       const blend = (b, c) => (c == null ? b : (1 - wCur) * b + wCur * c);
       const tdShare = blend(tdShareB, cp && ct && ct.tds ? cp.tds / ct.tds : null);
@@ -232,7 +237,7 @@ export default async function handler(req, res) {
       updatedAt: new Date().toISOString(), currentWeeksBlended: curWeeks, currentWeight: wCur,
       hasMatchupData: Object.keys(A).length > 0,
       reason: cards.length ? null : (Object.keys(B.players).length ? "No upcoming games matched this week's schedule." : "Neither nflverse nor Sleeper returned last season's player stats."),
-      cards: cards.slice(0, 40),
+      cards: cards.slice(0, 25),
     };
     if (debug) out.debug = {
       baseSource, basePlayers: Object.keys(B.players).length, baseError: B.error || null,
