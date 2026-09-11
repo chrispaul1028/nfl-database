@@ -618,12 +618,15 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     // edge position (SAM/WILL/OLB1/DE1/CB1), interior, "2" of an edge, R-side.
     const EDGE_BASES = new Set(["DE", "EDGE", "OLB", "CB", "S"]);
     const LEFT_NAMES = new Set(["SAM", "SLB"]), RIGHT_NAMES = new Set(["WILL", "WLB"]);
+    // 0 = left edge · 1 = left interior · 2 = middle · 3 = right interior · 4 = right edge
+    // So LDE · LDT · RDT · RDE lines up as a real front, not LDT · LDE · RDE · RDT.
     const sideKey = (b0, d) => {
       const b = norm(b0);
-      if (b0 !== b) return b0.startsWith("L") ? 0 : 4;
+      const edge = EDGE_BASES.has(b);
+      if (b0 !== b) return b0.startsWith("L") ? (edge ? 0 : 1) : (edge ? 4 : 3);
       if (LEFT_NAMES.has(b)) return 0;
       if (RIGHT_NAMES.has(b)) return 4;
-      return EDGE_BASES.has(b) ? (d <= 1 ? 1 : 3) : 2;
+      return edge ? (d <= 1 ? 0 : 4) : 2;
     };
     const rows = { dl: [], lb: [], db: [], s: [] };
     const starters = roster
@@ -2009,27 +2012,29 @@ function ComingSoon({ icon, title, blurb }) {
 
 // ═══════════════ APP SHELL ═══════════════════════════════════════
 // ═══════════════ TD BOARD ════════════════════════════════════════
-// Weekly anytime-TD targets, laid out like the MLB HR Targets card:
-//   rank · headshot · team · POS Name · vs OPP
-//   ROLE | RZ SHARE · OPP SHARE · IMP TOTAL · OPP TD/G |  big TD%
-//   venue / spread / weather line
-// Reads /api/td-board. Until that endpoint is live (Week 1), it renders a
-// clearly-labeled PREVIEW using your Airtable starters with sample values,
-// so the design can be judged before the data exists.
-const tdTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 dark:bg-slate-800"
+// Weekly anytime-TD board. Each card is "player vs this week's defense":
+//   rank · headshot · POS Name · [opp logo] vs OPP
+//   ROLE | OPP vs POS: TD/G · YDS/G | TD SHARE · IMP TOTAL |  big TD%
+// Real data only — if the endpoint isn't live, the tab says so plainly.
+// Rank colors on the opponent tiles: high rank number = defense allows a
+// lot to this position = good for the scorer (green).
+const rankTile = (rank) => (rank == null ? "bg-slate-100 text-slate-400 dark:bg-slate-800"
+  : rank >= 23 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+  : rank >= 11 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+  : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
+const valTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 dark:bg-slate-800"
   : val >= good ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
   : val >= ok ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
   : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
 
 function TdBoardTab({ players, teams, onSelect }) {
   const [board, setBoard] = useState(null);
-  const [sb, setSb] = useState(null);           // /api/scoreboard
+  const [sb, setSb] = useState(null);
   const [seg, setSeg] = useState("matchups");
   useEffect(() => {
-    fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [] }));
+    fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [], reason: "Couldn't reach the board endpoint." }));
   }, []);
   useEffect(() => {
-    // Live scores: refresh every 60s while this tab is open
     let alive = true;
     const load = () => fetch("/api/scoreboard").then((r) => r.json()).then((d) => { if (alive && d && d.games) setSb(d); }).catch(() => {});
     load();
@@ -2037,29 +2042,10 @@ function TdBoardTab({ players, teams, onSelect }) {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // Preview cards: RB1 / WR1-3 / TE1 from Airtable, sample values seeded from
-  // Madden rating so the layout reads realistically. Replaced by real data.
-  const preview = useMemo(() => {
-    const starters = players.filter((p) => /^(RB1|WR[123]|TE1)$/.test(String(p.sortLabel || "").toUpperCase()));
-    return starters.map((p) => {
-      const r = Number(p.rating2k ?? 72);
-      const expTd = Math.max(0.15, Math.min(1.1, (r - 62) / 30));
-      return {
-        _p: p, name: p.name, team: toAbbr(teamOfPlayer(p) || p.teamName || ""), pos: String(p.pos || "").toUpperCase(),
-        role: String(p.sortLabel || "").toUpperCase(), opp: null, home: true, spread: null, implTotal: 20 + (r - 70) * 0.35,
-        rzShare: Math.min(0.45, 0.08 + (r - 60) * 0.011), oppShare: Math.min(0.35, 0.06 + (r - 60) * 0.008),
-        oppTdAllowedPg: null, oppTdRank: null, expTd, tdPct: 1 - Math.exp(-expTd), venue: null, dome: false, weather: null,
-        teamExpTd: (20 + (r - 70) * 0.35) * 0.105, share: 0.65 * Math.min(0.45, 0.08 + (r - 60) * 0.011) + 0.35 * Math.min(0.35, 0.06 + (r - 60) * 0.008), matchup: 1,
-        injury: (injFor(p.name, toAbbr(teamOfPlayer(p) || "")) || {}).injury_status || null,
-      };
-    }).sort((a, b) => b.tdPct - a.tdPct).slice(0, 20);
-  }, [players]);
-
   const live = board && board.ready;
-  const cards = live ? board.cards : preview;
-  const findPlayer = (c) => c._p || players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(c.name));
+  const cards = live ? board.cards : [];
+  const findPlayer = (c) => players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(c.name));
   const week = sb?.week ?? board?.week ?? 1;
-  // Group games by kickoff day for section headers (Thu / Sun / Mon)
   const gamesByDay = useMemo(() => {
     const out = [];
     for (const g of (sb?.games || [])) {
@@ -2078,9 +2064,9 @@ function TdBoardTab({ players, teams, onSelect }) {
         <div className="flex items-baseline gap-2 flex-wrap">
           <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : "TD Targets"} <span className="text-blue-200">(Wk {week})</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
-            {board?.version || "v1"} · {seg === "matchups"
+            {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
-              : (live ? "data " + new Date(board.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "preview")}
+              : (live ? "v1 · " + new Date(board.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "v1")}
           </span>
         </div>
       </div>
@@ -2105,7 +2091,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                   {grp.games.map((g) => {
                     const isLive = g.state === "in", isFinal = g.state === "post";
                     const kickoff = new Date(g.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-                    const Row = ({ t, top }) => {
+                    const Row = ({ t }) => {
                       const hasBall = isLive && g.possession && String(g.possession) === String(t.id);
                       const lost = isFinal && !t.winner;
                       return (
@@ -2128,7 +2114,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                     return (
                       <div key={g.id} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2 flex items-center gap-2">
                         <div className="flex-1 min-w-0 space-y-1.5">
-                          <Row t={g.away} top />
+                          <Row t={g.away} />
                           <Row t={g.home} />
                         </div>
                         <div className="w-20 shrink-0 text-center border-l border-slate-100 dark:border-slate-800 pl-2">
@@ -2165,80 +2151,79 @@ function TdBoardTab({ players, teams, onSelect }) {
           </div>
         ) : (
           <>
-            {!live && (
-              <div className="mb-2 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                PREVIEW · sample values seeded from Madden ratings. Live board activates with Week 1 data — opponents, Vegas totals, and red-zone shares arrive automatically.
+            {!board && <div className="p-6 text-center text-xs text-slate-400">Building this week's board…</div>}
+            {board && !live && (
+              <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Board isn't live yet</div>
+                <div className="text-[11px] text-slate-400 mt-1">{board.reason || "The data source didn't return player stats."} Nothing is shown rather than guessed numbers.</div>
               </div>
             )}
-            <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">🎯 TD Targets</div>
-            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-              {cards.length === 0 && (
-                <div className="p-6 text-center text-xs text-slate-400">No starters found — label RB1, WR1–WR3, and TE1 in Airtable Sort Priority to seed the board.</div>
-              )}
-              {cards.map((c, i) => {
-                const p = findPlayer(c);
-                const pct = Math.round((c.tdPct || 0) * 100);
-                return (
-                  <button key={(c.name || "") + i} onClick={p ? () => onSelect(p) : undefined}
-                    className="w-full text-left px-3 py-2 active:bg-slate-50 dark:active:bg-slate-800/60">
-                    {/* row 1: rank · headshot · team · name · opponent */}
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
-                      {p ? <Avatar p={p} size="sm" /> : c.headshot
-                        ? <img src={c.headshot} alt="" className="w-9 h-9 rounded-full object-cover object-top bg-white" onError={(e) => e.currentTarget.remove()} />
-                        : <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700" />}
-                      {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
-                          <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
-                          {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-amber-500">{c.injury}</span>}
+            {live && (
+              <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                {cards.map((c, i) => {
+                  const p = findPlayer(c);
+                  const pct = Math.round((c.tdPct || 0) * 100);
+                  return (
+                    <button key={c.sleeperId || c.name + i} onClick={p ? () => onSelect(p) : undefined}
+                      className="w-full text-left px-3 py-2 active:bg-slate-50 dark:active:bg-slate-800/60">
+                      {/* row 1: rank · headshot · POS Name · vs OPP */}
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
+                        {p ? <Avatar p={p} size="sm" /> : <img src={c.headshot} alt="" className="w-9 h-9 rounded-full object-cover object-top bg-white" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />}
+                        {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
+                            <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
+                            {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-rose-500">{c.injury}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 shrink-0">
+                          {TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-4 h-4 rounded-full bg-white object-contain" />}
+                          <span>{(c.home ? "vs " : "@ ") + c.opp}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-300 shrink-0">
-                        {c.opp && TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-4 h-4 rounded-full bg-white object-contain" />}
-                        <span>{c.opp ? (c.home ? "vs " : "@ ") + c.opp : "vs —"}</span>
+                      {/* row 2: role | opponent vs position | player | TD% */}
+                      <div className="mt-1.5 flex items-end gap-1.5">
+                        <div className="w-9 text-center shrink-0">
+                          <div className="text-[7px] font-semibold text-slate-400 tracking-wider">ROLE</div>
+                          <div className="text-xs font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
+                        </div>
+                        <div className="w-px h-7 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                        <div className="flex-1 grid grid-cols-4 gap-1.5">
+                          {[
+                            [c.opp + " TD/G vs " + c.pos, c.oppTdAllowedPg != null ? c.oppTdAllowedPg.toFixed(1) : "—", rankTile(c.oppTdRank), c.oppTdRank ? ordinal(c.oppTdRank) : ""],
+                            [c.opp + " YDS/G vs " + c.pos, c.oppYdsAllowedPg != null ? c.oppYdsAllowedPg : "—", rankTile(c.oppYdsRank), c.oppYdsRank ? ordinal(c.oppYdsRank) : ""],
+                            ["TD SHARE", c.tdShare != null ? Math.round(c.tdShare * 100) + "%" : "—", valTile(c.tdShare, 0.22, 0.14), c.tdsLastSeason != null ? c.tdsLastSeason + " TD '" + String(board.baseSeason).slice(2) : ""],
+                            ["IMP TOTAL", c.implTotal != null ? c.implTotal.toFixed(1) : "—", valTile(c.implTotal, 24, 20), c.spread != null ? (c.spread > 0 ? "+" + c.spread : String(c.spread)) : ""],
+                          ].map(([lbl, val, cls, sub]) => (
+                            <div key={lbl} className="text-center min-w-0">
+                              <div className="text-[7px] font-semibold text-slate-400 tracking-wider truncate">{lbl}</div>
+                              <div className={"mt-0.5 rounded-md py-0.5 text-[11px] font-extrabold tabular-nums " + cls}>{val}</div>
+                              <div className="text-[8px] font-semibold text-slate-400 tabular-nums h-3">{sub}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="w-12 text-right shrink-0 pb-3">
+                          <div className="text-[8px] font-semibold text-slate-400 tracking-wider">TD%</div>
+                          <div className={"text-lg font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
+                        </div>
                       </div>
-                    </div>
-                    {/* row 2: role | component tiles | TD% */}
-                    <div className="mt-1.5 flex items-end gap-1.5">
-                      <div className="w-10 text-center shrink-0">
-                        <div className="text-[8px] font-semibold text-slate-400 tracking-wider">ROLE</div>
-                        <div className="text-xs font-extrabold text-slate-900 dark:text-white">{c.role || c.pos}</div>
-                      </div>
-                      <div className="w-px h-7 bg-slate-200 dark:bg-slate-700 mx-0.5" />
-                      <div className="flex-1 grid grid-cols-4 gap-1.5">
-                        {[
-                          ["TD SHARE", c.rzShare != null ? Math.round(c.rzShare * 100) + "%" : "—", tdTile(c.rzShare, 0.25, 0.15)],
-                          ["OPP SHARE", c.oppShare != null ? Math.round(c.oppShare * 100) + "%" : "—", tdTile(c.oppShare, 0.22, 0.14)],
-                          ["IMP TOTAL", c.implTotal != null ? c.implTotal.toFixed(1) : "—", tdTile(c.implTotal, 24, 20)],
-                          ["OPP TD/G", c.oppTdAllowedPg != null ? c.oppTdAllowedPg.toFixed(1) : "—", tdTile(c.oppTdAllowedPg, 1.2, 0.8)],
-                        ].map(([lbl, val, cls]) => (
-                          <div key={lbl} className="text-center">
-                            <div className="text-[7px] font-semibold text-slate-400 tracking-wider">{lbl}</div>
-                            <div className={"mt-0.5 rounded-md py-0.5 text-[10px] font-extrabold tabular-nums " + cls}>{val}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="w-12 text-right shrink-0">
-                        <div className="text-[8px] font-semibold text-slate-400 tracking-wider">TD%</div>
-                        <div className={"text-base font-extrabold tabular-nums " + (pct >= 50 ? "text-emerald-500" : pct >= 35 ? "text-amber-500" : "text-slate-500")}>{pct}%</div>
-                      </div>
-                    </div>
-                    {/* row 3: venue · spread · weather */}
-                    {/* the grade, shown as the actual math so #1 is never a mystery */}
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
-                      <span className="truncate">
-                        {c.teamExpTd != null && c.share != null
-                          ? <>{c.teamExpTd.toFixed(1)} team TD × {Math.round(c.share * 100)}% share × {(c.matchup ?? 1).toFixed(2)} matchup = <span className="font-bold text-slate-600 dark:text-slate-300">{(c.expTd ?? 0).toFixed(2)} xTD</span></>
-                          : (c.venue || "")}
-                      </span>
-                      {c.spread != null && <span className="shrink-0 ml-2 font-bold text-slate-500 dark:text-slate-300">{c.spread > 0 ? "+" + c.spread : c.spread}</span>}
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* how it's scored — one summary, not a sentence per player */}
+            <div className="mt-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
+              <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">How the board is scored</div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1 leading-snug">
+                <div><b>Opponent vs position</b> — TDs and yards this defense allowed per game to RBs / WRs / TEs last season, ranked 1st (toughest) to 32nd (softest). Green = soft matchup.</div>
+                <div><b>TD share</b> — the slice of his team's touchdowns he scored last season. Blends toward this season 12% per week.</div>
+                <div><b>Imp total</b> — points Vegas expects his team to score this week (from the spread and over/under). More points, more touchdowns to go around.</div>
+                <div><b>TD%</b> — expected touchdowns = (imp total × 0.105) × share × matchup, converted to the chance of at least one. That's the ranking.</div>
+                <div className="text-slate-400">Out / IR players and teams that already played this week are excluded. Questionable and doubtful are shown and flagged.</div>
+              </div>
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 px-1">How a card is graded: team TD = Vegas implied total × 0.105 · share = 65% TD share + 35% opportunity share · matchup = opponent's TDs allowed to this position vs league average (capped 0.8–1.2) · xTD = expected touchdowns · TD% = 1 − e^(−xTD), the chance of at least one</div>
           </>
         )}
       </div>
