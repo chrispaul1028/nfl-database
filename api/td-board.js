@@ -1,41 +1,37 @@
-// /api/td-board — Weekly anytime-touchdown board (v1, live).
+// /api/td-board — Weekly anytime-touchdown board (v1).
 //
-// Sources (all automated, nothing added to Airtable):
-//   nflverse  player weekly stats  -> TD share, opportunity share, opponent TDs allowed by position
-//   ESPN      scoreboard           -> this week's games, spreads, over/unders -> implied totals
-//   Sleeper   players              -> current team, injury status, headshots (via gsis_id join)
+// The question each card answers: "how good is this player at scoring, and
+// how bad is this week's opponent at stopping his position?"
 //
-// Model: expTD = teamExpTD × playerShare × matchup; teamExpTD ≈ impliedTotal × 0.105
-//        playerShare = 0.65·tdShare + 0.35·oppShare (regressed toward position average)
-//        tdPct = 1 − e^(−expTD)
-// Season blend: baseline season (last completed) carries the prior; current-season
-// weeks blend in as they arrive (weight = min(0.65, currentWeeks × 0.12)).
+// Sources (all automated):
+//   nflverse  weekly player stats  -> player TD share & touches; opponent TDs/yards allowed by position
+//   Sleeper   season stats         -> fallback player baseline if nflverse is unreachable
+//   ESPN      scoreboard           -> this week's games, spreads, over/unders -> implied team totals
+//   Sleeper   players              -> current team, injury status, headshot
 //
-// Debug: /api/td-board?debug=1 returns source columns and match counts.
+// Score: xTD = (implied total × 0.105) × playerShare × matchup
+//        playerShare = 65% TD share + 35% opportunity share (regressed toward position avg)
+//        matchup     = opponent TDs allowed to this position ÷ league average (capped 0.8–1.2)
+//        TD%         = 1 − e^(−xTD)   (chance of at least one touchdown)
+// Debug: /api/td-board?debug=1
 
 const CANON = { LA: "LAR", STL: "LAR", SD: "LAC", OAK: "LV", WSH: "WAS", JAC: "JAX", HST: "HOU", BLT: "BAL", CLV: "CLE", ARZ: "ARI" };
 const canon = (t) => { const u = String(t || "").toUpperCase(); return CANON[u] || u; };
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const col = (r, ...names) => { for (const n of names) if (r[n] != null && r[n] !== "") return r[n]; return null; };
 
-async function getText(url) {
-  const r = await fetch(url, { headers: { accept: "text/csv,*/*" } });
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
-  return r.text();
-}
 async function getJson(url) {
   const r = await fetch(url, { headers: { accept: "application/json" } });
   if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
   return r.json();
 }
 
-// Minimal CSV parser (handles quoted fields with commas)
 function parseCsv(text) {
   const rows = []; let row = [], cur = "", q = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (q) {
-      if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
-      else cur += ch;
-    } else if (ch === '"') q = true;
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
     else if (ch === ",") { row.push(cur); cur = ""; }
     else if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
     else if (ch !== "\r") cur += ch;
@@ -45,10 +41,7 @@ function parseCsv(text) {
   return rows.filter((r) => r.length > 1).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
 }
 
-// nflverse naming (2016+): stats_player_week_<season>.csv in the player_stats
-// release. Try the direct URL first; GitHub's release listing is capped at
-// 1,000 assets (this release has ~1,900), so listing is only a paginated
-// last resort. Every attempt is recorded for ?debug=1.
+// ── nflverse weekly player stats (direct URL first; listing is capped so it's last resort)
 async function listAssetsPaginated() {
   const rel = await getJson("https://api.github.com/repos/nflverse/nflverse-data/releases/tags/player_stats");
   const out = [];
@@ -59,12 +52,8 @@ async function listAssetsPaginated() {
   }
   return out;
 }
-async function loadSeasonStats(season) {
+async function loadNflverse(season) {
   const base = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/";
-  const urls = [
-    `${base}stats_player_week_${season}.csv`,
-    `${base}player_stats_${season}.csv`,
-  ];
   const attempts = [];
   const tryUrl = async (u) => {
     try {
@@ -75,68 +64,75 @@ async function loadSeasonStats(season) {
       return t;
     } catch (e) { attempts.push({ url: u, error: String(e.message || e) }); return null; }
   };
-  for (const u of urls) {
+  for (const u of [`${base}stats_player_week_${season}.csv`, `${base}player_stats_${season}.csv`]) {
     const t = await tryUrl(u);
     if (t) return { rows: parseCsv(t), url: u, attempts };
   }
-  // Last resort: find the file by listing (paginated, so 2025 isn't cut off)
   try {
     const assets = await listAssetsPaginated();
-    const hit = assets.find((a) => a.name === `stats_player_week_${season}.csv`) ||
-      assets.find((a) => /\.csv$/.test(a.name) && a.name.includes(String(season)) && /week/.test(a.name) && !/team|def|kick/.test(a.name));
-    if (hit) {
-      const t = await tryUrl(hit.url);
-      if (t) return { rows: parseCsv(t), url: hit.url, attempts };
-    }
-    attempts.push({ note: "listing had no weekly file for " + season, seasonFilesSeen: assets.filter((a) => a.name.includes(String(season))).map((a) => a.name) });
+    const hit = assets.find((a) => a.name === `stats_player_week_${season}.csv`);
+    if (hit) { const t = await tryUrl(hit.url); if (t) return { rows: parseCsv(t), url: hit.url, attempts }; }
+    attempts.push({ note: "listing had no weekly file for " + season, seasonFilesSeen: assets.filter((a) => a.name.includes(String(season))).map((a) => a.name).slice(0, 40) });
   } catch (e) { attempts.push({ note: "listing failed", error: String(e.message || e) }); }
-  return { rows: [], url: null, error: "no weekly stats file reachable for " + season, attempts };
+  return { rows: [], url: null, attempts };
 }
 
-const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const col = (r, ...names) => { for (const n of names) if (r[n] != null && r[n] !== "") return r[n]; return null; };
-
-// Aggregate one season's weekly rows into per-player and per-team/per-opponent totals
+// One season of weekly rows -> per-player totals, per-team totals, per-opponent allowed-by-position
 function aggregate(rows) {
   const players = {}, teams = {}, allowed = {};
   for (const r of rows) {
-    const st = String(col(r, "season_type") || "REG").toUpperCase();
-    if (st !== "REG") continue;
+    if (String(col(r, "season_type") || "REG").toUpperCase() !== "REG") continue;
     const pos = String(col(r, "position") || "").toUpperCase();
     if (!["RB", "WR", "TE", "QB"].includes(pos)) continue;
     const id = col(r, "player_id", "gsis_id");
     const team = canon(col(r, "team", "recent_team"));
     const opp = canon(col(r, "opponent_team"));
-    const name = col(r, "player_display_name", "player_name") || "";
-    const carries = num(col(r, "carries", "rushing_attempts"));
-    const targets = num(col(r, "targets"));
-    const rushTd = num(col(r, "rushing_tds"));
-    const recTd = num(col(r, "receiving_tds"));
-    const tds = rushTd + recTd;
-    const p = (players[id] ??= { id, name, pos, team, games: 0, carries: 0, targets: 0, tds: 0 });
-    p.games++; p.carries += carries; p.targets += targets; p.tds += tds; p.team = team; p.name = name || p.name;
-    const t = (teams[team] ??= { games: new Set(), carries: 0, targets: 0, tds: 0 });
-    t.games.add(col(r, "week")); t.carries += carries; t.targets += targets; t.tds += tds;
+    const carries = num(col(r, "carries", "rushing_attempts")), targets = num(col(r, "targets"));
+    const tds = num(col(r, "rushing_tds")) + num(col(r, "receiving_tds"));
+    const yds = num(col(r, "rushing_yards")) + num(col(r, "receiving_yards"));
+    const p = (players[id] ??= { id, name: col(r, "player_display_name", "player_name") || "", pos, team, games: 0, carries: 0, targets: 0, tds: 0, yds: 0 });
+    p.games++; p.carries += carries; p.targets += targets; p.tds += tds; p.yds += yds; p.team = team;
+    const t = (teams[team] ??= { weeks: new Set(), carries: 0, targets: 0, tds: 0 });
+    t.weeks.add(col(r, "week")); t.carries += carries; t.targets += targets; t.tds += tds;
     if (opp && pos !== "QB") {
-      const a = (allowed[opp] ??= { games: new Set(), RB: 0, WR: 0, TE: 0 });
-      a.games.add(col(r, "week")); a[pos] += tds;
+      const a = (allowed[opp] ??= { weeks: new Set(), RB: { td: 0, yds: 0 }, WR: { td: 0, yds: 0 }, TE: { td: 0, yds: 0 } });
+      a.weeks.add(col(r, "week")); a[pos].td += tds; a[pos].yds += yds;
     }
   }
-  for (const t of Object.values(teams)) t.games = t.games.size || 1;
-  for (const a of Object.values(allowed)) a.games = a.games.size || 1;
+  for (const t of Object.values(teams)) t.games = t.weeks.size || 1;
+  for (const a of Object.values(allowed)) a.games = a.weeks.size || 1;
   return { players, teams, allowed };
 }
 
-// "CIN -3.5" + O/U 50.5 -> implied totals for both teams
+// ── Sleeper season stats: fallback player baseline (no opponent splits)
+async function loadSleeperSeason(season, sleeperPlayers) {
+  try {
+    const st = await getJson(`https://api.sleeper.app/v1/stats/nfl/regular/${season}`);
+    const players = {}, teams = {};
+    for (const [sid, s] of Object.entries(st || {})) {
+      const sp = sleeperPlayers[sid]; if (!sp || !sp.gsis_id) continue;
+      const pos = String(sp.position || "").toUpperCase(); if (!["RB", "WR", "TE"].includes(pos)) continue;
+      const g = num(s.gp || s.gms_active), carries = num(s.rush_att), targets = num(s.rec_tgt);
+      const tds = num(s.rush_td) + num(s.rec_td), yds = num(s.rush_yd) + num(s.rec_yd);
+      if (!g) continue;
+      const team = canon(sp.team);
+      players[sp.gsis_id] = { id: sp.gsis_id, name: sp.full_name || `${sp.first_name} ${sp.last_name}`, pos, team, games: g, carries, targets, tds, yds };
+      const t = (teams[team] ??= { games: 17, carries: 0, targets: 0, tds: 0 });
+      t.carries += carries; t.targets += targets; t.tds += tds;
+    }
+    return { players, teams, allowed: {} };
+  } catch (e) { return { players: {}, teams: {}, allowed: {}, error: String(e.message || e) }; }
+}
+
+// "CIN -3.5" + O/U 50.5 -> implied totals
 function impliedTotals(game) {
-  const ou = game.odds?.overUnder; const det = game.odds?.details || "";
-  if (ou == null) return { home: null, away: null };
+  const ou = game.odds?.overUnder, det = game.odds?.details || "";
+  if (ou == null) return {};
   const m = det.match(/([A-Z]{2,4})\s*([-+]?\d+(\.\d+)?)/);
   if (!m) return { home: ou / 2, away: ou / 2 };
   const fav = canon(m[1]), spread = Math.abs(Number(m[2]));
-  const favTotal = (ou + spread) / 2, dogTotal = (ou - spread) / 2;
-  const homeIsFav = canon(game.home.abbr) === fav;
-  return { home: homeIsFav ? favTotal : dogTotal, away: homeIsFav ? dogTotal : favTotal, favorite: fav, spread };
+  const homeFav = canon(game.home.abbr) === fav;
+  return { home: homeFav ? (ou + spread) / 2 : (ou - spread) / 2, away: homeFav ? (ou - spread) / 2 : (ou + spread) / 2, favorite: fav, spread };
 }
 
 export default async function handler(req, res) {
@@ -145,111 +141,107 @@ export default async function handler(req, res) {
     const now = new Date();
     const curSeason = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
     const baseSeason = curSeason - 1;
+    const proto = req.headers["x-forwarded-proto"] || "https";
 
-    const [sb, base, cur, sleeper] = await Promise.all([
-      getJson(`${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/scoreboard`),
-      loadSeasonStats(baseSeason),
-      loadSeasonStats(curSeason),
+    const [sb, sleeper, nvBase, nvCur] = await Promise.all([
+      getJson(`${proto}://${req.headers.host}/api/scoreboard`),
       getJson("https://api.sleeper.app/v1/players/nfl"),
+      loadNflverse(baseSeason),
+      loadNflverse(curSeason),
     ]);
-
-    // Sleeper index by gsis_id -> current team / injury / headshot
     const byGsis = {};
     for (const [sid, sp] of Object.entries(sleeper || {})) if (sp && sp.gsis_id) byGsis[sp.gsis_id] = { ...sp, sleeper_id: sid };
 
-    const B = aggregate(base.rows), C = aggregate(cur.rows);
-    const curWeeks = Math.max(0, ...Object.values(C.teams).map((t) => t.games), 0);
-    const wCur = Math.min(0.65, curWeeks * 0.12); // 0 in Week 1, ~0.36 by Week 3, caps at 0.65
-
-    // Position averages for regression
+    // Baseline: nflverse if it loaded, else Sleeper season stats
+    let B, baseSource;
+    if (nvBase.rows.length) { B = aggregate(nvBase.rows); baseSource = "nflverse"; }
+    else { B = await loadSleeperSeason(baseSeason, sleeper); baseSource = "sleeper"; }
+    const C = nvCur.rows.length ? aggregate(nvCur.rows) : { players: {}, teams: {}, allowed: {} };
+    const curWeeks = Math.max(0, ...Object.values(C.teams).map((t) => t.games || 0), 0);
+    const wCur = Math.min(0.65, curWeeks * 0.12);
     const posAvg = { RB: { td: 0.14, opp: 0.12 }, WR: { td: 0.12, opp: 0.12 }, TE: { td: 0.09, opp: 0.09 } };
 
-    // This week's games -> per-team context; skip teams whose game already finished
+    // This week's games -> per-team context
     const ctx = {};
     for (const g of sb.games || []) {
       const it = impliedTotals(g);
       const done = g.state === "post";
-      ctx[canon(g.home.abbr)] = { opp: canon(g.away.abbr), home: true, implTotal: it.home, spread: it.favorite === canon(g.home.abbr) ? -it.spread : it.spread, venue: g.venue, done, state: g.state };
-      ctx[canon(g.away.abbr)] = { opp: canon(g.home.abbr), home: false, implTotal: it.away, spread: it.favorite === canon(g.away.abbr) ? -it.spread : it.spread, venue: g.venue, done, state: g.state };
+      const h = canon(g.home.abbr), a = canon(g.away.abbr);
+      ctx[h] = { opp: a, home: true, implTotal: it.home ?? null, spread: it.favorite == null ? null : (it.favorite === h ? -it.spread : it.spread), done, kickoff: g.date };
+      ctx[a] = { opp: h, home: false, implTotal: it.away ?? null, spread: it.favorite == null ? null : (it.favorite === a ? -it.spread : it.spread), done, kickoff: g.date };
     }
 
-    // League-average TDs allowed per game by position (for matchup multiplier)
-    const allowedRate = (A, opp, pos) => (A.allowed[opp] ? A.allowed[opp][pos] / A.allowed[opp].games : null);
-    const leagueAvg = {};
+    // Opponent defense vs position: per-game TDs & yards allowed, ranked 1 (stingiest) .. 32
+    const A = B.allowed;
+    const rate = (opp, pos, k) => (A[opp] ? A[opp][pos][k] / A[opp].games : null);
+    const league = {}, ranks = {};
     for (const pos of ["RB", "WR", "TE"]) {
-      const vals = Object.keys(B.allowed).map((o) => allowedRate(B, o, pos)).filter((v) => v != null);
-      leagueAvg[pos] = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 1;
-    }
-    const oppRanks = {};
-    for (const pos of ["RB", "WR", "TE"]) {
-      const list = Object.keys(B.allowed).map((o) => [o, allowedRate(B, o, pos)]).filter(([, v]) => v != null).sort((a, b) => a[1] - b[1]);
-      list.forEach(([o], i) => { (oppRanks[o] ??= {})[pos] = i + 1; }); // 1 = stingiest
+      for (const k of ["td", "yds"]) {
+        const list = Object.keys(A).map((o) => [o, rate(o, pos, k)]).filter(([, v]) => v != null).sort((x, y) => x[1] - y[1]);
+        league[pos + k] = list.length ? list.reduce((s, [, v]) => s + v, 0) / list.length : null;
+        list.forEach(([o], i) => { ((ranks[o] ??= {})[pos] ??= {})[k] = i + 1; });
+      }
     }
 
     const cards = [];
-    let matched = 0, noTeam = 0, noGame = 0;
+    let noTeam = 0, noGame = 0, excluded = 0;
     for (const [id, bp] of Object.entries(B.players)) {
-      if (bp.pos === "QB") continue;
+      if (!["RB", "WR", "TE"].includes(bp.pos)) continue;
       const sp = byGsis[id];
-      const team = canon(sp && sp.team ? sp.team : bp.team);
-      if (!sp || !sp.team) { noTeam++; continue; }             // not on an NFL roster now
+      if (!sp || !sp.team) { noTeam++; continue; }
+      const team = canon(sp.team);
       const g = ctx[team];
-      if (!g || g.done) { noGame++; continue; }                // bye, or already played this week
+      if (!g || g.done) { noGame++; continue; }
       const injSt = String(sp.injury_status || "").toUpperCase();
-      if (["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR"].includes(injSt)) continue;
-      if (/injured reserve|pup|suspend/i.test(String(sp.status || ""))) continue;
+      if (["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR"].includes(injSt) || /injured reserve|pup|suspend/i.test(String(sp.status || ""))) { excluded++; continue; }
       if (bp.games < 4) continue;
 
       const bt = B.teams[bp.team] || { tds: 1, carries: 1, targets: 1, games: 1 };
-      const tdShareB = bt.tds ? bp.tds / bt.tds : 0;
-      const oppShareB = (bp.carries + bp.targets) / Math.max(1, bt.carries + bt.targets);
-      const cp = C.players[id], ct = cp ? C.teams[cp.team] : null;
-      const tdShareC = cp && ct && ct.tds ? cp.tds / ct.tds : null;
-      const oppShareC = cp && ct ? (cp.carries + cp.targets) / Math.max(1, ct.carries + ct.targets) : null;
-      const blend = (b, c) => (c == null ? b : (1 - wCur) * b + wCur * c);
-      // Regress thin baselines toward the position average
       const reg = Math.min(1, bp.games / 12);
-      const tdShare = blend(reg * tdShareB + (1 - reg) * posAvg[bp.pos].td, tdShareC);
-      const oppShare = blend(reg * oppShareB + (1 - reg) * posAvg[bp.pos].opp, oppShareC);
+      const tdShareB = reg * (bt.tds ? bp.tds / bt.tds : 0) + (1 - reg) * posAvg[bp.pos].td;
+      const oppShareB = reg * ((bp.carries + bp.targets) / Math.max(1, bt.carries + bt.targets)) + (1 - reg) * posAvg[bp.pos].opp;
+      const cp = C.players[id], ct = cp ? C.teams[cp.team] : null;
+      const blend = (b, c) => (c == null ? b : (1 - wCur) * b + wCur * c);
+      const tdShare = blend(tdShareB, cp && ct && ct.tds ? cp.tds / ct.tds : null);
+      const oppShare = blend(oppShareB, cp && ct ? (cp.carries + cp.targets) / Math.max(1, ct.carries + ct.targets) : null);
       const share = 0.65 * tdShare + 0.35 * oppShare;
 
       const implTotal = g.implTotal;
       const teamExpTd = (implTotal != null ? implTotal : 22) * 0.105;
-      const oppRate = allowedRate(B, g.opp, bp.pos);
-      const matchup = oppRate != null ? Math.max(0.8, Math.min(1.2, oppRate / leagueAvg[bp.pos])) : 1;
+      const oppTd = rate(g.opp, bp.pos, "td"), oppYds = rate(g.opp, bp.pos, "yds");
+      const matchup = oppTd != null && league[bp.pos + "td"] ? Math.max(0.8, Math.min(1.2, oppTd / league[bp.pos + "td"])) : 1;
       const expTd = teamExpTd * share * matchup;
-      const tdPct = 1 - Math.exp(-expTd);
-      matched++;
+
       cards.push({
         name: bp.name, team, pos: bp.pos, role: (sp.depth_chart_position || bp.pos) + (sp.depth_chart_order || ""),
-        opp: g.opp, home: g.home, spread: g.spread ?? null, implTotal: implTotal != null ? Number(implTotal.toFixed(1)) : null,
-        rzShare: Number(tdShare.toFixed(3)), oppShare: Number(oppShare.toFixed(3)),
-        oppTdAllowedPg: oppRate != null ? Number(oppRate.toFixed(2)) : null, oppTdRank: oppRanks[g.opp]?.[bp.pos] ?? null,
-        expTd: Number(expTd.toFixed(3)), tdPct: Number(tdPct.toFixed(3)),
-        teamExpTd: Number(teamExpTd.toFixed(2)), share: Number(share.toFixed(3)), matchup: Number(matchup.toFixed(2)),
-        venue: g.venue || null, dome: false, weather: null,
-        injury: injSt === "QUESTIONABLE" || injSt === "DOUBTFUL" ? injSt[0] + injSt.slice(1).toLowerCase() : null,
-        headshot: `https://sleepercdn.com/content/nfl/players/${sp.sleeper_id}.jpg`,
-        sleeperId: sp.sleeper_id, gsis: id,
+        opp: g.opp, home: g.home, spread: g.spread, implTotal: implTotal != null ? Number(implTotal.toFixed(1)) : null, kickoff: g.kickoff,
+        tdShare: Number(tdShare.toFixed(3)), touchesPg: Number(((bp.carries + bp.targets) / bp.games).toFixed(1)), tdsLastSeason: bp.tds, gamesLastSeason: bp.games,
+        oppTdAllowedPg: oppTd != null ? Number(oppTd.toFixed(2)) : null, oppTdRank: ranks[g.opp]?.[bp.pos]?.td ?? null,
+        oppYdsAllowedPg: oppYds != null ? Math.round(oppYds) : null, oppYdsRank: ranks[g.opp]?.[bp.pos]?.yds ?? null,
+        matchup: Number(matchup.toFixed(2)), teamExpTd: Number(teamExpTd.toFixed(2)), share: Number(share.toFixed(3)),
+        expTd: Number(expTd.toFixed(3)), tdPct: Number((1 - Math.exp(-expTd)).toFixed(3)),
+        injury: injSt === "QUESTIONABLE" ? "Questionable" : injSt === "DOUBTFUL" ? "Doubtful" : null,
+        headshot: `https://sleepercdn.com/content/nfl/players/${sp.sleeper_id}.jpg`, sleeperId: sp.sleeper_id,
       });
     }
     cards.sort((a, b) => b.tdPct - a.tdPct);
 
     res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
     const out = {
-      ready: cards.length > 0, season: curSeason, baseSeason, week: sb.week, version: "v1",
+      ready: cards.length > 0, season: curSeason, baseSeason, baseSource, week: sb.week, version: "v1",
       updatedAt: new Date().toISOString(), currentWeeksBlended: curWeeks, currentWeight: wCur,
+      hasMatchupData: Object.keys(A).length > 0,
+      reason: cards.length ? null : (Object.keys(B.players).length ? "No upcoming games matched this week's schedule." : "Neither nflverse nor Sleeper returned last season's player stats."),
       cards: cards.slice(0, 40),
     };
     if (debug) out.debug = {
-      baseUrl: base.url, baseRows: base.rows.length, baseError: base.error || null, baseAttempts: base.attempts || null,
-      curUrl: cur.url, curRows: cur.rows.length, curError: cur.error || null, curAttempts: cur.attempts || null,
-      baseColumns: base.rows[0] ? Object.keys(base.rows[0]) : [],
-      games: (sb.games || []).length, matched, noTeam, noGame,
-      sampleTeamCtx: Object.entries(ctx).slice(0, 4),
+      baseSource, basePlayers: Object.keys(B.players).length, baseError: B.error || null,
+      nflverseBase: { url: nvBase.url, rows: nvBase.rows.length, attempts: nvBase.attempts },
+      nflverseCur: { url: nvCur.url, rows: nvCur.rows.length, attempts: nvCur.attempts },
+      games: (sb.games || []).length, noTeam, noGame, excluded,
     };
     return res.status(200).json(out);
   } catch (e) {
-    return res.status(502).json({ ready: false, cards: [], error: String(e.message || e) });
+    return res.status(502).json({ ready: false, cards: [], reason: String(e.message || e) });
   }
 }
