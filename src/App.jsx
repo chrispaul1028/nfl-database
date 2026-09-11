@@ -251,7 +251,83 @@ function BioRow({ k, v }) {
 }
 
 // ═══════════════ PLAYER DETAIL ═══════════════════════════════════
-function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
+// ── Season stats box + game-by-game graph (from /api/season-stats) ──
+function SeasonStatsBox({ p, seasonStats }) {
+  const [metric, setMetric] = useState(null);
+  if (!seasonStats || !seasonStats.players) return null;
+  // match by name (+team when ambiguous)
+  const nm = hrbNrmSafe(p.name);
+  const abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
+  const cands = Object.values(seasonStats.players).filter((q) => hrbNrmSafe(q.name) === nm);
+  const P = cands.length > 1 ? cands.find((q) => injTeamEq(q.team, abbr)) || cands[0] : cands[0];
+  if (!P || !P.totals || !P.totals.gp) return null;
+  const T = P.totals, G = P.perGame;
+  const pos = String(p.pos || P.pos || "").toUpperCase();
+  const isQB = pos === "QB", isRB = ["RB", "HB", "FB"].includes(pos), isRec = ["WR", "TE"].includes(pos);
+  const isDef = !isQB && !isRB && !isRec && (T.tkl > 0 || T.sacks > 0 || T.defInt > 0);
+  // Columns per position: [label, total, per-game, graphKey]
+  const cols = isQB ? [["Cmp", T.cmp, G.cmp, "cmp"], ["Att", T.att, G.att, "att"], ["Pass Yds", T.passYds, G.passYds, "passYds"], ["Pass TD", T.passTd, G.passTd, "passTd"], ["INT", T.int, G.int, "int"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
+    : isRB ? [["Carries", T.car, G.car, "car"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Y/Car", T.ypcar, null, null], ["Rush TD", T.rushTd, G.rushTd, "rushTd"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec", T.rec, G.rec, "rec"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Tgt Share", T.tgtShare != null ? Math.round(T.tgtShare * 100) + "%" : null, null, null]]
+    : isRec ? [["Rec", T.rec, G.rec, "rec"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Y/Rec", T.ypc, null, null], ["Tgt Share", T.tgtShare != null ? Math.round(T.tgtShare * 100) + "%" : null, null, null], ["Carries", T.car, G.car, "car"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
+    : isDef ? [["Tackles", T.tkl, G.tkl, "tkl"], ["Solo", T.solo, G.solo, "solo"], ["Sacks", T.sacks, G.sacks, "sacks"], ["TFL", T.tfl, G.tfl, "tfl"], ["INT", T.defInt, G.defInt, "defInt"], ["PD", T.pd, G.pd, "pd"], ["TD", T.defTd, G.defTd, "defTd"]]
+    : [];
+  if (!cols.length) return null;
+  const graphable = cols.filter((c) => c[3]);
+  const key = metric || (isRec ? "tgt" : isRB ? "car" : isQB ? "passYds" : "tkl");
+  const series = P.games.map((g) => ({ week: g.week, opp: g.opp, v: g[key] || 0 }));
+  const max = Math.max(1, ...series.map((d) => d.v));
+  const W = 320, H = 110, padL = 22, padB = 18, padT = 10;
+  const x = (i) => padL + (series.length > 1 ? (i * (W - padL - 6)) / (series.length - 1) : (W - padL) / 2);
+  const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+  const path = series.map((d, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(d.v).toFixed(1)).join(" ");
+  const label = graphable.find((c) => c[3] === key)?.[0] || key;
+  return (
+    <>
+      <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{seasonStats.season} Season · {T.gp} GP</div>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="grid grid-cols-4 divide-x divide-y divide-slate-100 dark:divide-slate-800">
+          {cols.map(([lbl, tot, pg]) => (
+            <div key={lbl} className="px-2 py-2.5 text-center">
+              <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{lbl}</div>
+              <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">{tot ?? "—"}</div>
+              {pg != null && <div className="text-[9px] font-semibold text-slate-400 tabular-nums">{pg}/g</div>}
+            </div>
+          ))}
+        </div>
+        {/* game-by-game line: is the role trending up or down? */}
+        <div className="border-t border-slate-100 dark:border-slate-800 px-3 pt-2.5 pb-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto mb-1" style={{ scrollbarWidth: "none" }}>
+            {graphable.map(([lbl,,, k]) => (
+              <button key={k} onClick={() => setMetric(k)}
+                className={"shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold " + (key === k ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+            {[0, 0.5, 1].map((f) => (
+              <g key={f}>
+                <line x1={padL} x2={W - 6} y1={y(max * f)} y2={y(max * f)} stroke="currentColor" className="text-slate-200 dark:text-slate-700" strokeWidth="1" />
+                <text x={padL - 4} y={y(max * f) + 3} fontSize="8" textAnchor="end" className="fill-slate-400">{Math.round(max * f)}</text>
+              </g>
+            ))}
+            <path d={path} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            {series.map((d, i) => (
+              <g key={i}>
+                <circle cx={x(i)} cy={y(d.v)} r="3.5" fill="#2563eb" stroke="white" strokeWidth="1.5" />
+                <text x={x(i)} y={y(d.v) - 7} fontSize="8" textAnchor="middle" fontWeight="700" className="fill-slate-700 dark:fill-slate-200">{d.v}</text>
+                <text x={x(i)} y={H - 4} fontSize="7.5" textAnchor="middle" className="fill-slate-400">W{d.week}</text>
+              </g>
+            ))}
+          </svg>
+          <div className="text-[9px] text-slate-400 text-center">{label} by game</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const act = activeOf(p);
   const past = p.contracts.filter((c) => c !== act);
@@ -328,6 +404,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full" }) {
             </div>
           </>
         )}
+        {mode === "full" && <SeasonStatsBox p={p} seasonStats={seasonStats} />}
 
         {mode === "full" && p.stats && p.stats.length > 0 && (
           <>
@@ -1507,10 +1584,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer }) {
             if (seg === "roster" && unit === "defense") {
               return (
                 <>
-                  <Tile compact value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Pts Allowed" sub={rk(sx.paRank)} />
-                  <Tile compact value={sx.sacks != null ? Math.round(sx.sacks) : "—"} label="Sacks" sub={rk(sx.sacksRank)} />
-                  <Tile compact value={sx.takeaways != null ? Math.round(sx.takeaways) : "—"} label="Takeaways" sub={rk(sx.takeawaysRank)} />
-                  <Tile compact value={sx.toDiff != null ? (sx.toDiff > 0 ? "+" + Math.round(sx.toDiff) : String(Math.round(sx.toDiff))) : "—"} label="TO Diff" sub={rk(sx.toDiffRank)} />
+                  <Tile compact value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds Alwd" sub={rk(sx.defPassYpgRank)} />
+                  <Tile compact value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD Alwd" sub={rk(sx.defPassTdRank)} />
+                  <Tile compact value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds Alwd" sub={rk(sx.defRushYpgRank)} />
+                  <Tile compact value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD Alwd" sub={rk(sx.defRushTdRank)} />
                 </>
               );
             }
@@ -2268,6 +2345,7 @@ export default function App() {
   const [teams, setTeams] = useState([]);
   const [stand, setStand] = useState(null); // records + stat ranks from /api/standings
   const [nflWeek, setNflWeek] = useState(null); // current week, for the bottom-nav label
+  const [seasonStats, setSeasonStats] = useState(null); // ESPN box-score aggregation (/api/season-stats)
 
   // Automated records/stats: merge ESPN data into the Airtable teams by abbr.
   // Airtable values still win when present; ESPN fills the blanks (and stx).
@@ -2275,9 +2353,15 @@ export default function App() {
     if (!stand || !stand.teams) return teams;
     const find = (abbr) => stand.teams.find((s) => injTeamEq(s.abbr, abbr));
     return teams.map((t) => {
-      const s = find(t.abbr || toAbbr(t.name));
-      if (!s) return t;
+      const s = find(t.abbr || toAbbr(t.name)) || {};
+      const bx = seasonStats && seasonStats.teams ? seasonStats.teams[t.abbr || toAbbr(t.name)] : null;
       const stx = {
+        // defense splits from box scores (pass/rush yds & TDs allowed, ranked)
+        defPassYpg: bx ? bx.defPg.passYds : null, defPassYpgRank: bx ? bx.ranks.defPassYds : null,
+        defPassTd: bx ? bx.def.passTd : null, defPassTdRank: bx ? bx.ranks.defPassTd : null,
+        defRushYpg: bx ? bx.defPg.rushYds : null, defRushYpgRank: bx ? bx.ranks.defRushYds : null,
+        defRushTd: bx ? bx.def.rushTd : null, defRushTdRank: bx ? bx.ranks.defRushTd : null,
+        defSeason: seasonStats ? seasonStats.season : null,
         passYpg: s.passYpg, passYpgRank: s.passYpgRank,
         rushYpg: s.rushYpg, rushYpgRank: s.rushYpgRank,
         offTd: s.offTd, offTdRank: s.offTdRank,
@@ -2292,7 +2376,7 @@ export default function App() {
         ? { ...t, wins: t.wins ?? s.wins, losses: t.losses ?? s.losses, ties: t.ties ?? s.ties, pf: t.pf ?? s.pf, pa: t.pa ?? s.pa, stx }
         : { ...t, winsPrev: t.winsPrev ?? s.wins, lossesPrev: t.lossesPrev ?? s.losses, tiesPrev: t.tiesPrev ?? s.ties, pfPrev: t.pfPrev ?? s.pf, paPrev: t.paPrev ?? s.pa, stx };
     });
-  }, [teams, stand]);
+  }, [teams, stand, seasonStats]);
   const [selTeam, setSelTeam] = useState(null);
   const [error, setError] = useState(null);
 
@@ -2330,6 +2414,15 @@ export default function App() {
     fetch("/api/scoreboard").then((r) => r.json()).then((d) => { if (d && d.week) setNflWeek(d.week); }).catch(() => {});
   }, []);
   useEffect(() => {
+    // Current season's box scores; until a week is final, show last season's so tiles aren't blank.
+    const yr = new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+    fetch(`/api/season-stats?season=${yr}`).then((r) => r.json())
+      .then((d) => {
+        if (d && d.weeksWithGames > 0) return setSeasonStats(d);
+        return fetch(`/api/season-stats?season=${yr - 1}`).then((r) => r.json()).then((d2) => setSeasonStats(d2 && d2.players ? d2 : null));
+      }).catch(() => {});
+  }, []);
+  useEffect(() => {
     // Non-fatal: if ESPN is down the app just shows Airtable's numbers.
     fetch("/api/standings")
       .then((r) => r.json())
@@ -2344,6 +2437,7 @@ export default function App() {
         onBack={() => setSel(null)}
         backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
         mode="full"
+        seasonStats={seasonStats}
       />
     );
   }
