@@ -491,6 +491,47 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   const lblOf = (p) => String(p.sortLabel || "").toUpperCase();
   const depthNo = (p) => { const m = lblOf(p).match(/(\d+)$/); return m ? Number(m[1]) : 1; };
   const baseOf = (p) => { const m = lblOf(p).match(/^([A-Z]+)/); return m ? m[1] : null; };
+  const injOf = (p) => (p ? injFor(p.name, abbr) : null);
+  // Sleeper's injury_status vocabulary is wider than Q/D/Out — IR, PUP, NA,
+  // Sus, COV, DNR all mean "not playing". Missing any of these = a hurt
+  // player shown as healthy (the Charbonnet bug).
+  const OUT_CODES = new Set(["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR", "NFI", "RET"]);
+  const isOut = (inj) => !!inj && (OUT_CODES.has(String(inj.injury_status || "").toUpperCase()) ||
+    /injured reserve|pup|non football|suspend|inactive/i.test(String(inj.status || "")));
+  // Health state: "out" | "d" | "q" | "ok" | null (no Sleeper match)
+  const healthOf = (p) => {
+    const inj = injOf(p);
+    if (!inj) return null;
+    if (isOut(inj)) return "out";
+    const st = String(inj.injury_status || "").toUpperCase();
+    if (st === "DOUBTFUL") return "d";
+    if (st === "QUESTIONABLE") return "q";
+    return "ok";
+  };
+  // Ring: white = healthy (reads on grass), gray = no data, orange = Q, red = D/Out
+  const ringCls = (p) => {
+    if (!p) return "border-white/40";
+    const h = healthOf(p);
+    if (h == null) return "border-slate-400";
+    if (h === "ok") return "border-white";
+    return "border-red-500"; // anyone banged up = red; the badge says how badly
+  };
+  // High-contrast status badge at the top-right of the circle — the thing
+  // you actually read, since ring hue alone gets lost against green turf.
+  const HealthBadge = ({ p, small }) => {
+    const h = healthOf(p);
+    if (!h || h === "ok") return null;
+    const inj = injOf(p);
+    const txt = h === "q" ? "QUEST" : h === "d" ? "DOUBT"
+      : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
+      : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
+    return (
+      <span className={"absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
+        (small ? "h-[14px] text-[7px] " : "h-[17px] text-[8px] ")}>
+        {txt}
+      </span>
+    );
+  };
   const used = new Set();
   let SLOTS, assigned, formationLabel = null; // defense sets this ("4-3 · Nickel"); offense stays clean
 
@@ -514,23 +555,33 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
     //   3rd WR spot even if no WR2 exists, leaving the WR2 slot visibly open.
     //   Pass 2 — remaining slots fill in depth order by label, then Position.
     assigned = new Array(SLOTS.length).fill(null);
+    // Next man up: an OUT/IR/PUP/suspended starter is skipped in pass 1 and
+    // his slot fills from the depth chart in pass 2 (WR4 steps into WR3's
+    // spot). He goes to the sideline wearing his OUT badge. Q/D starters stay
+    // on the field — those are game-time calls, not lineup changes.
+    const outStarter = new Array(SLOTS.length).fill(null);
     SLOTS.forEach((s, i) => {
       for (const want of s.exact || []) {
         const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
-        if (hit) { assigned[i] = hit; used.add(hit.id); break; }
+        if (hit) {
+          if (isOut(injOf(hit))) { outStarter[i] = hit; continue; }
+          assigned[i] = hit; used.add(hit.id); break;
+        }
       }
     });
     SLOTS.forEach((s, i) => {
       if (assigned[i]) return;
       const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
+      const healthy = (p) => !isOut(injOf(p));
       const byLabel = roster
-        .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1)
+        .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1 && healthy(p))
         .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
       const byPos = roster
-        .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()))
+        .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()) && healthy(p))
         .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
-      const hit = byLabel[0] || byPos[0] || null;
-      if (hit) { assigned[i] = hit; used.add(hit.id); }
+      // no healthy body at all -> show the injured starter rather than a hole
+      const hit = byLabel[0] || byPos[0] || outStarter[i] || null;
+      if (hit) { assigned[i] = hit; used.add(hit.id); if (outStarter[i] && hit !== outStarter[i]) s.nextUp = true; }
     });
   } else {
     // ── Defense: NOT a template. Every declared starter takes the field. ──
@@ -570,10 +621,24 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
       return EDGE_BASES.has(b) ? (d <= 1 ? 1 : 3) : 2;
     };
     const rows = { dl: [], lb: [], db: [], s: [] };
-    roster
+    const starters = roster
       .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= maxFor(b); })
-      .sort((a, b) => sideKey(baseOf(a), depthNo(a)) - sideKey(baseOf(b), depthNo(b)) || depthNo(a) - depthNo(b))
-      .forEach((p) => { rows[ROW_OF(baseOf(p))].push({ p, lbl: baseOf(p) }); used.add(p.id); });
+      .sort((a, b) => sideKey(baseOf(a), depthNo(a)) - sideKey(baseOf(b), depthNo(b)) || depthNo(a) - depthNo(b));
+    const starterIds = new Set(starters.map((p) => p.id));
+    starters.forEach((p) => {
+      let who = p, nextUp = false;
+      if (isOut(injOf(p))) {
+        // Next man up: same position family first (WLB1 out -> WLB2), then
+        // any healthy non-starter in the same row, shallowest depth first.
+        const fam = norm(baseOf(p)), row = ROW_OF(baseOf(p));
+        const repl = roster
+          .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !isOut(injOf(q)))
+          .sort((a, b) => (norm(baseOf(a)) === fam ? 0 : 1) - (norm(baseOf(b)) === fam ? 0 : 1) || depthNo(a) - depthNo(b))[0];
+        if (repl) { who = repl; nextUp = true; }
+      }
+      rows[ROW_OF(baseOf(p))].push({ p: who, lbl: baseOf(p), nextUp });
+      used.add(who.id);
+    });
     // Fallback for rosters without depth labels: fill each row by Position.
     const FALLBACK = { dl: ["DE", "DT", "NT", "EDGE", "DL"], lb: ["LB", "ILB", "OLB", "MLB"], db: ["CB", "NB", "DB"], s: ["S", "FS", "SS"] };
     const MIN_ROW = { dl: 3, lb: 2, db: 2, s: 2 };
@@ -616,7 +681,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           else x = inner === 1 ? 50 : 32 + (36 * (i - 1)) / (inner - 1);
           if (n === 1) x = 50;
         }
-        SLOTS.push({ lbl: it.lbl, x, y });
+        SLOTS.push({ lbl: it.lbl, x, y, nextUp: !!it.nextUp });
         assigned.push(it.p);
       });
     }
@@ -650,49 +715,6 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
   // Ring scheme (no yellow — it collided with the gold 90+ OVR chip):
   //   emerald = Sleeper confirms healthy · orange = Questionable
   //   red = Doubtful · red + faded photo = Out/IR/PUP · slate = no Sleeper data
-  const injOf = (p) => (p ? injFor(p.name, abbr) : null);
-  // Sleeper's injury_status vocabulary is wider than Q/D/Out — IR, PUP, NA,
-  // Sus, COV, DNR all mean "not playing". Missing any of these = a hurt
-  // player shown as healthy (the Charbonnet bug).
-  const OUT_CODES = new Set(["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR", "NFI", "RET"]);
-  const isOut = (inj) => !!inj && (OUT_CODES.has(String(inj.injury_status || "").toUpperCase()) ||
-    /injured reserve|pup|non football|suspend|inactive/i.test(String(inj.status || "")));
-  // Health state: "out" | "d" | "q" | "ok" | null (no Sleeper match)
-  const healthOf = (p) => {
-    const inj = injOf(p);
-    if (!inj) return null;
-    if (isOut(inj)) return "out";
-    const st = String(inj.injury_status || "").toUpperCase();
-    if (st === "DOUBTFUL") return "d";
-    if (st === "QUESTIONABLE") return "q";
-    return "ok";
-  };
-  // Ring: white = healthy (reads on grass), gray = no data, orange = Q, red = D/Out
-  const ringCls = (p) => {
-    if (!p) return "border-white/40";
-    const h = healthOf(p);
-    if (h == null) return "border-slate-400";
-    if (h === "out" || h === "d") return "border-red-500";
-    if (h === "q") return "border-orange-400";
-    return "border-white";
-  };
-  // High-contrast status badge at the top-right of the circle — the thing
-  // you actually read, since ring hue alone gets lost against green turf.
-  const HealthBadge = ({ p, small }) => {
-    const h = healthOf(p);
-    if (!h || h === "ok") return null;
-    const inj = injOf(p);
-    const txt = h === "q" ? "Q" : h === "d" ? "D"
-      : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
-      : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
-    return (
-      <span className={"absolute -top-1 -right-1.5 px-1 rounded-full font-extrabold text-white border-2 border-white shadow flex items-center justify-center " +
-        (small ? "min-w-[14px] h-[14px] text-[7px] " : "min-w-[17px] h-[17px] text-[8px] ") +
-        (h === "q" ? "bg-orange-500" : "bg-red-600")}>
-        {txt}
-      </span>
-    );
-  };
   return (
     <div className="mt-4">
       <div className="flex gap-2 mb-3">
@@ -793,6 +815,11 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
                   </span>
                 )}
                 {p && <HealthBadge p={p} />}
+                {p && s.nextUp && healthOf(p) !== "out" && (
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 h-[17px] px-1.5 rounded-full text-[8px] font-extrabold text-white bg-emerald-600 border-2 border-white shadow whitespace-nowrap flex items-center">
+                    ▲ NEXT UP
+                  </span>
+                )}
               </span>
               <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[92px] truncate drop-shadow">
                 {p ? (() => {
@@ -856,7 +883,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank }
           </div>
         </div>
       )}
-      <div className="text-[9px] text-slate-400 mt-2 px-1">Badge = injury (Q · D · OUT · IR, faded = not playing) · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
+      <div className="text-[9px] text-slate-400 mt-2 px-1">Red = injured (QUEST · DOUBT · OUT · IR) · OUT starters auto-swap to the sideline, ▲ NEXT UP takes the spot · no badge = healthy · gray ring = no report data · chip = OVR · tag = unit rank vs NFL · tap for profile</div>
     </div>
   );
 }
