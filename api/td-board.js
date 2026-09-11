@@ -45,38 +45,52 @@ function parseCsv(text) {
   return rows.filter((r) => r.length > 1).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
 }
 
-// nflverse renames these files between years, so instead of guessing we ask
-// GitHub for the release's asset list and pick the weekly player-stats CSV
-// for the season. Falls back to the known naming patterns if the API is
-// rate-limited.
-let _assetCache = null;
-async function listPlayerStatAssets() {
-  if (_assetCache) return _assetCache;
-  try {
-    const rel = await getJson("https://api.github.com/repos/nflverse/nflverse-data/releases/tags/player_stats");
-    _assetCache = (rel.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url }));
-  } catch { _assetCache = []; }
-  return _assetCache;
+// nflverse naming (2016+): stats_player_week_<season>.csv in the player_stats
+// release. Try the direct URL first; GitHub's release listing is capped at
+// 1,000 assets (this release has ~1,900), so listing is only a paginated
+// last resort. Every attempt is recorded for ?debug=1.
+async function listAssetsPaginated() {
+  const rel = await getJson("https://api.github.com/repos/nflverse/nflverse-data/releases/tags/player_stats");
+  const out = [];
+  for (let page = 1; page <= 25; page++) {
+    const chunk = await getJson(`https://api.github.com/repos/nflverse/nflverse-data/releases/${rel.id}/assets?per_page=100&page=${page}`);
+    out.push(...chunk.map((a) => ({ name: a.name, url: a.browser_download_url })));
+    if (chunk.length < 100) break;
+  }
+  return out;
 }
 async function loadSeasonStats(season) {
-  const assets = await listPlayerStatAssets();
-  const isCsv = (n) => /\.csv$/i.test(n);
-  const hasYear = (n) => n.includes(String(season));
-  // Prefer week-level offense files; avoid def/kicking/reg-summary files
-  const pick = assets.filter((a) => isCsv(a.name) && hasYear(a.name))
-    .filter((a) => !/def|kick|_reg|_post|regpost|season/i.test(a.name))
-    .sort((a, b) => (/week/i.test(b.name) ? 1 : 0) - (/week/i.test(a.name) ? 1 : 0))[0];
+  const base = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/";
   const urls = [
-    ...(pick ? [pick.url] : []),
-    `https://github.com/nflverse/nflverse-data/releases/download/player_stats/stats_player_week_${season}.csv`,
-    `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`,
+    `${base}stats_player_week_${season}.csv`,
+    `${base}player_stats_${season}.csv`,
   ];
-  let lastErr;
+  const attempts = [];
+  const tryUrl = async (u) => {
+    try {
+      const r = await fetch(u, { headers: { accept: "text/csv,*/*" }, redirect: "follow" });
+      if (!r.ok) { attempts.push({ url: u, status: r.status }); return null; }
+      const t = await r.text();
+      if (t.length < 1000) { attempts.push({ url: u, status: r.status, note: "tiny body" }); return null; }
+      return t;
+    } catch (e) { attempts.push({ url: u, error: String(e.message || e) }); return null; }
+  };
   for (const u of urls) {
-    try { const t = await getText(u); if (t.length > 1000) return { rows: parseCsv(t), url: u }; }
-    catch (e) { lastErr = e; }
+    const t = await tryUrl(u);
+    if (t) return { rows: parseCsv(t), url: u, attempts };
   }
-  return { rows: [], url: null, error: String(lastErr && lastErr.message), assetsSeen: assets.map((a) => a.name) };
+  // Last resort: find the file by listing (paginated, so 2025 isn't cut off)
+  try {
+    const assets = await listAssetsPaginated();
+    const hit = assets.find((a) => a.name === `stats_player_week_${season}.csv`) ||
+      assets.find((a) => /\.csv$/.test(a.name) && a.name.includes(String(season)) && /week/.test(a.name) && !/team|def|kick/.test(a.name));
+    if (hit) {
+      const t = await tryUrl(hit.url);
+      if (t) return { rows: parseCsv(t), url: hit.url, attempts };
+    }
+    attempts.push({ note: "listing had no weekly file for " + season, seasonFilesSeen: assets.filter((a) => a.name.includes(String(season))).map((a) => a.name) });
+  } catch (e) { attempts.push({ note: "listing failed", error: String(e.message || e) }); }
+  return { rows: [], url: null, error: "no weekly stats file reachable for " + season, attempts };
 }
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -212,6 +226,7 @@ export default async function handler(req, res) {
         rzShare: Number(tdShare.toFixed(3)), oppShare: Number(oppShare.toFixed(3)),
         oppTdAllowedPg: oppRate != null ? Number(oppRate.toFixed(2)) : null, oppTdRank: oppRanks[g.opp]?.[bp.pos] ?? null,
         expTd: Number(expTd.toFixed(3)), tdPct: Number(tdPct.toFixed(3)),
+        teamExpTd: Number(teamExpTd.toFixed(2)), share: Number(share.toFixed(3)), matchup: Number(matchup.toFixed(2)),
         venue: g.venue || null, dome: false, weather: null,
         injury: injSt === "QUESTIONABLE" || injSt === "DOUBTFUL" ? injSt[0] + injSt.slice(1).toLowerCase() : null,
         headshot: `https://sleepercdn.com/content/nfl/players/${sp.sleeper_id}.jpg`,
@@ -227,8 +242,8 @@ export default async function handler(req, res) {
       cards: cards.slice(0, 40),
     };
     if (debug) out.debug = {
-      baseUrl: base.url, baseRows: base.rows.length, baseError: base.error || null, assetsSeen: base.assetsSeen || null,
-      curUrl: cur.url, curRows: cur.rows.length, curError: cur.error || null,
+      baseUrl: base.url, baseRows: base.rows.length, baseError: base.error || null, baseAttempts: base.attempts || null,
+      curUrl: cur.url, curRows: cur.rows.length, curError: cur.error || null, curAttempts: cur.attempts || null,
       baseColumns: base.rows[0] ? Object.keys(base.rows[0]) : [],
       games: (sb.games || []).length, matched, noTeam, noGame,
       sampleTeamCtx: Object.entries(ctx).slice(0, 4),
