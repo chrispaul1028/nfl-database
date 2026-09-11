@@ -110,13 +110,16 @@ async function loadSleeperSeason(season, sleeperPlayers) {
     const st = await getJson(`https://api.sleeper.app/v1/stats/nfl/regular/${season}`);
     const players = {}, teams = {};
     for (const [sid, s] of Object.entries(st || {})) {
-      const sp = sleeperPlayers[sid]; if (!sp || !sp.gsis_id) continue;
+      const sp = sleeperPlayers[sid]; if (!sp) continue;
       const pos = String(sp.position || "").toUpperCase(); if (!["RB", "WR", "TE"].includes(pos)) continue;
-      const g = num(s.gp || s.gms_active), carries = num(s.rush_att), targets = num(s.rec_tgt);
+      const carries = num(s.rush_att), targets = num(s.rec_tgt);
       const tds = num(s.rush_td) + num(s.rec_td), yds = num(s.rush_yd) + num(s.rec_yd);
-      if (!g) continue;
+      if (carries + targets === 0) continue;
+      // games: gp, else gms_active, else assume a full season (never drop a player for a missing field)
+      const g = num(s.gp) || num(s.gms_active) || 17;
       const team = canon(sp.team);
-      players[sp.gsis_id] = { id: sp.gsis_id, name: sp.full_name || `${sp.first_name} ${sp.last_name}`, pos, team, games: g, carries, targets, tds, yds };
+      const key = sp.gsis_id || ("sleeper:" + sid);
+      players[key] = { id: key, sp: { ...sp, sleeper_id: sid }, name: sp.full_name || `${sp.first_name} ${sp.last_name}`, pos, team, games: g, carries, targets, tds, yds };
       const t = (teams[team] ??= { games: 17, carries: 0, targets: 0, tds: 0 });
       t.carries += carries; t.targets += targets; t.tds += tds;
     }
@@ -187,7 +190,7 @@ export default async function handler(req, res) {
     let noTeam = 0, noGame = 0, excluded = 0;
     for (const [id, bp] of Object.entries(B.players)) {
       if (!["RB", "WR", "TE"].includes(bp.pos)) continue;
-      const sp = byGsis[id];
+      const sp = bp.sp || byGsis[id];
       if (!sp || !sp.team) { noTeam++; continue; }
       const team = canon(sp.team);
       const g = ctx[team];
@@ -195,6 +198,11 @@ export default async function handler(req, res) {
       const injSt = String(sp.injury_status || "").toUpperCase();
       if (["OUT", "IR", "PUP", "NA", "SUS", "COV", "DNR"].includes(injSt) || /injured reserve|pup|suspend/i.test(String(sp.status || ""))) { excluded++; continue; }
       if (bp.games < 4) continue;
+      // Role gate from Sleeper's depth chart: backups don't belong on a TD board
+      // (a 5-TD season as an RB4 is a share of a role he no longer has).
+      const depth = num(sp.depth_chart_order);
+      const maxDepth = { RB: 2, WR: 3, TE: 1 }[bp.pos];
+      if (depth && depth > maxDepth) { excluded++; continue; }
 
       // Team denominators. nflverse gives real per-team totals; Sleeper season
       // stats carry no team splits, so fall back to league-average team volume
@@ -239,6 +247,15 @@ export default async function handler(req, res) {
       reason: cards.length ? null : (Object.keys(B.players).length ? "No upcoming games matched this week's schedule." : "Neither nflverse nor Sleeper returned last season's player stats."),
       cards: cards.slice(0, 25),
     };
+    if (debug && req.query.find) {
+      const q = String(req.query.find).toLowerCase();
+      out.find = Object.values(B.players).filter((bp) => String(bp.name).toLowerCase().includes(q)).map((bp) => {
+        const sp = bp.sp || byGsis[bp.id];
+        return { name: bp.name, pos: bp.pos, lastSeasonTeam: bp.team, games: bp.games, tds: bp.tds, touches: bp.carries + bp.targets,
+          sleeperTeam: sp ? sp.team : null, depth: sp ? sp.depth_chart_order : null, injury: sp ? sp.injury_status : null,
+          gameCtx: sp && sp.team ? ctx[canon(sp.team)] || "no game found for team" : "no sleeper match" };
+      });
+    }
     if (debug) out.debug = {
       baseSource, basePlayers: Object.keys(B.players).length, baseError: B.error || null,
       nflverseBase: { url: nvBase.url, rows: nvBase.rows.length, attempts: nvBase.attempts },
