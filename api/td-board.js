@@ -38,8 +38,22 @@ export default async function handler(req, res) {
       getJson("https://api.sleeper.app/v1/players/nfl"),
     ]);
     // Sleeper by ESPN athlete id (Sleeper carries espn_id for nearly everyone)
-    const byEspn = {};
-    for (const [sid, sp] of Object.entries(sleeper || {})) if (sp && sp.espn_id) byEspn[String(sp.espn_id)] = { ...sp, sleeper_id: sid };
+    const byEspn = {}, byName = {};
+    const nrm = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.'’\-]/g, "").replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+    for (const [sid, sp] of Object.entries(sleeper || {})) {
+      if (!sp) continue;
+      const rec = { ...sp, sleeper_id: sid };
+      if (sp.espn_id) byEspn[String(sp.espn_id)] = rec;
+      const k = nrm(sp.full_name || `${sp.first_name} ${sp.last_name}`);
+      if (k) (byName[k] ??= []).push(rec);
+    }
+    // ESPN id first; fall back to name (+ position when several share it)
+    const findSleeper = (id, name, pos) => {
+      if (byEspn[id]) return byEspn[id];
+      const c = byName[nrm(name)] || [];
+      if (c.length === 1) return c[0];
+      return c.find((x) => String(x.position || "").toUpperCase() === pos && x.team) || null;
+    };
 
     const wCur = Math.min(0.65, (C.weeksWithGames || 0) * 0.12);
     const posAvg = { RB: { td: 0.14, opp: 0.12 }, WR: { td: 0.12, opp: 0.12 }, TE: { td: 0.09, opp: 0.09 } };
@@ -74,7 +88,7 @@ export default async function handler(req, res) {
     const cards = []; let noSleeper = 0, noGame = 0, excluded = 0;
     for (const [id, P] of Object.entries(B.players || {})) {
       if (!["RB", "WR", "TE"].includes(P.pos)) continue;
-      const sp = byEspn[id]; if (!sp || !sp.team) { noSleeper++; continue; }
+      const sp = findSleeper(id, P.name, P.pos); if (!sp || !sp.team) { noSleeper++; continue; }
       const team = canon(sp.team), g = ctx[team];
       if (!g || g.done) { noGame++; continue; }
       const injSt = String(sp.injury_status || "").toUpperCase();
@@ -115,14 +129,16 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
     const out = { ready: cards.length > 0, season: curSeason, baseSeason, week: sb.week, version: "v2", updatedAt: new Date().toISOString(),
       currentWeeksBlended: C.weeksWithGames || 0, currentWeight: wCur, hasMatchupData: Object.keys(B.allowed || {}).length > 0,
-      reason: cards.length ? null : (Object.keys(B.players || {}).length ? "No upcoming games matched this week's schedule." : `Last season's box scores (${baseSeason}) didn't load.`),
+      reason: cards.length ? null : (Object.keys(B.players || {}).length
+        ? `0 of ${Object.keys(B.players).length} players made the board — no Sleeper match: ${noSleeper}, no upcoming game: ${noGame}, injured/backup: ${excluded}, games this week: ${(sb.games || []).length}.`
+        : `Last season's box scores (${baseSeason}) didn't load${B.error ? " — " + B.error : ""}.`),
       cards: cards.slice(0, 25) };
     if (debug) {
       out.debug = { basePlayers: Object.keys(B.players || {}).length, baseError: B.error || null, baseWeeks: B.weeksWithGames, curWeeks: C.weeksWithGames, games: (sb.games || []).length, noSleeper, noGame, excluded, leagueTdAllowed: league };
       if (req.query.find) {
         const q = String(req.query.find).toLowerCase();
         out.find = Object.values(B.players || {}).filter((P) => String(P.name).toLowerCase().includes(q)).map((P) => {
-          const sp = byEspn[P.id];
+          const sp = findSleeper(P.id, P.name, P.pos);
           return { name: P.name, espnId: P.id, pos: P.pos, lastSeasonTeam: P.team, totals: P.totals, sleeperTeam: sp?.team ?? "no sleeper match", depth: sp?.depth_chart_order, injury: sp?.injury_status, game: sp?.team ? ctx[canon(sp.team)] : null };
         });
       }
