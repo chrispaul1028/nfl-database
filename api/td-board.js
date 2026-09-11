@@ -45,9 +45,29 @@ function parseCsv(text) {
   return rows.filter((r) => r.length > 1).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
 }
 
-// nflverse has renamed this file across years — try the known names.
+// nflverse renames these files between years, so instead of guessing we ask
+// GitHub for the release's asset list and pick the weekly player-stats CSV
+// for the season. Falls back to the known naming patterns if the API is
+// rate-limited.
+let _assetCache = null;
+async function listPlayerStatAssets() {
+  if (_assetCache) return _assetCache;
+  try {
+    const rel = await getJson("https://api.github.com/repos/nflverse/nflverse-data/releases/tags/player_stats");
+    _assetCache = (rel.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url }));
+  } catch { _assetCache = []; }
+  return _assetCache;
+}
 async function loadSeasonStats(season) {
+  const assets = await listPlayerStatAssets();
+  const isCsv = (n) => /\.csv$/i.test(n);
+  const hasYear = (n) => n.includes(String(season));
+  // Prefer week-level offense files; avoid def/kicking/reg-summary files
+  const pick = assets.filter((a) => isCsv(a.name) && hasYear(a.name))
+    .filter((a) => !/def|kick|_reg|_post|regpost|season/i.test(a.name))
+    .sort((a, b) => (/week/i.test(b.name) ? 1 : 0) - (/week/i.test(a.name) ? 1 : 0))[0];
   const urls = [
+    ...(pick ? [pick.url] : []),
     `https://github.com/nflverse/nflverse-data/releases/download/player_stats/stats_player_week_${season}.csv`,
     `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`,
   ];
@@ -56,7 +76,7 @@ async function loadSeasonStats(season) {
     try { const t = await getText(u); if (t.length > 1000) return { rows: parseCsv(t), url: u }; }
     catch (e) { lastErr = e; }
   }
-  return { rows: [], url: null, error: String(lastErr && lastErr.message) };
+  return { rows: [], url: null, error: String(lastErr && lastErr.message), assetsSeen: assets.map((a) => a.name) };
 }
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -207,7 +227,7 @@ export default async function handler(req, res) {
       cards: cards.slice(0, 40),
     };
     if (debug) out.debug = {
-      baseUrl: base.url, baseRows: base.rows.length, baseError: base.error || null,
+      baseUrl: base.url, baseRows: base.rows.length, baseError: base.error || null, assetsSeen: base.assetsSeen || null,
       curUrl: cur.url, curRows: cur.rows.length, curError: cur.error || null,
       baseColumns: base.rows[0] ? Object.keys(base.rows[0]) : [],
       games: (sb.games || []).length, matched, noTeam, noGame,
