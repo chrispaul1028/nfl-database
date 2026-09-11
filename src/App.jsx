@@ -2049,6 +2049,7 @@ function TdBoardTab({ players, teams, onSelect }) {
         role: String(p.sortLabel || "").toUpperCase(), opp: null, home: true, spread: null, implTotal: 20 + (r - 70) * 0.35,
         rzShare: Math.min(0.45, 0.08 + (r - 60) * 0.011), oppShare: Math.min(0.35, 0.06 + (r - 60) * 0.008),
         oppTdAllowedPg: null, oppTdRank: null, expTd, tdPct: 1 - Math.exp(-expTd), venue: null, dome: false, weather: null,
+        teamExpTd: (20 + (r - 70) * 0.35) * 0.105, share: 0.65 * Math.min(0.45, 0.08 + (r - 60) * 0.011) + 0.35 * Math.min(0.35, 0.06 + (r - 60) * 0.008), matchup: 1,
         injury: (injFor(p.name, toAbbr(teamOfPlayer(p) || "")) || {}).injury_status || null,
       };
     }).sort((a, b) => b.tdPct - a.tdPct).slice(0, 20);
@@ -2224,15 +2225,20 @@ function TdBoardTab({ players, teams, onSelect }) {
                       </div>
                     </div>
                     {/* row 3: venue · spread · weather */}
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="truncate">{c.venue || "Venue TBD"}{c.spread != null && <span className="ml-1.5 font-bold text-slate-500 dark:text-slate-300">{c.spread > 0 ? "+" + c.spread : c.spread}</span>}</span>
-                      <span className="shrink-0 ml-2">{c.dome ? "🏟 Dome" : c.weather || "—"}</span>
+                    {/* the grade, shown as the actual math so #1 is never a mystery */}
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400 tabular-nums">
+                      <span className="truncate">
+                        {c.teamExpTd != null && c.share != null
+                          ? <>{c.teamExpTd.toFixed(1)} team TD × {Math.round(c.share * 100)}% share × {(c.matchup ?? 1).toFixed(2)} matchup = <span className="font-bold text-slate-600 dark:text-slate-300">{(c.expTd ?? 0).toFixed(2)} xTD</span></>
+                          : (c.venue || "")}
+                      </span>
+                      {c.spread != null && <span className="shrink-0 ml-2 font-bold text-slate-500 dark:text-slate-300">{c.spread > 0 ? "+" + c.spread : c.spread}</span>}
                     </div>
                   </button>
                 );
               })}
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 px-1">TD share = share of team touchdowns (last season, blending toward this season weekly) · Opp share = share of touches/targets · Imp total = Vegas implied team points · Opp TD/G = TDs the opponent allows per game to this position · TD% = anytime-TD probability</div>
+            <div className="text-[9px] text-slate-400 mt-2 px-1">How a card is graded: team TD = Vegas implied total × 0.105 · share = 65% TD share + 35% opportunity share · matchup = opponent's TDs allowed to this position vs league average (capped 0.8–1.2) · xTD = expected touchdowns · TD% = 1 − e^(−xTD), the chance of at least one</div>
           </>
         )}
       </div>
@@ -2252,7 +2258,7 @@ const TABS = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("teams");
+  const [tab, setTab] = useState("targets"); // land on the Week board
   const [sel, setSel] = useState(null);
   const [players, setPlayers] = useState(null);
   const [teams, setTeams] = useState([]);
