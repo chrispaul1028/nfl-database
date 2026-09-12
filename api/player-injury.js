@@ -12,7 +12,15 @@ export default async function handler(req, res) {
       if (it.$ref && !it.status) { try { const rr = await fetch(it.$ref); return rr.ok ? await rr.json() : null; } catch { return null; } }
       return it;
     }));
-    const cur = items.filter(Boolean).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
+    let cur = items.filter(Boolean).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
+    if (!cur || !cur.details?.returnDate) {
+      // Second source: the athlete overview often carries the current injury with a return date
+      try {
+        const o = await (await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${id}`, { headers: { accept: "application/json" } })).json();
+        const oi = (o.injuries || [])[0];
+        if (oi && (oi.details?.returnDate || !cur)) cur = { ...(cur || {}), ...oi, details: { ...(cur?.details || {}), ...(oi.details || {}) } };
+      } catch {}
+    }
     res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
     if (!cur) return res.status(200).json({ injury: null });
     const det = cur.details || {};
