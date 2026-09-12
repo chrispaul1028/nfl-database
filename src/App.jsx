@@ -1746,6 +1746,36 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
                 </>
               );
             }
+            if (seg === "charts" && (chartMode === "volume" || chartMode === "defense")) {
+              // Team volume / defense totals from the box-score players, ranked across the league
+              const agg = {};
+              for (const P of Object.values((seasonStats && seasonStats.players) || {})) {
+                const a = (agg[P.team] ??= { passAtt: 0, rushAtt: 0, sacks: 0, defInt: 0, tfl: 0 });
+                a.passAtt += P.totals.att || 0; a.rushAtt += P.totals.car || 0; a.sacks += P.totals.sacks || 0; a.defInt += P.totals.defInt || 0; a.tfl += P.totals.tfl || 0;
+              }
+              const mineKey = Object.keys(agg).find((k) => injTeamEq(k, abbr));
+              const mine = mineKey ? agg[mineKey] : null;
+              const rankOf = (get) => {
+                if (!mine) return null;
+                const vals = Object.values(agg).map(get).sort((a, b) => b - a);
+                return vals.indexOf(get(mine)) + 1;
+              };
+              const passRate = (a) => (a.passAtt + a.rushAtt ? a.passAtt / (a.passAtt + a.rushAtt) : 0);
+              if (chartMode === "volume") return (
+                <>
+                  <Tile value={mine ? mine.passAtt : "—"} label="Pass Att" sub={rk(rankOf((a) => a.passAtt))} />
+                  <Tile value={mine ? mine.rushAtt : "—"} label="Rush Att" sub={rk(rankOf((a) => a.rushAtt))} />
+                  <Tile value={mine ? Math.round(passRate(mine) * 100) + "%" : "—"} label="Pass Rate" sub={rk(rankOf(passRate))} />
+                </>
+              );
+              return (
+                <>
+                  <Tile value={mine ? mine.sacks : "—"} label="Sacks" sub={rk(rankOf((a) => a.sacks))} />
+                  <Tile value={mine ? mine.defInt : "—"} label="INT" sub={rk(rankOf((a) => a.defInt))} />
+                  <Tile value={mine ? mine.tfl : "—"} label="TFL" sub={rk(rankOf((a) => a.tfl))} />
+                </>
+              );
+            }
             if (seg === "contracts") {
               const fa = roster.filter((p) => { const e = nextEvent(p); return e && (e.kind === "UFA" || e.kind === "RFA"); }).length;
               const ages = roster.map((p) => Number(p.age)).filter((a) => a > 0);
@@ -1842,49 +1872,32 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-2">
                         <span className="flex-1 min-w-0 text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
-                        {(() => {
-                          const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
-                          if (!grp) return p.rating2k != null ? <Rating2kBadge r={p.rating2k} /> : null;
-                          const G = S && S.totals && S.totals.gp ? S.perGame : null;
-                          return (
-                            <span className="flex gap-1 shrink-0">
-                              {STAT_TILES[grp].map(([lbl, k]) => (
-                                <span key={k} className="w-11 text-center rounded-md bg-slate-100 dark:bg-slate-800 py-0.5">
-                                  <span className="block text-[7px] font-semibold tracking-wider uppercase text-slate-400 leading-none">{lbl}</span>
-                                  <span className="block text-[11px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight">{G && G[k] != null ? G[k] : "—"}</span>
-                                </span>
-                              ))}
-                            </span>
-                          );
-                        })()}
                       </span>
                       <span className="flex items-center gap-1.5 mt-0.5">
                         {cleanNo(p.no) && <span className="text-[11px] text-slate-400 font-medium">#{cleanNo(p.no)}</span>}
                         <LiveStatus p={p} team={abbr} />
                         <span className="flex-1" />
-                        {(() => {
-                          const st = latestStats(p);
-                          if (st && (st.yds != null || st.td != null || st.tkl != null)) {
-                            return (
-                              <span className="flex gap-2 shrink-0">
-                                {[["G", st.gp != null ? String(Math.round(st.gp)) : null], ["YDS", st.yds != null ? String(Math.round(st.yds)) : null], ["TD", st.td != null ? String(Math.round(st.td)) : null], ["TKL", st.tkl != null ? String(Math.round(st.tkl)) : null]].map(([lbl, v]) => (
-                                  <span key={lbl} className="w-7 text-center">
-                                    <span className="block text-[8px] font-bold text-slate-400 uppercase">{lbl}</span>
-                                    <span className="block text-[11px] font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{v ?? "—"}</span>
-                                  </span>
-                                ))}
-                              </span>
-                            );
-                          }
-                          return currentSalary(p) > 0 ? (
-                            <span className="text-xs font-extrabold text-slate-600 dark:text-slate-300 shrink-0">{fmtM(currentSalary(p))}</span>
-                          ) : null;
-                        })()}
                       </span>
                       {p.injuryNotes && (
                         <span className="block text-[11px] font-semibold text-red-500 truncate mt-0.5">{p.injuryNotes}</span>
                       )}
                     </span>
+                    {(() => {
+                      // per-game season tiles, vertically centered in the row
+                      const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
+                      if (!grp) return p.rating2k != null ? <Rating2kBadge r={p.rating2k} /> : null;
+                      const G = S && S.totals && S.totals.gp ? S.perGame : null;
+                      return (
+                        <span className="flex gap-1 shrink-0 self-center">
+                          {STAT_TILES[grp].map(([lbl, k]) => (
+                            <span key={k} className="w-12 text-center rounded-md bg-slate-100 dark:bg-slate-800 py-1">
+                              <span className="block text-[7px] font-semibold tracking-wider uppercase text-slate-400 leading-none">{lbl}</span>
+                              <span className="block text-[12px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight mt-0.5">{G && G[k] != null ? G[k] : "—"}</span>
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    })()}
                   </button>
                 ))}
             </div>
@@ -1894,7 +1907,6 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
           <>
             <div className="flex items-baseline justify-between mt-6 mb-2 px-1">
               <span className="text-[11px] font-bold tracking-widest text-slate-400 uppercase">Team Contracts</span>
-              <span className="text-[11px] font-bold text-green-600 dark:text-green-400">{fmtM(payroll)} payroll</span>
             </div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
               {roster
