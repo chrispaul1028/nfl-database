@@ -251,6 +251,24 @@ function BioRow({ k, v }) {
 }
 
 // ═══════════════ PLAYER DETAIL ═══════════════════════════════════
+// Position group for stat tiles / peer ranking
+function posGroup(pos) {
+  const p = String(pos || "").toUpperCase();
+  if (p === "WR") return "WR";
+  if (p === "TE") return "TE";
+  if (["RB", "HB", "FB"].includes(p)) return "RB";
+  if (p === "QB") return "QB";
+  if (/^(DE|DT|NT|EDGE|DL|LB|ILB|OLB|MLB|CB|S|FS|SS|DB|NB|LDE|RDE|LDT|RDT|LOLB|ROLB|DEF)$/.test(p)) return "DEF";
+  return null;
+}
+// [label, statKey, ascending?]  (ascending = fewer is better, e.g. INT)
+const STAT_TILES = {
+  WR: [["Rec", "rec"], ["Rec Yds", "recYds"], ["Rec TD", "recTd"]],
+  TE: [["Rec", "rec"], ["Rec Yds", "recYds"], ["Rec TD", "recTd"]],
+  RB: [["Carries", "car"], ["Rush Yds", "rushYds"], ["Rush TD", "rushTd"]],
+  QB: [["Pass Yds", "passYds"], ["Pass TD", "passTd"], ["INT", "int", true]],
+  DEF: [["Tackles", "tkl"], ["Sacks", "sacks"], ["INT", "defInt"]],
+};
 // ── Season stats box + game-by-game graph (from /api/season-stats) ──
 function SeasonStatsBox({ p, seasonStats }) {
   const [metric, setMetric] = useState(null);
@@ -334,13 +352,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
   const no = cleanNo(p.no);
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24">
-      <div className="relative overflow-hidden px-5 pb-7 text-white"
-        style={{ background: `linear-gradient(160deg, ${playerHeaderColor(p)} 0%, ${playerHeaderColor(p)} 55%, rgba(0,0,0,0.35) 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
-        {/* jersey number watermark + team logo ghost give the card depth without clutter */}
-        {no && <div className="absolute -right-2 -bottom-6 text-[120px] font-black leading-none text-white/10 select-none tabular-nums">{no}</div>}
-        {TEAM_LOGOS[toAbbr(teamOfPlayer(p) || p.teamName || "")] && (
-          <img src={TEAM_LOGOS[toAbbr(teamOfPlayer(p) || p.teamName || "")]} alt="" className="absolute right-4 top-3 w-9 h-9 rounded-full bg-white/90 p-0.5 shadow" />
-        )}
+      <div className="relative px-5 pb-8 text-white" style={{ backgroundColor: playerHeaderColor(p), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
           <div className="rounded-full p-[3px] bg-white/90 shadow-lg shrink-0"><Avatar p={p} size="lg" /></div>
@@ -363,26 +375,34 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
 
       <div className="px-4 -mt-3">
         {(() => {
-          // Three season tiles by position; nothing for positions without box-score stats (OL, K, P).
+          // Three season tiles by position, each ranked against every player at
+          // that position league-wide (Nacua's rec yards vs all WRs).
           const pos = String(p.pos || "").toUpperCase();
-          const rowOf = () => {
-            if (!seasonStats || !seasonStats.players) return null;
-            const nm = hrbNrmSafe(p.name), abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
-            const c = Object.values(seasonStats.players).filter((q) => hrbNrmSafe(q.name) === nm);
-            return c.length > 1 ? c.find((q) => injTeamEq(q.team, abbr)) || c[0] : c[0] || null;
+          const grp = posGroup(pos);
+          if (!grp || !seasonStats || !seasonStats.players) return null;
+          const S = playerSeasonRow(p, seasonStats); const T = S ? S.totals : null;
+          const yr = seasonStats.season;
+          const spec = STAT_TILES[grp];
+          const peers = Object.values(seasonStats.players).filter((q) => posGroup(q.pos) === grp && q.totals && q.totals.gp);
+          const rankOf = (k, asc) => {
+            if (!T) return null;
+            const vals = peers.map((q) => q.totals[k] || 0).sort((a, b) => (asc ? a - b : b - a));
+            return vals.indexOf(T[k] || 0) + 1;
           };
-          const S = rowOf(); const T = S ? S.totals : null;
-          const v = (k) => (T ? T[k] : "—");
-          const yr = seasonStats ? seasonStats.season : "";
-          let tiles = null;
-          if (["WR", "TE"].includes(pos)) tiles = [["Rec", v("rec")], ["Rec Yds", v("recYds")], ["Rec TD", v("recTd")]];
-          else if (["RB", "HB", "FB"].includes(pos)) tiles = [["Carries", v("car")], ["Rush Yds", v("rushYds")], ["Rush TD", v("rushTd")]];
-          else if (pos === "QB") tiles = [["Pass Yds", v("passYds")], ["Pass TD", v("passTd")], ["INT", v("int")]];
-          else if (/^(DE|DT|NT|EDGE|DL|LB|ILB|OLB|MLB|CB|S|FS|SS|DB|NB|LDE|RDE|LDT|RDT|LOLB|ROLB)$/.test(pos)) tiles = [["Tackles", v("tkl")], ["Sacks", v("sacks")], ["INT", v("defInt")]];
-          if (!tiles) return null;
+          const tier = (r, n) => (r == null ? "text-slate-400" : r <= Math.max(5, n * 0.15) ? "text-emerald-500" : r <= n * 0.5 ? "text-amber-500" : "text-slate-400");
           return (
             <div className="grid grid-cols-3 gap-2">
-              {tiles.map(([lbl, val]) => <Tile key={lbl} value={val ?? "—"} label={yr ? yr + " " + lbl : lbl} />)}
+              {spec.map(([lbl, k, asc]) => {
+                const r = rankOf(k, asc);
+                return (
+                  <div key={k} className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-3 pb-2.5 text-center">
+                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: playerHeaderColor(p) }} />
+                    <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{yr} {lbl}</div>
+                    <div className="text-[26px] leading-tight font-black tabular-nums text-slate-900 dark:text-white">{T ? (T[k] ?? "—") : "—"}</div>
+                    <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + " of " + grp + "s" : "—"}</div>
+                  </div>
+                );
+              })}
             </div>
           );
         })()}
@@ -553,14 +573,14 @@ function InjuryLine({ p }) {
     fetch(`/api/player-injury?espn=${inj.espn_id}`).then((r) => r.json()).then((d) => { if (alive) setEspn(d && d.injury ? d.injury : null); }).catch(() => {});
     return () => { alive = false; };
   }, [inj && inj.espn_id, p.id]);
-  if (!inj || !injHasFlag(p, abbr)) return p.injuryNotes ? <div className="text-xs font-semibold text-red-200 mt-1 truncate">{p.injuryNotes}</div> : null;
+  if (!inj || !injHasFlag(p, abbr)) return p.injuryNotes ? <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full">{p.injuryNotes}</div> : null;
   const part = inj.injury_body_part || (espn && (espn.location || espn.type)) || "";
   const kind = (espn && espn.detail) || (inj.injury_notes && !/^\s*$/.test(inj.injury_notes) ? inj.injury_notes : "") || (espn && espn.type) || "";
   const label = [part, kind && kind.toLowerCase() !== String(part).toLowerCase() ? kind.toLowerCase() : ""].filter(Boolean).join(" ");
   const ret = espn && espn.returnDate ? new Date(espn.returnDate) : null;
   const retTxt = ret && !isNaN(ret) ? " · Est. return " + ret.toLocaleDateString([], { month: "short", day: "numeric" }) : "";
   if (!label && !retTxt) return null;
-  return <div className="text-xs font-semibold text-red-200 mt-1 truncate">{label ? label[0].toUpperCase() + label.slice(1) : "Injury"}{retTxt}</div>;
+  return <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full">{label ? label[0].toUpperCase() + label.slice(1) : "Injury"}{retTxt}</div>;
 }
 
 function InjBadge({ p, team, lg = false, noNote = false }) {
@@ -588,7 +608,7 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
         {label}
       </span>
       {note && !noNote && (
-        <span className={"text-slate-400 dark:text-slate-500 font-semibold truncate " + (lg ? "text-[11px]" : "text-[9px]")}>
+        <span className={"text-rose-500 font-semibold truncate " + (lg ? "text-[11px]" : "text-[9px]")}>
           {note}
         </span>
       )}
@@ -1726,6 +1746,18 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
                 </>
               );
             }
+            if (seg === "contracts") {
+              const fa = roster.filter((p) => { const e = nextEvent(p); return e && (e.kind === "UFA" || e.kind === "RFA"); }).length;
+              const ages = roster.map((p) => Number(p.age)).filter((a) => a > 0);
+              const avgAge = ages.length ? (ages.reduce((a, b) => a + b, 0) / ages.length).toFixed(1) : null;
+              return (
+                <>
+                  <Tile value={payroll ? fmtM(payroll) : "—"} label="Payroll" sub={roster.length + " players"} />
+                  <Tile value={fa} label="Free Agents" sub={"next offseason"} />
+                  <Tile value={avgAge ?? "—"} label="Avg Age" sub={ages.length ? ages.length + " w/ age" : null} />
+                </>
+              );
+            }
             const diff = pts.pf != null && pts.pa != null ? Math.round(pts.pf - pts.pa) : null;
             return (
               <>
@@ -1778,7 +1810,14 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
                   return currentSalary(b) - currentSalary(a);
                 });
                 const starters = sorted.filter(isStarter);
-                const bench = sorted.filter((p) => !isStarter(p));
+                const BENCH_ORDER = ["QB", "RB", "HB", "FB", "WR", "TE", "LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OL", "DE", "LDE", "RDE", "EDGE", "DT", "LDT", "RDT", "NT", "DL", "LB", "ILB", "OLB", "MLB", "LOLB", "ROLB", "CB", "LCB", "RCB", "NB", "DB", "S", "FS", "SS", "K", "P", "LS"];
+                const benchKey = (p) => {
+                  const m = String(p.sortLabel || "").toUpperCase().match(/^([A-Z]+)(\d*)$/);
+                  const base = m ? m[1] : String(p.pos || "").toUpperCase();
+                  const i = BENCH_ORDER.indexOf(base);
+                  return [i === -1 ? 99 : i, m && m[2] ? Number(m[2]) : 99];
+                };
+                const bench = sorted.filter((p) => !isStarter(p)).sort((a, b) => { const ka = benchKey(a), kb = benchKey(b); return ka[0] - kb[0] || ka[1] - kb[1]; });
                 const withHeaders = [];
                 if (starters.length) withHeaders.push({ __hdr: "Starters" }, ...starters);
                 if (bench.length) withHeaders.push({ __hdr: "Bench" }, ...bench);
@@ -1793,7 +1832,21 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-2">
                         <span className="flex-1 min-w-0 text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
-                        {p.rating2k != null && <Rating2kBadge r={p.rating2k} />}
+                        {(() => {
+                          const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
+                          if (!grp) return p.rating2k != null ? <Rating2kBadge r={p.rating2k} /> : null;
+                          const G = S && S.totals && S.totals.gp ? S.perGame : null;
+                          return (
+                            <span className="flex gap-1 shrink-0">
+                              {STAT_TILES[grp].map(([lbl, k]) => (
+                                <span key={k} className="w-11 text-center rounded-md bg-slate-100 dark:bg-slate-800 py-0.5">
+                                  <span className="block text-[7px] font-semibold tracking-wider uppercase text-slate-400 leading-none">{lbl}</span>
+                                  <span className="block text-[11px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight">{G && G[k] != null ? G[k] : "—"}</span>
+                                </span>
+                              ))}
+                            </span>
+                          );
+                        })()}
                       </span>
                       <span className="flex items-center gap-1.5 mt-0.5">
                         {cleanNo(p.no) && <span className="text-[11px] text-slate-400 font-medium">#{cleanNo(p.no)}</span>}
