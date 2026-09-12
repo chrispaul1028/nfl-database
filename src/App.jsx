@@ -399,7 +399,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
                     <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: playerHeaderColor(p) }} />
                     <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{yr} {lbl}</div>
                     <div className="text-[26px] leading-tight font-black tabular-nums text-slate-900 dark:text-white">{T ? (T[k] ?? "—") : "—"}</div>
-                    <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + " of " + grp + "s" : "—"}</div>
+                    <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + (grp === "WR" || grp === "TE" ? " of " + grp + "s" : "") : "—"}</div>
                   </div>
                 );
               })}
@@ -1749,12 +1749,22 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
             if (seg === "contracts") {
               const fa = roster.filter((p) => { const e = nextEvent(p); return e && (e.kind === "UFA" || e.kind === "RFA"); }).length;
               const ages = roster.map((p) => Number(p.age)).filter((a) => a > 0);
-              const avgAge = ages.length ? (ages.reduce((a, b) => a + b, 0) / ages.length).toFixed(1) : null;
+              const avgAge = ages.length ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
+              // Rank every team's average age: 1st = youngest, 32nd = oldest
+              const teamAvg = (t) => {
+                const ab = t.abbr || toAbbr(t.name);
+                const rs = players.filter((q) => (q.teamId && q.teamId === t.id) || teamOfPlayer(q) === ab || String(q.teamName || "").toLowerCase() === String(t.name || "").toLowerCase());
+                const as = rs.map((q) => Number(q.age)).filter((a) => a > 0);
+                return as.length >= 5 ? as.reduce((a, b) => a + b, 0) / as.length : null;
+              };
+              const ageRanked = teams.map((t) => [t.id, teamAvg(t)]).filter(([, v]) => v != null).sort((a, b) => a[1] - b[1]);
+              const ageRank = ageRanked.findIndex(([id]) => id === team.id) + 1;
+              const ageCls = ageRank ? (ageRank <= 10 ? "text-green-600 dark:text-green-400" : ageRank <= 20 ? "text-yellow-600 dark:text-yellow-400" : "text-red-500 dark:text-red-400") : null;
               return (
                 <>
                   <Tile value={payroll ? fmtM(payroll) : "—"} label="Payroll" sub={roster.length + " players"} />
                   <Tile value={fa} label="Free Agents" sub={"next offseason"} />
-                  <Tile value={avgAge ?? "—"} label="Avg Age" sub={ages.length ? ages.length + " w/ age" : null} />
+                  <Tile value={avgAge != null ? avgAge.toFixed(1) : "—"} label="Avg Age" sub={ageRank ? { label: ordinal(ageRank) + (ageRank <= 3 ? " youngest" : ageRank >= ageRanked.length - 2 ? " oldest" : ""), cls: ageCls } : null} />
                 </>
               );
             }
