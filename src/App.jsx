@@ -631,7 +631,7 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
   if (!label) return null;
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
-    <span className="inline-flex items-center gap-1 min-w-0">
+    <span className="inline-flex flex-col items-start gap-0.5 min-w-0">
       <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
         {label}
       </span>
@@ -2023,175 +2023,96 @@ const STAT_CATS = [
 ];
 
 // ═══════════════ STATS: league leaders from the box-score pipeline ═══
+// Standard PPR fantasy scoring
+const fantasyPts = (T) => (T.passYds || 0) / 25 + (T.passTd || 0) * 4 - (T.int || 0) * 2 + (T.rushYds || 0) / 10 + (T.rushTd || 0) * 6 + (T.rec || 0) + (T.recYds || 0) / 10 + (T.recTd || 0) * 6;
 const LEADER_CATS = [
-  { id: "passing", label: "Passing", positions: [["QB", "QB"]], stat: "passYds", statLabel: "Pass Yds", subs: [["passTd", "TD"], ["int", "INT"], ["cmp", "Cmp"], ["att", "Att"]] },
-  { id: "rushing", label: "Rushing", positions: [["RB", "RB"], ["QB", "QB"], ["WR", "WR"]], stat: "rushYds", statLabel: "Rush Yds", subs: [["car", "Car"], ["rushTd", "TD"], ["ypcar", "Y/C"]] },
-  { id: "receiving", label: "Receiving", positions: [["WR", "WR"], ["TE", "TE"], ["RB", "RB"]], stat: "recYds", statLabel: "Rec Yds", subs: [["rec", "Rec"], ["tgt", "Tgt"], ["recTd", "TD"]] },
-  { id: "defense", label: "Defense", positions: [["tkl", "Tackles"], ["sacks", "Sacks"], ["defInt", "INT"], ["tfl", "TFL"], ["pd", "PD"]], stat: null },
+  { id: "passing", label: "Passing", positions: null, stats: [["passYds", "Yards"], ["passTd", "TD"], ["cmp", "Cmp"], ["att", "Att"], ["int", "INT"]] },
+  { id: "rushing", label: "Rushing", positions: ["QB", "RB", "WR"], stats: [["rushYds", "Yards"], ["rushTd", "TD"], ["car", "Carries"], ["ypcar", "Y/Car"]] },
+  { id: "receiving", label: "Receiving", positions: ["WR", "TE", "RB"], stats: [["recYds", "Yards"], ["recTd", "TD"], ["rec", "Rec"], ["tgt", "Targets"]] },
+  { id: "defense", label: "Defense", positions: null, stats: [["tkl", "Tackles"], ["sacks", "Sacks"], ["defInt", "INT"], ["tfl", "TFL"], ["pd", "PD"]] },
+  { id: "fantasy", label: "Fantasy", positions: ["QB", "RB", "WR", "TE"], stats: [["fpts", "Points"]] },
 ];
 function StatsTab({ players, onSelect, seasonStats }) {
   const [catId, setCatId] = useState("passing");
-  const [sub, setSub] = useState(null);
+  const [statKey, setStatKey] = useState(null);
+  const [posPick, setPosPick] = useState("ALL");
   const cat = LEADER_CATS.find((c) => c.id === catId);
-  const pick = sub && cat.positions.some(([k]) => k === sub) ? sub : cat.positions[0][0];
-  const isDef = cat.id === "defense";
-  const statKey = isDef ? pick : cat.stat;
+  const key = statKey && cat.stats.some(([k]) => k === statKey) ? statKey : cat.stats[0][0];
   const rows = useMemo(() => {
     const all = Object.values((seasonStats && seasonStats.players) || {});
     const grp = (P) => posGroup(P.pos);
-    return all
-      .filter((P) => P.totals && P.totals.gp && (isDef ? grp(P) === "DEF" : grp(P) === pick) && (P.totals[statKey] || 0) > 0)
-      .sort((a, b) => (b.totals[statKey] || 0) - (a.totals[statKey] || 0))
-      .slice(0, 40);
-  }, [seasonStats, catId, pick, statKey]);
+    const inCat = (P) => {
+      const g = grp(P);
+      if (cat.id === "passing") return g === "QB";
+      if (cat.id === "defense") return g === "DEF";
+      if (cat.id === "fantasy") return ["QB", "RB", "WR", "TE"].includes(g) && (posPick === "ALL" || g === posPick);
+      return ["QB", "RB", "WR", "TE"].includes(g) && (posPick === "ALL" || g === posPick);
+    };
+    const val = (P) => (key === "fpts" ? fantasyPts(P.totals) : (P.totals[key] || 0));
+    return all.filter((P) => P.totals && P.totals.gp && inCat(P) && val(P) > 0)
+      .map((P) => ({ P, v: val(P) }))
+      .sort((a, b) => b.v - a.v).slice(0, 50);
+  }, [seasonStats, catId, key, posPick]);
   const yr = seasonStats ? seasonStats.season : "";
   const findP = (P) => players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(P.name));
-  const subsFor = isDef ? [["gp", "GP"]] : cat.subs;
+  const statLabel = cat.stats.find(([k]) => k === key)?.[1] || key;
+  const fmt = (v) => (key === "fpts" || key === "ypcar" ? Number(v).toFixed(1) : v);
   return (
     <div>
       <div className="bg-blue-600 pb-3 px-4 text-white sticky top-0 z-10 shadow-md" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
-        <div className="flex items-baseline gap-2"><h1 className="text-xl font-extrabold">Leaders</h1><span className="text-[11px] font-semibold text-blue-200">{yr} season{seasonStats && seasonStats.weeksWithGames ? ` · thru Wk ${seasonStats.weeksWithGames}` : ""}</span></div>
-        <div className="flex gap-2 mt-3">
+        <div className="flex items-baseline gap-2"><h1 className="text-xl font-extrabold">Leaders</h1><span className="text-[11px] font-semibold text-blue-200">{yr}{seasonStats && seasonStats.weeksWithGames ? ` · thru Wk ${seasonStats.weeksWithGames}` : ""}</span></div>
+        <div className="flex gap-1.5 mt-3">
           {LEADER_CATS.map((c) => (
-            <button key={c.id} onClick={() => { setCatId(c.id); setSub(null); }}
-              className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold " + (catId === c.id ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100")}>{c.label}</button>
+            <button key={c.id} onClick={() => { setCatId(c.id); setStatKey(null); setPosPick("ALL"); }}
+              className={"flex-1 py-1.5 rounded-full text-[10px] font-extrabold " + (catId === c.id ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100")}>{c.label}</button>
           ))}
         </div>
         <div className="flex gap-1.5 mt-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-          {cat.positions.map(([k, lbl]) => (
-            <button key={k} onClick={() => setSub(k)}
-              className={"shrink-0 px-3 py-1 rounded-full text-[10px] font-bold " + (pick === k ? "bg-white/90 text-blue-700" : "bg-blue-700/50 text-blue-100")}>{lbl}</button>
+          {cat.stats.map(([k, lbl]) => (
+            <button key={k} onClick={() => setStatKey(k)}
+              className={"shrink-0 px-3 py-1 rounded-full text-[10px] font-bold " + (key === k ? "bg-white/90 text-blue-700" : "bg-blue-700/50 text-blue-100")}>{lbl}</button>
           ))}
         </div>
+        {cat.positions && (
+          <div className="flex gap-1.5 mt-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            {["ALL", ...cat.positions].map((k) => (
+              <button key={k} onClick={() => setPosPick(k)}
+                className={"shrink-0 px-3 py-1 rounded-full text-[10px] font-bold " + (posPick === k ? "bg-white/90 text-blue-700" : "bg-blue-700/50 text-blue-100")}>{k === "ALL" ? "All" : k}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="px-4 pt-3">
         {!seasonStats && <Loader label="Loading leaders" />}
         {seasonStats && rows.length === 0 && <div className="text-center text-xs text-slate-400 py-10">No {yr} stats yet for this filter.</div>}
         {rows.length > 0 && (
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-            {rows.map((P, i) => {
+            {rows.map(({ P, v }, i) => {
               const p = findP(P);
-              const max = rows[0].totals[statKey] || 1;
               return (
-                <button key={P.id} onClick={p ? () => onSelect(p) : undefined} className="w-full text-left px-3 py-2 active:bg-slate-50 dark:active:bg-slate-800/60">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
-                    <img src={`https://a.espncdn.com/i/headshots/nfl/players/full/${P.id}.png`} alt="" className="w-9 h-9 rounded-full object-cover object-top bg-white shrink-0" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                    {TEAM_LOGOS[P.team] && <img src={TEAM_LOGOS[P.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate"><span className="text-slate-400 font-bold mr-1.5">{P.pos}</span>{P.name}</div>
-                      <div className="text-[9px] text-slate-400 tabular-nums">{subsFor.map(([k, l]) => `${l} ${P.totals[k] ?? "—"}`).join(" · ")}{isDef ? "" : ` · ${P.totals.gp} GP`}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-lg font-black tabular-nums text-slate-900 dark:text-white leading-tight">{P.totals[statKey]}</div>
-                      <div className="text-[8px] font-semibold tracking-wider uppercase text-slate-400">{isDef ? cat.positions.find(([k]) => k === pick)[1] : cat.statLabel}</div>
-                    </div>
+                <button key={P.id} onClick={p ? () => onSelect(p) : undefined} className="w-full text-left pr-3 py-2 flex items-center gap-2.5 active:bg-slate-50 dark:active:bg-slate-800/60">
+                  <div className="self-stretch w-1 rounded-r" style={{ backgroundColor: teamColor(P.team) }} />
+                  <div className={"w-6 text-center text-[13px] font-black tabular-nums " + (i < 3 ? "text-blue-600" : "text-slate-400")}>{i + 1}</div>
+                  <img src={`https://a.espncdn.com/i/headshots/nfl/players/full/${P.id}.png`} alt="" className="w-10 h-10 rounded-full object-cover object-top bg-white shrink-0 ring-2 ring-white dark:ring-slate-800 shadow" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">{P.name}</div>
+                    <div className="flex items-center gap-1 mt-0.5">{TEAM_LOGOS[P.team] && <img src={TEAM_LOGOS[P.team]} alt="" className="w-3.5 h-3.5 rounded-full bg-white object-contain" />}<span className="text-[10px] font-semibold text-slate-400">{P.team}</span></div>
                   </div>
-                  <div className="mt-1.5 ml-7 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className="h-full rounded-full bg-blue-600" style={{ width: Math.max(2, (P.totals[statKey] / max) * 100) + "%" }} /></div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xl font-black tabular-nums text-slate-900 dark:text-white leading-none">{fmt(v)}</div>
+                    <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400 mt-0.5">{statLabel}</div>
+                  </div>
                 </button>
               );
             })}
           </div>
         )}
-        <div className="text-[9px] text-slate-400 mt-2 px-1">Built from every box score this season, including games in progress (refreshes every few minutes on game days). Tap a player who's in your Airtable to open his page.</div>
+        <div className="text-[9px] text-slate-400 mt-2 px-1">{catId === "fantasy" ? "PPR scoring: 1 pt per 25 pass yds · 4 per pass TD · −2 per INT · 1 per 10 rush/rec yds · 6 per rush/rec TD · 1 per catch. " : ""}Every box score this season, including games in progress. Tap a player in your Airtable to open his page.</div>
       </div>
     </div>
   );
 }
 
-function DraftTab({ players, onSelect, pills }) {
-  const byYear = {};
-  const noData = [];
-  for (const p of players) {
-    if (p.draftYear) (byYear[p.draftYear] ??= []).push(p);
-    else noData.push(p);
-  }
-  const years = Object.keys(byYear).map(Number).sort((a, b) => b - a);
-  const [selYear, setSelYear] = useState(null);
-  const yr = selYear && byYear[selYear] ? selYear : years[0]; // default: newest class
-  return (
-    <div>
-      <div className="bg-blue-600 pb-4 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-extrabold text-white">Draft</h1>
-          {/* one dropdown instead of a scroll of years — native picker on iOS */}
-          <label className="relative">
-            <select value={yr ?? ""} onChange={(e) => setSelYear(Number(e.target.value))}
-              className="appearance-none bg-white text-blue-700 font-extrabold text-sm rounded-full pl-4 pr-8 py-1.5 outline-none">
-              {years.map((y) => <option key={y} value={y}>{y} Draft Class</option>)}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-700 text-xs">▾</span>
-          </label>
-        </div>
-        {pills}
-      </div>
-      <div className="px-4 pb-28 mt-4">
-        {[yr].filter((y) => y != null).map((yr) => {
-          const cls = byYear[yr];
-          const rounds = [
-            ...[1, 2, 3, 4, 5, 6, 7].map((r) => ["Round " + r, cls.filter((p) => roundOf(p) === r)]),
-            ["Undrafted", cls.filter((p) => isUndrafted(p))],
-            ["Round Unknown", cls.filter((p) => !isUndrafted(p) && (roundOf(p) == null || roundOf(p) > 7))],
-          ].filter(([, g]) => g.length > 0);
-          return (
-            <div key={yr}>
-              {rounds.map(([label, group]) => (
-                <div key={label}>
-                  <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">
-                    {label}
-                  </div>
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-                    {group
-                      .sort((a, b) => pickOf(a) - pickOf(b))
-                      .map((p) => (
-                        <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
-                          <span className="w-7 text-center text-sm font-extrabold text-slate-400 tabular-nums shrink-0">{pickOf(p) !== 999 ? pickOf(p) : "—"}</span>
-                          <Avatar p={p} />
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
-                            <span className="block text-[11px] text-slate-400 font-medium truncate">{[p.pos, p.college].filter(Boolean).join(" · ") || "—"}</span>
-                          </span>
-                          <TeamPill team={draftedBy(p) || teamOfPlayer(p)} />
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-        {noData.length > 0 && (
-          <div className="text-center text-xs text-slate-400 mt-8">
-            {noData.length} player{noData.length === 1 ? "" : "s"} without draft data yet
-          </div>
-        )}
-        {years.length === 0 && (
-          <div className="text-center text-sm text-slate-400 mt-16">
-            No draft data yet. Fill in the Draft Year field in Airtable and classes will appear here.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════ PLACEHOLDER TABS ════════════════════════════════
-function ComingSoon({ icon, title, blurb }) {
-  return (
-    <div>
-      <div className="bg-blue-600 px-5 pb-5 text-white sticky top-0 z-10 shadow-md" style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.5rem)" }}>
-        <div className="text-2xl font-extrabold tracking-tight">{title}</div>
-      </div>
-      <div className="px-8 pt-24 pb-28 text-center">
-        <div className="text-5xl mb-4">{icon}</div>
-        <div className="text-lg font-extrabold text-slate-700 dark:text-slate-200">{title} is coming soon</div>
-        <div className="text-sm text-slate-400 mt-2 leading-relaxed">{blurb}</div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════ APP SHELL ═══════════════════════════════════════
 // ═══════════════ TD BOARD ════════════════════════════════════════
 // Weekly anytime-TD board. Each card is "player vs this week's defense":
 //   rank · headshot · POS Name · [opp logo] vs OPP
@@ -2307,51 +2228,50 @@ function TdBoardTab({ players, teams, onSelect }) {
                   {grp.games.map((g) => {
                     const isLive = g.state === "in", isFinal = g.state === "post";
                     const kickoff = new Date(g.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-                    const Row = ({ t }) => {
-                      const hasBall = isLive && g.possession && String(g.possession) === String(t.id);
-                      const lost = isFinal && !t.winner;
-                      return (
-                        <div className="flex items-center gap-2.5">
-                          <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-7 h-7 rounded-full bg-white object-contain shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-1.5">
-                              <span className={"text-[13px] font-extrabold tracking-wide " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</span>
-                              {t.record && <span className="text-[10px] font-semibold text-slate-400 tabular-nums">{t.record}</span>}
-                            </div>
-                            <div className="text-[10px] text-slate-400 truncate leading-tight">{t.name}</div>
-                          </div>
-                          <div className={"w-8 text-right text-lg font-extrabold tabular-nums " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>
-                            {g.state === "pre" ? "" : (t.score ?? 0)}
-                            {hasBall && <span className="ml-1 text-[10px] text-rose-500 align-middle inline-block" style={{ animation: "hrbBlink 1.4s ease-in-out infinite" }}>▼</span>}
-                          </div>
-                        </div>
-                      );
-                    };
+                    // Broadcast-bug layout: [logo] [score] [clock/qtr] [score] [logo]
+                    const hasBall = (t) => isLive && g.possession && String(g.possession) === String(t.id);
+                    const lost = (t) => isFinal && !t.winner;
+                    const Side = ({ t, right }) => (
+                      <div className={"flex flex-col items-center w-16 shrink-0"}>
+                        <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className={"w-12 h-12 rounded-full bg-white object-contain " + (lost(t) ? "opacity-50" : "")} />
+                        <div className={"mt-1 text-[12px] font-extrabold tracking-wide " + (lost(t) ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</div>
+                        {t.record && <div className="text-[9px] font-semibold text-slate-400 tabular-nums leading-none">{t.record}</div>}
+                      </div>
+                    );
+                    const Score = ({ t }) => (
+                      <div className="flex flex-col items-center w-12">
+                        <div className={"text-[30px] leading-none font-black tabular-nums " + (lost(t) ? "text-slate-400" : "text-slate-900 dark:text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
+                        <div className={"mt-1 h-1 w-8 rounded-full " + (hasBall(t) ? "bg-rose-500" : "bg-transparent")} style={hasBall(t) ? { animation: "hrbBlink 1.4s ease-in-out infinite" } : undefined} />
+                      </div>
+                    );
                     return (
-                      <button key={g.id} onClick={() => setSelGame(g)} className="w-full text-left rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2 flex items-center gap-2 active:bg-slate-50 dark:active:bg-slate-800/60">
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <Row t={g.away} />
-                          <Row t={g.home} />
-                        </div>
-                        <div className="w-20 shrink-0 text-center border-l border-slate-100 dark:border-slate-800 pl-2">
-                          {isLive ? (
-                            <>
-                              <div className={"text-xs font-extrabold uppercase " + (isTwoMin(g) ? "text-rose-500" : "text-slate-900 dark:text-white")}>{g.detail}</div>
-                              {g.downDistance && <div className={"text-[10px] font-semibold mt-0.5 " + (g.redZone ? "text-rose-500" : "text-slate-400")}>{g.downDistance}</div>}
-                            </>
-                          ) : isFinal ? (
-                            <div className="text-xs font-extrabold text-slate-500 dark:text-slate-300">Final</div>
-                          ) : (
-                            <>
-                              <div className="text-xs font-extrabold text-slate-900 dark:text-white tabular-nums">{kickoff}</div>
-                              {g.broadcast && <div className="text-[9px] font-semibold text-slate-400">{g.broadcast}</div>}
-                            </>
-                          )}
-                          {g.odds && (g.odds.details || g.odds.overUnder != null) && !isFinal && (
-                            <div className="text-[9px] font-semibold text-slate-400 mt-0.5 tabular-nums">
-                              {g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}
-                            </div>
-                          )}
+                      <button key={g.id} onClick={() => setSelGame(g)} className="w-full text-left rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 py-2.5 active:bg-slate-50 dark:active:bg-slate-800/60">
+                        {isLive && g.downDistance && (
+                          <div className={"text-center text-[10px] font-extrabold tracking-wide mb-1.5 " + (g.redZone ? "text-rose-500" : "text-slate-500 dark:text-slate-300")}>{g.downDistance}{g.redZone ? " · RED ZONE" : ""}</div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <Side t={g.away} />
+                          <Score t={g.away} />
+                          <div className="flex-1 flex flex-col items-center px-1">
+                            {isLive ? (
+                              <div className={"rounded-lg px-2.5 py-1 text-center " + (isTwoMin(g) ? "bg-rose-600 text-white" : "bg-slate-900 text-white dark:bg-slate-700")}>
+                                <div className="text-[13px] font-black tabular-nums leading-none">{g.clock || ""}</div>
+                                <div className="text-[9px] font-extrabold tracking-widest uppercase mt-0.5">{g.period ? ordinal(g.period) : ""}{g.period > 4 ? " OT" : ""}</div>
+                              </div>
+                            ) : isFinal ? (
+                              <div className="rounded-lg px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 text-[11px] font-black tracking-widest uppercase text-slate-600 dark:text-slate-300">Final</div>
+                            ) : (
+                              <div className="text-center">
+                                <div className="text-[13px] font-extrabold tabular-nums text-slate-900 dark:text-white leading-none">{kickoff}</div>
+                                {g.broadcast && <div className="text-[9px] font-semibold text-slate-400 mt-0.5">{g.broadcast}</div>}
+                              </div>
+                            )}
+                            {g.odds && (g.odds.details || g.odds.overUnder != null) && !isFinal && (
+                              <div className="text-[9px] font-semibold text-slate-400 mt-1 tabular-nums text-center">{g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}</div>
+                            )}
+                          </div>
+                          <Score t={g.home} />
+                          <Side t={g.home} right />
                         </div>
                       </button>
                     );
@@ -2487,7 +2407,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                         {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain shrink-0" />}
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
-                            <span className="text-slate-400 font-bold mr-1.5">{c.pos}</span>{c.name}
+                            {c.name}
                             {c.injury && <span className="ml-2 text-[9px] font-extrabold uppercase text-rose-500">{c.injury}</span>}
                           </div>
                         </div>
@@ -2586,18 +2506,23 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   // Box score for the focused team: offense (passing / rushing / receiving) then defense
   const BoxTable = ({ cat }) => {
     if (!cat || !cat.rows.length) return null;
-    const show = cat.labels.slice(0, 5);
+    // Four columns that matter per category, so the name column gets the room
+    const WANT = { passing: ["C/ATT", "YDS", "TD", "INT"], rushing: ["CAR", "YDS", "AVG", "TD"], receiving: ["REC", "YDS", "AVG", "TD"], defensive: ["TOT", "SOLO", "SACKS", "TFL"], interceptions: ["INT", "YDS", "TD"] };
+    const want = WANT[String(cat.name).toLowerCase()];
+    const idxs = (want ? want.map((w) => cat.labels.findIndex((l) => String(l).toUpperCase() === w)).filter((i) => i !== -1) : []);
+    const cols = idxs.length ? idxs : cat.labels.slice(0, 4).map((_, i) => i);
+    const show = cols.map((i) => cat.labels[i]);
     return (
       <div className="mb-2">
         <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400 mb-1 capitalize">{cat.name}</div>
         <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-          <div className="grid text-[8px] font-bold text-slate-400 uppercase px-2 py-1 border-b border-slate-100 dark:border-slate-800" style={{ gridTemplateColumns: `minmax(0,1.6fr) repeat(${show.length}, minmax(0,1fr))` }}>
+          <div className="grid text-[8px] font-bold text-slate-400 uppercase px-2 py-1 border-b border-slate-100 dark:border-slate-800" style={{ gridTemplateColumns: `minmax(0,2.6fr) repeat(${show.length}, minmax(0,0.9fr))` }}>
             <span>Player</span>{show.map((l, i) => <span key={i} className="text-center">{l}</span>)}
           </div>
           {cat.rows.map((r) => (
-            <div key={r.id || r.name} className="grid items-center px-2 py-1.5 border-b border-slate-50 dark:border-slate-800/60 last:border-0" style={{ gridTemplateColumns: `minmax(0,1.6fr) repeat(${show.length}, minmax(0,1fr))` }}>
+            <div key={r.id || r.name} className="grid items-center px-2 py-1.5 border-b border-slate-50 dark:border-slate-800/60 last:border-0" style={{ gridTemplateColumns: `minmax(0,2.6fr) repeat(${show.length}, minmax(0,0.9fr))` }}>
               <span className="flex items-center gap-1.5 min-w-0">{r.headshot && <img src={r.headshot} alt="" className="w-6 h-6 rounded-full object-cover object-top bg-white shrink-0" onError={(e) => e.currentTarget.remove()} />}<span className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{r.name}</span></span>
-              {show.map((_, i) => <span key={i} className="text-center text-[11px] font-semibold tabular-nums text-slate-700 dark:text-slate-200">{r.stats[i] ?? "—"}</span>)}
+              {cols.map((ci) => <span key={ci} className="text-center text-[11px] font-semibold tabular-nums text-slate-700 dark:text-slate-200">{r.stats[ci] ?? "—"}</span>)}
             </div>
           ))}
         </div>
