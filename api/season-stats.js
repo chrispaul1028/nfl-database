@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     const players = {}, teams = {};
     let weeksWithGames = 0;
     for (const wk of weeks) {
-      if (!wk || !wk.gamesFinal) continue;
+      if (!wk || !(wk.gamesFinal || wk.gamesLive)) continue;
       weeksWithGames++;
       for (const [id, p] of Object.entries(wk.players || {})) {
         const P = (players[id] ??= { id, name: p.name, pos: p.pos, team: p.team, games: [] });
@@ -109,7 +109,7 @@ export default async function handler(req, res) {
       }
     }
 
-    res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
+    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json({ season, weeksWithGames, players, teams, allowed, updatedAt: new Date().toISOString() });
   } catch (e) {
     return res.status(502).json({ season, error: String(e.message || e), players: {}, teams: {}, allowed: {} });
