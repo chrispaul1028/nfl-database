@@ -42,7 +42,9 @@ export default async function handler(req, res) {
   const debug = !!req.query.debug;
   try {
     const sb = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=2&week=${week}`);
-    const events = (sb.events || []).filter((e) => (e.competitions?.[0]?.status?.type?.state || e.status?.type?.state) === "post");
+    const stateOf = (e) => e.competitions?.[0]?.status?.type?.state || e.status?.type?.state;
+    const events = (sb.events || []).filter((e) => stateOf(e) === "post" || stateOf(e) === "in");
+    const liveCount = events.filter((e) => stateOf(e) === "in").length;
 
     const players = {}, teams = {};
     let sampleCats = null;
@@ -99,10 +101,12 @@ export default async function handler(req, res) {
     // Flatten games to arrays
     for (const p of Object.values(players)) p.games = Object.values(p.games);
 
-    res.setHeader("Cache-Control", events.length === (sb.events || []).length && events.length > 0
+    const finalCount = events.length - liveCount;
+    res.setHeader("Cache-Control", finalCount === (sb.events || []).length && finalCount > 0
       ? "s-maxage=2592000, stale-while-revalidate=86400" // fully final week: cache a month
-      : "s-maxage=900, stale-while-revalidate=1800");     // in-progress week: 15 min
-    return res.status(200).json({ season, week, gamesFinal: events.length, gamesScheduled: (sb.events || []).length, players, teams, ...(debug ? { sampleCats } : {}) });
+      : liveCount > 0 ? "s-maxage=180, stale-while-revalidate=300"   // games live: 3 min
+      : "s-maxage=900, stale-while-revalidate=1800");
+    return res.status(200).json({ season, week, gamesFinal: finalCount, gamesLive: liveCount, gamesScheduled: (sb.events || []).length, players, teams, ...(debug ? { sampleCats } : {}) });
   } catch (e) {
     return res.status(502).json({ season, week, error: String(e.message || e), players: {}, teams: {} });
   }
