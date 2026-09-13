@@ -21,6 +21,7 @@ function side(comp, homeAway) {
     short: t.shortDisplayName || t.name || "",
     logo: t.logo || null,
     color: t.color ? "#" + t.color : null,
+    altColor: t.alternateColor ? "#" + t.alternateColor : null,
     score: c.score != null && c.score !== "" ? Number(c.score) : null,
     record: rec ? rec.summary : null,
     winner: !!c.winner,
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
         odds: odds ? { details: odds.details || null, overUnder: odds.overUnder ?? null } : null,
         possession: sit.possession || null,         // team id with the ball (live)
         downDistance: sit.shortDownDistanceText || null,
+        spot: sit.possessionText || null,               // e.g. "WAS 6"
         redZone: !!sit.isRedZone,
       };
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
