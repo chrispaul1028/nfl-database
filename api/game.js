@@ -24,6 +24,12 @@ export default async function handler(req, res) {
     const teamStats = (d.boxscore?.teams || []).map((t) => ({ team: String(t.team?.abbreviation || "").toUpperCase(),
       stats: Object.fromEntries((t.statistics || []).map((s) => [s.name, s.displayValue])) }));
     const wp = d.winprobability && d.winprobability.length ? d.winprobability[d.winprobability.length - 1] : null;
+    // Per-team box score: player lines per category (for the tap-a-team view)
+    const box = (d.boxscore?.players || []).map((side) => ({
+      team: String(side.team?.abbreviation || "").toUpperCase(),
+      cats: (side.statistics || []).map((c) => ({ name: c.name, labels: c.labels || [], keys: c.keys || [],
+        rows: (c.athletes || []).map((a) => ({ id: a.athlete?.id, name: a.athlete?.displayName, pos: a.athlete?.position?.abbreviation || "", headshot: a.athlete?.headshot?.href || (a.athlete?.id ? `https://a.espncdn.com/i/headshots/nfl/players/full/${a.athlete.id}.png` : null), stats: a.stats || [] })) })),
+    }));
     const sit = d.situation || (comp.situation) || {};
     res.setHeader("Cache-Control", type.state === "in" ? "s-maxage=30, stale-while-revalidate=60" : "s-maxage=600, stale-while-revalidate=1800");
     return res.status(200).json({
@@ -31,7 +37,7 @@ export default async function handler(req, res) {
       home: side("home"), away: side("away"), venue: d.gameInfo?.venue?.fullName || null, weather: d.gameInfo?.weather ? `${d.gameInfo.weather.temperature ?? ""}° ${d.gameInfo.weather.displayValue ?? ""}`.trim() : null,
       situation: { possession: sit.possession ?? null, downDistance: sit.shortDownDistanceText || sit.downDistanceText || null, yardLine: sit.possessionText || null, redZone: !!sit.isRedZone,
         lastPlay: (sit.lastPlay && sit.lastPlay.text) || (lastPlay && lastPlay.text) || null, drive: cur ? cur.description : null },
-      scoring, leaders, teamStats, homeWinPct: wp && wp.homeWinPercentage != null ? Math.round(wp.homeWinPercentage * 100) : null,
+      scoring, leaders, teamStats, box, homeWinPct: wp && wp.homeWinPercentage != null ? Math.round(wp.homeWinPercentage * 100) : null,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
