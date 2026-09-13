@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 
 // ═══════════════ THEME (edit these to restyle the app) ═══════════
 // Player detail header color:
@@ -251,6 +251,33 @@ function BioRow({ k, v }) {
 }
 
 // ═══════════════ PLAYER DETAIL ═══════════════════════════════════
+// ── Swipe gestures: left→right = back/previous, right→left = next ──
+function useSwipe({ onLeft, onRight }) {
+  const start = useRef(null);
+  return {
+    onTouchStart: (e) => { const t = e.touches[0]; start.current = { x: t.clientX, y: t.clientY, t: Date.now() }; },
+    onTouchEnd: (e) => {
+      if (!start.current) return;
+      const t = e.changedTouches[0], dx = t.clientX - start.current.x, dy = t.clientY - start.current.y, dt = Date.now() - start.current.t;
+      start.current = null;
+      if (dt > 700 || Math.abs(dy) > 70 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx > 0) onRight && onRight(); else onLeft && onLeft();
+    },
+  };
+}
+// Spinning-football loader (the basketball app's bouncing ball, football edition)
+function Loader({ label = "Loading" }) {
+  return (
+    <div className="flex flex-col items-center justify-center pt-24 gap-3">
+      <style>{`@keyframes hrbSpin { 0% { transform: rotate(-20deg) translateY(0) } 50% { transform: rotate(20deg) translateY(-10px) } 100% { transform: rotate(-20deg) translateY(0) } }`}</style>
+      <div className="text-4xl" style={{ animation: "hrbSpin 0.9s ease-in-out infinite", display: "inline-block" }}>🏈</div>
+      <div className="text-xs font-bold tracking-widest uppercase text-slate-400">{label}</div>
+    </div>
+  );
+}
+// One-time attention pulse (used on injury badges when a formation opens)
+const PULSE_CSS = `@keyframes hrbPulse { 0% { transform: translate(-50%,0) scale(1) } 40% { transform: translate(-50%,0) scale(1.18) } 100% { transform: translate(-50%,0) scale(1) } }`;
+
 // Position group for stat tiles / peer ranking
 function posGroup(pos) {
   const p = String(pos || "").toUpperCase();
@@ -346,12 +373,13 @@ function SeasonStatsBox({ p, seasonStats }) {
 }
 
 function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
+  const swipe = useSwipe({ onRight: onBack });
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const act = activeOf(p);
   const past = p.contracts.filter((c) => c !== act);
   const no = cleanNo(p.no);
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
       <div className="relative px-5 pb-8 text-white" style={{ backgroundColor: playerHeaderColor(p), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
@@ -667,8 +695,9 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
       : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
     return (
-      <span className={"absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
-        (small ? "h-[13px] text-[6px] " : "h-[15px] text-[7px] ")}>
+      <span className={"absolute -top-2 left-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
+        (small ? "h-[13px] text-[6px] " : "h-[15px] text-[7px] ")}
+        style={{ transform: "translate(-50%,0)", animation: "hrbPulse 0.7s ease-out 0.5s 2" }}>
         {txt}
       </span>
     );
@@ -915,7 +944,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             {formationLabel}
           </span>
         )}
-        <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`}</style>
+        <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } } ${PULSE_CSS}`}</style>
         {/* yard lines (no side numbers — quieter field) */}
         {[16, 24, 32, 40, 48, 56, 64, 72, 80, 88].map((y) => (
           <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
@@ -1649,8 +1678,14 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
   );
 }
 
-function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats }) {
-  useEffect(() => { window.scrollTo(0, 0); }, []);
+function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats, onSwitchTeam }) {
+  useEffect(() => { window.scrollTo(0, 0); }, [team.id]);
+  const alpha = useMemo(() => [...(teams || [])].sort((a, b) => String(a.name).localeCompare(String(b.name))), [teams]);
+  const idx = alpha.findIndex((t) => t.id === team.id);
+  const swipe = useSwipe({
+    onLeft: () => idx !== -1 && idx < alpha.length - 1 && onSwitchTeam && onSwitchTeam(alpha[idx + 1]),
+    onRight: () => idx > 0 && onSwitchTeam && onSwitchTeam(alpha[idx - 1]),
+  });
   const abbr = team.abbr || toAbbr(team.name);
   const [seg, setSeg] = useState("roster");
   // Inside Roster: "list" (full roster), "offense" or "defense" (formation)
@@ -1675,7 +1710,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats 
   const orderedRoles = [...ROLE_ORDER.filter((r) => groups[r]), ...(groups["Roster"] ? ["Roster"] : [])];
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
       <div className="px-5 pb-6 text-white" style={{ backgroundColor: teamColor(abbr), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
@@ -2179,6 +2214,7 @@ function TdBoardTab({ players, teams, onSelect }) {
   const [sb, setSb] = useState(null);
   const [seg, setSeg] = useState("matchups");
   const [digestWeek, setDigestWeek] = useState(null);
+  const [selGame, setSelGame] = useState(null);
   const [digest, setDigest] = useState(null);       // { week, stats, games }
   const [history, setHistory] = useState(null);
   const season = new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1;
@@ -2224,8 +2260,10 @@ function TdBoardTab({ players, teams, onSelect }) {
     return out;
   }, [sb]);
 
+  if (selGame) return <GameDetail game={selGame} onBack={() => setSelGame(null)} />;
   return (
     <div>
+      <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
       <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
           <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : seg === "history" ? "History" : "TD Targets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span></h1>
@@ -2248,7 +2286,7 @@ function TdBoardTab({ players, teams, onSelect }) {
 
         {seg === "matchups" ? (
           <>
-            {!sb && <div className="p-6 text-center text-xs text-slate-400">Loading this week's games…</div>}
+            {!sb && <Loader label="Loading games" />}
             {sb && sb.games.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>}
             {gamesByDay.map((grp) => (
               <div key={grp.key} className="mb-4">
@@ -2272,13 +2310,13 @@ function TdBoardTab({ players, teams, onSelect }) {
                           </div>
                           <div className={"w-8 text-right text-lg font-extrabold tabular-nums " + (lost ? "text-slate-400" : "text-slate-900 dark:text-white")}>
                             {g.state === "pre" ? "" : (t.score ?? 0)}
-                            {hasBall && <span className="ml-1 text-[10px] text-rose-500 align-middle">▼</span>}
+                            {hasBall && <span className="ml-1 text-[10px] text-rose-500 align-middle inline-block" style={{ animation: "hrbBlink 1.4s ease-in-out infinite" }}>▼</span>}
                           </div>
                         </div>
                       );
                     };
                     return (
-                      <div key={g.id} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2 flex items-center gap-2">
+                      <button key={g.id} onClick={() => setSelGame(g)} className="w-full text-left rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2 flex items-center gap-2 active:bg-slate-50 dark:active:bg-slate-800/60">
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <Row t={g.away} />
                           <Row t={g.home} />
@@ -2303,7 +2341,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                             </div>
                           )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -2494,6 +2532,125 @@ function TdBoardTab({ players, teams, onSelect }) {
     </div>
   );
 }
+// ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
+function GameDetail({ game, onBack }) {
+  const [d, setD] = useState(null);
+  const swipe = useSwipe({ onRight: onBack });
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetch(`/api/game?event=${game.id}`).then((r) => r.json()).then((x) => { if (alive && x && !x.error) setD(x); }).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, [game.id]);
+  const g = d || { home: game.home, away: game.away, state: game.state, detail: game.detail, scoring: [], leaders: [], teamStats: [], situation: {} };
+  const isLive = g.state === "in", isFinal = g.state === "post";
+  const homeColor = g.home.color || "#1e3a8a", awayColor = g.away.color || "#334155";
+  const statRow = (label, key) => {
+    const a = g.teamStats.find((t) => t.team === g.away.abbr)?.stats?.[key], h = g.teamStats.find((t) => t.team === g.home.abbr)?.stats?.[key];
+    if (a == null && h == null) return null;
+    const na = Number(String(a).split("-")[0]) || 0, nh = Number(String(h).split("-")[0]) || 0, tot = na + nh || 1;
+    return (
+      <div key={key} className="py-2">
+        <div className="flex justify-between text-[11px] font-bold tabular-nums text-slate-700 dark:text-slate-200"><span>{a ?? "—"}</span><span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">{label}</span><span>{h ?? "—"}</span></div>
+        <div className="mt-1 flex h-1.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+          <div style={{ width: (na / tot) * 100 + "%", backgroundColor: awayColor }} /><div className="flex-1" /><div style={{ width: (nh / tot) * 100 + "%", backgroundColor: homeColor }} />
+        </div>
+      </div>
+    );
+  };
+  const Team = ({ t }) => (
+    <div className="flex flex-col items-center gap-1">
+      <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-12 h-12 rounded-full bg-white object-contain" />
+      <div className="text-sm font-extrabold text-white">{t.abbr}</div>
+      {t.record && <div className="text-[10px] text-white/70 tabular-nums">{t.record}</div>}
+    </div>
+  );
+  const hasBall = (t) => isLive && g.situation && g.situation.possession && String(g.situation.possession) === String(t.id);
+  return (
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
+      <div className="px-4 pb-5 text-white" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+        <button onClick={onBack} className="text-sm font-semibold opacity-90 mb-3">‹ Matchups</button>
+        <div className="flex items-center justify-between">
+          <Team t={g.away} />
+          <div className="text-center">
+            <div className="flex items-baseline gap-3 text-4xl font-black tabular-nums">
+              <span className={g.away.score != null && isFinal && !g.away.winner ? "opacity-60" : ""}>{g.away.score ?? "–"}{hasBall(g.away) && <span className="text-sm align-middle ml-1">🏈</span>}</span>
+              <span className="text-lg opacity-60">–</span>
+              <span className={g.home.score != null && isFinal && !g.home.winner ? "opacity-60" : ""}>{hasBall(g.home) && <span className="text-sm align-middle mr-1">🏈</span>}{g.home.score ?? "–"}</span>
+            </div>
+            <div className={"mt-1 text-[11px] font-extrabold uppercase tracking-wider " + (isLive ? "text-rose-200" : "opacity-80")}>{isLive ? "● " : ""}{g.detail}</div>
+            {isLive && g.situation && g.situation.downDistance && <div className="text-[11px] font-semibold opacity-90 mt-0.5">{g.situation.downDistance}{g.situation.yardLine ? " · " + g.situation.yardLine : ""}{g.situation.redZone ? " · RED ZONE" : ""}</div>}
+          </div>
+          <Team t={g.home} />
+        </div>
+        {g.homeWinPct != null && !isFinal && (
+          <div className="mt-4">
+            <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider opacity-80"><span>{g.away.abbr} {100 - g.homeWinPct}%</span><span>Win probability</span><span>{g.home.abbr} {g.homeWinPct}%</span></div>
+            <div className="mt-1 h-1.5 rounded-full bg-white/20 overflow-hidden"><div className="h-full bg-white/90" style={{ width: (100 - g.homeWinPct) + "%" }} /></div>
+          </div>
+        )}
+      </div>
+      <div className="px-4 pt-3">
+        {!d && <Loader label="Loading game" />}
+        {d && isLive && g.situation && (g.situation.lastPlay || g.situation.drive) && (
+          <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 mb-3">
+            <div className="text-[9px] font-semibold tracking-widest uppercase text-rose-500 mb-1">● Last play</div>
+            <div className="text-[12px] text-slate-800 dark:text-slate-100 leading-snug">{g.situation.lastPlay || g.situation.drive}</div>
+            {g.situation.lastPlay && g.situation.drive && <div className="text-[10px] text-slate-400 mt-1">{g.situation.drive}</div>}
+          </div>
+        )}
+        {d && g.scoring.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">Scoring</div>
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
+              {g.scoring.map((p, i) => (
+                <div key={i} className="px-3 py-2 flex items-start gap-2">
+                  {TEAM_LOGOS[p.team] && <img src={TEAM_LOGOS[p.team]} alt="" className="w-5 h-5 rounded-full bg-white object-contain mt-0.5" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-slate-800 dark:text-slate-100 leading-snug">{p.text}</div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">{p.type ? p.type + " · " : ""}Q{p.q} {p.clock}</div>
+                  </div>
+                  <div className="text-[11px] font-extrabold tabular-nums text-slate-600 dark:text-slate-300 shrink-0">{p.away}–{p.home}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {d && g.leaders.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">Leaders</div>
+            <div className="grid grid-cols-2 gap-2">
+              {[g.away, g.home].map((t) => {
+                const L = g.leaders.find((x) => x.team === t.abbr);
+                return (
+                  <div key={t.abbr} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5">
+                    <div className="text-[10px] font-extrabold text-slate-500 mb-1.5">{t.abbr}</div>
+                    {(L ? L.items : []).slice(0, 3).map((l) => (
+                      <div key={l.cat} className="flex items-center gap-2 py-1">
+                        {l.headshot && <img src={l.headshot} alt="" className="w-7 h-7 rounded-full object-cover object-top bg-white" />}
+                        <div className="min-w-0"><div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{l.name}</div><div className="text-[9px] text-slate-400 truncate">{l.label} · {l.value}</div></div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {d && g.teamStats.length === 2 && (
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">Team stats</div>
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 divide-y divide-slate-100 dark:divide-slate-800">
+              {statRow("Total yards", "totalYards")}{statRow("Passing", "netPassingYards")}{statRow("Rushing", "rushingYards")}{statRow("First downs", "firstDowns")}{statRow("3rd down", "thirdDownEff")}{statRow("Turnovers", "turnovers")}{statRow("Possession", "possessionTime")}
+            </div>
+          </div>
+        )}
+        {d && (g.venue || g.weather) && <div className="text-[10px] text-slate-400 text-center mb-2">{[g.venue, g.weather].filter(Boolean).join(" · ")}{isLive ? " · updates every 30s" : ""}</div>}
+      </div>
+    </div>
+  );
+}
 // name normalizer local to the board (falls back gracefully if hrbNrm isn't in scope)
 function hrbNrmSafe(s) {
   return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.'’]/g, "").replace(/\s+(jr|sr|ii|iii|iv|v)$/i, "").trim().toLowerCase();
@@ -2617,7 +2774,7 @@ export default function App() {
           Couldn't load data: {error}
         </div>
       )}
-      {!players && !error && <div className="text-center text-sm text-slate-400 pt-24">Loading…</div>}
+      {!players && !error && <Loader />}
 
       {players && tab === "teams" && !selTeam && (
         <TeamsTab teams={mergedTeams} players={players} onSelect={setSelTeam} />
@@ -2627,6 +2784,7 @@ export default function App() {
           team={mergedTeams.find((t) => t.id === selTeam.id) || selTeam} teams={mergedTeams} seasonStats={seasonStats}
           players={players}
           onBack={() => setSelTeam(null)}
+          onSwitchTeam={(t) => setSelTeam(t)}
           onSelectPlayer={setSel}
         />
       )}
