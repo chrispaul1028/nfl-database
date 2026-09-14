@@ -649,9 +649,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
   // Sleeper's injury_status vocabulary is wider than Q/D/Out — IR, PUP, NA,
   // Sus, COV, DNR all mean "not playing". Missing any of these = a hurt
   // player shown as healthy (the Charbonnet bug).
+  // Out = Sleeper says so, OR you marked Status = Out / Inactive / IR in Airtable
+  // (healthy scratches never hit the injury report, so the manual flag matters).
+  const airtableOut = (p) => /^(out|inactive|ir|injured reserve|pup|suspended)$/i.test(String((p && p.status) || "").trim());
   const isOut = injIsOut;
+  const outP = (p) => !!p && (injIsOut(injOf(p)) || airtableOut(p));
   // Health state: "out" | "d" | "q" | "ok" | null (no Sleeper match)
   const healthOf = (p) => {
+    if (airtableOut(p)) return "out";
     const inj = injOf(p);
     if (!inj) return null;
     if (isOut(inj)) return "out";
@@ -673,9 +678,9 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
   const HealthBadge = ({ p, small }) => {
     const h = healthOf(p);
     if (!h || h === "ok") return null;
-    const inj = injOf(p);
+    const inj = injOf(p) || {};
     const txt = h === "q" ? "QUESTIONABLE" : h === "d" ? "DOUBTFUL"
-      : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve/i.test(String(inj.status || ""))) ? "IR"
+      : (String(inj.injury_status || "").toUpperCase() === "IR" || /injured reserve|^ir$/i.test(String(inj.status || p.status || ""))) ? "IR"
       : String(inj.injury_status || "").toUpperCase() === "PUP" ? "PUP" : "OUT";
     return (
       <span className={"absolute -top-2 left-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
@@ -717,7 +722,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       for (const want of s.exact || []) {
         const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
         if (hit) {
-          if (isOut(injOf(hit))) { outStarter[i] = hit; continue; }
+          if (outP(hit)) { outStarter[i] = hit; continue; }
           assigned[i] = hit; used.add(hit.id); break;
         }
       }
@@ -725,15 +730,24 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     SLOTS.forEach((s, i) => {
       if (assigned[i]) return;
       const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
-      const healthy = (p) => !isOut(injOf(p));
+      const healthy = (p) => !outP(p);
       const byLabel = roster
         .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1 && healthy(p))
         .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
       const byPos = roster
         .filter((p) => !used.has(p.id) && s.aliases.includes(String(p.pos || "").toUpperCase()) && healthy(p))
         .sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999));
+      // Offensive line backups are interchangeable across the interior (a C2 is
+      // the backup guard too) and across tackle spots — so if the slot's own
+      // position has no healthy backup, borrow from the line family before
+      // showing a hole. Depth-1 starters at other spots are never pulled.
+      const OL_INTERIOR = ["C", "OC", "LG", "RG", "G", "OG", "OL"], OL_TACKLE = ["LT", "RT", "OT", "T", "OL"];
+      const fam = ["LG", "C", "RG"].includes(s.lbl) ? OL_INTERIOR : ["LT", "RT"].includes(s.lbl) ? OL_TACKLE : null;
+      const byFamily = fam ? roster
+        .filter((p) => !used.has(p.id) && healthy(p) && depthNo(p) >= 2 && (fam.some((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p))) || fam.includes(String(p.pos || "").toUpperCase())))
+        .sort((a, b) => depthNo(a) - depthNo(b) || (b.rating2k ?? 0) - (a.rating2k ?? 0)) : [];
       // no healthy body at all -> show the injured starter rather than a hole
-      const hit = byLabel[0] || byPos[0] || outStarter[i] || null;
+      const hit = byLabel[0] || byPos[0] || byFamily[0] || outStarter[i] || null;
       if (hit) { assigned[i] = hit; used.add(hit.id); if (outStarter[i] && hit !== outStarter[i]) s.nextUp = true; }
     });
   } else {
@@ -782,12 +796,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     const starterIds = new Set(starters.map((p) => p.id));
     starters.forEach((p) => {
       let who = p, nextUp = false;
-      if (isOut(injOf(p))) {
+      if (outP(p)) {
         // Next man up: same position family first (WLB1 out -> WLB2), then
         // any healthy non-starter in the same row, shallowest depth first.
         const fam = norm(baseOf(p)), row = ROW_OF(baseOf(p));
         const repl = roster
-          .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !isOut(injOf(q)))
+          .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !outP(q))
           .sort((a, b) => (norm(baseOf(a)) === fam ? 0 : 1) - (norm(baseOf(b)) === fam ? 0 : 1) || depthNo(a) - depthNo(b))[0];
         if (repl) { who = repl; nextUp = true; }
       }
@@ -996,15 +1010,16 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           stealing space from the formation. */}
       {bench.length > 0 && (
         <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-2 pb-1">
-          <div className="flex items-baseline justify-between px-1 mb-1.5">
-            <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline</span>
-            <span className="text-[9px] font-bold text-slate-400 tabular-nums truncate ml-3">
+          <div className="px-1 mb-1.5">
+            <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline</div>
+            <div className="flex flex-wrap justify-around gap-x-3 gap-y-0.5 mt-1">
               {(() => {
                 const counts = {};
                 for (const b of bench) { const k = (baseOf(b) && norm(baseOf(b))) || String(b.pos || "").toUpperCase() || "?"; counts[k] = (counts[k] || 0) + 1; }
-                return Object.entries(counts).map(([k, n]) => `${k} (${n})`).join(" ");
+                const plural = (k) => { const f = POS_FULL[k] || k; return /y$/i.test(f) ? f.replace(/y$/i, "ies") : f + "s"; };
+                return Object.entries(counts).map(([k, n]) => <span key={k} className="text-[9px] font-bold text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{plural(k)} ({n})</span>);
               })()}
-            </span>
+            </div>
           </div>
           <div className="grid grid-cols-5 gap-y-3 gap-x-1 pt-3 pb-1.5 px-1">
             {bench.map((p) => (
