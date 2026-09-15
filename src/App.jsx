@@ -60,6 +60,17 @@ function toAbbr(team) {
 const teamColorSafe = (a) => { try { return teamColor(a) || "#334155"; } catch { return "#334155"; } };
 // Logo chips sit on the team's own color instead of plain white, the way the
 // matchup header does. Dark colors get a subtle top gloss so the mark reads.
+// Luminance of a hex color, 0 (black) to 1 (white)
+const lumOf = (hex) => {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return 0.5;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+// ESPN publishes a light "dark-background" mark for every team. Giants, Jets,
+// Rams and friends vanish on their own navy without it.
+const darkLogo = (abbr) => (abbr ? `https://a.espncdn.com/i/teamlogos/nfl/500-dark/${String(abbr).toLowerCase()}.png` : null);
+const logoFor = (abbr, fallback, onDark) => (onDark && abbr ? darkLogo(abbr) : (fallback || TEAM_LOGOS[abbr] || null));
 const logoChip = (abbr) => ({
   background: `radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), rgba(255,255,255,0) 60%), ${teamColorSafe(abbr)}`,
   boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.35)",
@@ -1140,7 +1151,7 @@ function TeamPill({ team }) {
   if (!abbr) return null;
   const logo = TEAM_LOGOS[abbr];
   if (logo) {
-    return <img src={logo} alt={abbr} className="w-8 h-8 rounded-full object-contain p-0.5 shrink-0" style={logoChip(abbr)} />;
+    return <img src={darkLogo(abbr) || logo} alt={abbr} onError={(e) => { if (e.currentTarget.src !== logo) e.currentTarget.src = logo; }} className="w-8 h-8 rounded-full object-contain p-0.5 shrink-0" style={logoChip(abbr)} />;
   }
   return (
     <span className="text-[10px] font-bold text-white px-2 py-1 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }}>
@@ -1482,7 +1493,7 @@ function TeamsTab({ teams, players, onSelect }) {
             return (
               <button key={t.id} onClick={() => onSelect(t)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
                 {t.logo ? (
-                  <img src={t.logo} alt="" className="w-11 h-11 rounded-full object-contain p-1 shrink-0" style={logoChip(t.abbr || toAbbr(t.name))} />
+                  <img src={darkLogo(t.abbr || toAbbr(t.name)) || t.logo} alt="" onError={(e) => { if (t.logo && e.currentTarget.src !== t.logo) e.currentTarget.src = t.logo; }} className="w-11 h-11 rounded-full object-contain p-1 shrink-0" style={logoChip(t.abbr || toAbbr(t.name))} />
                 ) : (
                   <span className="w-11 h-11 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }} />
                 )}
@@ -1740,7 +1751,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
-            <img src={team.logo} alt="" className="w-16 h-16 rounded-full object-contain p-1.5 shrink-0" style={{ background: "radial-gradient(circle at 35% 25%, rgba(255,255,255,0.35), rgba(255,255,255,0.05) 60%)", boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.45)" }} />
+            <img src={darkLogo(abbr) || team.logo} alt="" onError={(e) => { if (team.logo && e.currentTarget.src !== team.logo) e.currentTarget.src = team.logo; }}
+              className="w-16 h-16 rounded-full object-contain p-1.5 shrink-0" style={{ background: "rgba(255,255,255,0.14)", boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.45)" }} />
           ) : (
             <span className="text-3xl">🏈</span>
           )}
@@ -2130,7 +2142,7 @@ function StatsTab({ players, onSelect, seasonStats }) {
                   <img src={`https://a.espncdn.com/i/headshots/nfl/players/full/${P.id}.png`} alt="" className="w-10 h-10 rounded-full object-cover object-top bg-white shrink-0 ring-2 ring-white dark:ring-slate-800 shadow" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">{P.name}</div>
-                    <div className="flex items-center gap-1 mt-0.5">{TEAM_LOGOS[P.team] && <img src={TEAM_LOGOS[P.team]} alt="" className="w-3.5 h-3.5 rounded-full object-contain p-px" style={logoChip(P.team)} />}<span className="text-[10px] font-semibold text-slate-400">{P.team}</span></div>
+                    <div className="flex items-center gap-1 mt-0.5">{TEAM_LOGOS[P.team] && <img src={TEAM_LOGOS[P.team]} alt="" className="w-3.5 h-3.5 rounded-full object-contain p-px" style={logoChip(P.team)} onError={(e) => { e.currentTarget.src = TEAM_LOGOS[P.team] || ""; }} />}<span className="text-[10px] font-semibold text-slate-400">{P.team}</span></div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-xl font-black tabular-nums text-slate-900 dark:text-white leading-none">{fmt(v)}</div>
@@ -2279,7 +2291,7 @@ function TdBoardTab({ players, teams, onSelect }) {
           const defBest = teamsArr.map(([a, t]) => ({ a, y: (t.def.passYds || 0) + (t.def.rushYds || 0), pa: t.pa })).sort((x, y) => x.y - y.y).slice(0, 5);
           const Row = ({ x, val }) => (
             <div className="flex items-center gap-2 py-1.5 text-[12px]">
-              {TEAM_LOGOS[x.p.team] && <img src={TEAM_LOGOS[x.p.team]} alt="" className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(x.p.team)} />}
+              {TEAM_LOGOS[x.p.team] && <img src={darkLogo(x.p.team)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[x.p.team] || ""; }} className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(x.p.team)} />}
               <span className="flex-1 truncate font-bold text-slate-800 dark:text-slate-100">{x.p.name}<span className="text-slate-400 font-medium"> {x.p.pos || ""} · {x.p.team}{x.g ? " vs " + x.g.opp : ""}</span></span>
               <span className="font-extrabold tabular-nums text-slate-700 dark:text-slate-200">{val}</span>
             </div>
@@ -2316,10 +2328,10 @@ function TdBoardTab({ players, teams, onSelect }) {
                   <Card title="Most carries">{top("car").map((x) => <Row key={x.p.id} x={x} val={x.v} />)}</Card>
                   <Card title="Passing yards">{top("passYds", 6).map((x) => <Row key={x.p.id} x={x} val={x.v} />)}</Card>
                   <Card title="Defenses that got gashed · total yds allowed">
-                    {defWorst.map((d) => <div key={d.a} className="flex items-center justify-between py-1.5 text-[12px]"><span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">{TEAM_LOGOS[d.a] && <img src={TEAM_LOGOS[d.a]} alt="" className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(d.a)} />}{d.a}</span><span className="font-extrabold tabular-nums text-rose-500">{d.y} yds · {d.pa} pts</span></div>)}
+                    {defWorst.map((d) => <div key={d.a} className="flex items-center justify-between py-1.5 text-[12px]"><span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">{TEAM_LOGOS[d.a] && <img src={darkLogo(d.a)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[d.a] || ""; }} className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(d.a)} />}{d.a}</span><span className="font-extrabold tabular-nums text-rose-500">{d.y} yds · {d.pa} pts</span></div>)}
                   </Card>
                   <Card title="Defenses that shut it down">
-                    {defBest.map((d) => <div key={d.a} className="flex items-center justify-between py-1.5 text-[12px]"><span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">{TEAM_LOGOS[d.a] && <img src={TEAM_LOGOS[d.a]} alt="" className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(d.a)} />}{d.a}</span><span className="font-extrabold tabular-nums text-emerald-500">{d.y} yds · {d.pa} pts</span></div>)}
+                    {defBest.map((d) => <div key={d.a} className="flex items-center justify-between py-1.5 text-[12px]"><span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">{TEAM_LOGOS[d.a] && <img src={darkLogo(d.a)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[d.a] || ""; }} className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(d.a)} />}{d.a}</span><span className="font-extrabold tabular-nums text-emerald-500">{d.y} yds · {d.pa} pts</span></div>)}
                   </Card>
                 </>
               )}
@@ -2348,7 +2360,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                     const norm = pa != null && ph != null ? pa + ph : null;
                     const Row = ({ t, ml, p, fav }) => (
                       <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center py-1">
-                        <span className="flex items-center gap-2 min-w-0">{TEAM_LOGOS[t.abbr] && <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-6 h-6 rounded-full object-contain p-0.5" style={logoChip(t.abbr)} />}<span className={"text-[12px] font-extrabold truncate " + (g.state === "post" ? (t.winner ? "text-emerald-600" : "text-slate-400") : "text-slate-900 dark:text-white")}>{t.abbr}</span>{g.state === "post" && <span className="text-[11px] font-bold tabular-nums text-slate-500">{t.score}</span>}</span>
+                        <span className="flex items-center gap-2 min-w-0">{TEAM_LOGOS[t.abbr] && <img src={darkLogo(t.abbr)} alt="" onError={(e) => { e.currentTarget.src = t.logo || TEAM_LOGOS[t.abbr] || ""; }} className="w-6 h-6 rounded-full object-contain p-0.5" style={logoChip(t.abbr)} />}<span className={"text-[12px] font-extrabold truncate " + (g.state === "post" ? (t.winner ? "text-emerald-600" : "text-slate-400") : "text-slate-900 dark:text-white")}>{t.abbr}</span>{g.state === "post" && <span className="text-[11px] font-bold tabular-nums text-slate-500">{t.score}</span>}</span>
                         <span className={"w-12 text-right text-[12px] font-extrabold tabular-nums " + (ml != null && ml < 0 ? "text-slate-900 dark:text-white" : "text-slate-500")}>{fmtML(ml)}</span>
                         <span className="w-10 text-right text-[11px] font-bold tabular-nums text-slate-500">{p != null ? Math.round((norm ? p / norm : p) * 100) + "%" : "—"}</span>
                         <span className="w-12 text-right text-[11px] font-bold tabular-nums text-slate-500">{fav && o.spread != null ? (o.spread > 0 ? "-" + o.spread : String(o.spread)) : ""}</span>
@@ -2420,7 +2432,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                       <div className="flex items-center gap-2">
                         <div className="w-4 text-xs font-extrabold text-slate-400 tabular-nums">{i + 1}</div>
                         {p ? <Avatar p={p} size="sm" /> : <img src={c.headshot} alt="" className="w-9 h-9 rounded-full object-cover object-top bg-white" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />}
-                        {TEAM_LOGOS[c.team] && <img src={TEAM_LOGOS[c.team]} alt="" className="w-5 h-5 rounded-full object-contain p-px shrink-0" style={logoChip(c.team)} />}
+                        {TEAM_LOGOS[c.team] && <img src={darkLogo(c.team)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[c.team] || ""; }} className="w-5 h-5 rounded-full object-contain p-px shrink-0" style={logoChip(c.team)} />}
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">
                             {c.name}
@@ -2428,7 +2440,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 shrink-0">
-                          {TEAM_LOGOS[c.opp] && <img src={TEAM_LOGOS[c.opp]} alt="" className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(c.opp)} />}
+                          {TEAM_LOGOS[c.opp] && <img src={darkLogo(c.opp)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[c.opp] || ""; }} className="w-4 h-4 rounded-full object-contain p-px" style={logoChip(c.opp)} />}
                           <span>{(c.home ? "vs " : "@ ") + c.opp}</span>
                         </div>
                       </div>
@@ -2518,7 +2530,7 @@ function MatchCard({ g, onClick }) {
   const lost = (t) => isFinal && !t.winner;
   const Side = ({ t }) => (
     <div className="flex flex-col items-center w-16 shrink-0">
-      <img src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className={"w-12 h-12 rounded-full object-contain p-1 " + (lost(t) ? "opacity-50" : "")} style={logoChip(t.abbr)} />
+      <img src={darkLogo(t.abbr)} alt="" onError={(e) => { e.currentTarget.src = t.logo || TEAM_LOGOS[t.abbr] || ""; }} className={"w-12 h-12 rounded-full object-contain p-1 " + (lost(t) ? "opacity-50" : "")} style={logoChip(t.abbr)} />
       <div className={"mt-1 text-[12px] font-extrabold tracking-wide " + (lost(t) ? "text-slate-400" : "text-slate-900 dark:text-white")}>{t.abbr}</div>
       {t.record && <div className="text-[9px] font-semibold text-slate-400 tabular-nums leading-none">{t.record}</div>}
     </div>
@@ -2574,6 +2586,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
   const uid = `${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
   const shell = color || teamColor(abbr) || "#334155";
   const mask = alt || TEAM_ALT[abbr] || "#e5e7eb";
+  const dark = lumOf(shell) < 0.45;
   const SHELL = "M30 74 C30 36 54 14 88 14 C124 14 146 38 146 70 C146 84 141 95 131 101 L118 106 C109 110 96 112 85 112 C56 112 30 100 30 74 Z";
   return (
     <svg viewBox="0 0 176 150" width={size} height={size * 150 / 176} style={style} onClick={onClick} className={onClick ? "cursor-pointer" : undefined}>
@@ -2614,7 +2627,14 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
         <path d={SHELL} fill={shell} />
         <path d={SHELL} fill={`url(#paint-${uid})`} />
         {/* decal, with halo so it never disappears into the paint */}
-        {logo && <image href={logo} x="60" y="32" width="80" height="60" preserveAspectRatio="xMidYMid meet" clipPath={`url(#clip-${uid})`} filter={`url(#halo-${uid})`} />}
+        {/* decal: counter-mirrored on the flipped helmet so the logo still faces
+            forward, and swapped for the light mark when the paint is dark */}
+        {logo && (
+          <g clipPath={`url(#clip-${uid})`} transform={flip ? "translate(176,0) scale(-1,1)" : undefined}>
+            <image href={dark ? (darkLogo(abbr) || logo) : logo} x={flip ? 36 : 60} y="32" width="80" height="60" preserveAspectRatio="xMidYMid meet"
+              filter={`url(#halo-${uid})`} onError={(e) => { if (e.currentTarget.getAttribute("href") !== logo) e.currentTarget.setAttribute("href", logo); }} />
+          </g>
+        )}
         {/* specular sweep across the crown + tight hot spot */}
         <g clipPath={`url(#clip-${uid})`}>
           <path d="M34 62 C40 30 64 16 96 18 C78 24 58 38 48 62 C44 72 42 84 44 96 C36 88 32 74 34 62 Z" fill={`url(#spec-${uid})`} opacity="0.75" />
@@ -2628,9 +2648,12 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
         <path d={SHELL} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" />
         {/* jaw pad + ear hole */}
         <path d="M40 84 C46 100 64 110 85 112 C70 112 46 104 40 84 Z" fill="rgba(0,0,0,0.28)" />
-        <circle cx="58" cy="76" r="13" fill="rgba(0,0,0,0.5)" />
-        <circle cx="58" cy="76" r="9.5" fill="#0b0f16" />
-        <circle cx="55" cy="72" r="3" fill="#fff" opacity="0.18" />
+        <g>
+          <circle cx="58" cy="78" r="12" fill="rgba(255,255,255,0.10)" />
+          <circle cx="58" cy="78" r="9" fill="rgba(0,0,0,0.55)" />
+          <circle cx="58" cy="78" r="9" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.6" />
+          <path d="M52 74 C55 71 61 71 64 74" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" strokeLinecap="round" />
+        </g>
         {/* facemask cage */}
         <g fill="none" stroke={`url(#chrome-${uid})`} strokeLinecap="round" strokeWidth="6.5">
           <path d="M141 86 C155 92 161 107 157 121 C153 133 141 139 127 140" />
@@ -2766,8 +2789,8 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
 
         <div key={"clash-" + game.id} className="relative flex items-center justify-between" style={{ animation: "hrbShake 1.2s ease-out 1" }}>
           {/* impact */}
-          <span className="pointer-events-none absolute left-1/2 top-[38%] w-24 h-24 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,240,180,0.6) 40%, rgba(255,255,255,0) 70%)", animation: "hrbFlash 1.2s ease-out 1" }} />
-          <span className="pointer-events-none absolute left-1/2 top-[38%] w-16 h-16 rounded-full border-2 border-white/80" style={{ animation: "hrbWave 1.2s ease-out 1" }} />
+          <span className="pointer-events-none absolute left-1/2 top-[38%] w-24 h-24 rounded-full opacity-0" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,240,180,0.6) 40%, rgba(255,255,255,0) 70%)", animation: "hrbFlash 1.2s ease-out 1 both" }} />
+          <span className="pointer-events-none absolute left-1/2 top-[38%] w-16 h-16 rounded-full border-2 border-white/80 opacity-0" style={{ animation: "hrbWave 1.2s ease-out 1 both" }} />
           <Team t={g.away} />
           <div className="text-center">
             <div className="flex items-baseline gap-3 text-4xl font-black tabular-nums">
@@ -2815,7 +2838,7 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
             <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
               {g.scoring.map((p, i) => (
                 <div key={i} className="px-3 py-2 flex items-start gap-2">
-                  {TEAM_LOGOS[p.team] && <img src={TEAM_LOGOS[p.team]} alt="" className="w-5 h-5 rounded-full object-contain p-px mt-0.5" style={logoChip(p.team)} />}
+                  {TEAM_LOGOS[p.team] && <img src={darkLogo(p.team)} alt="" onError={(e) => { e.currentTarget.src = TEAM_LOGOS[p.team] || ""; }} className="w-5 h-5 rounded-full object-contain p-px mt-0.5" style={logoChip(p.team)} />}
                   <div className="flex-1 min-w-0">
                     <div className="text-[11px] text-slate-800 dark:text-slate-100 leading-snug">{p.text}</div>
                     <div className="text-[9px] text-slate-400 mt-0.5">{p.type ? p.type + " · " : ""}Q{p.q} {p.clock}</div>
