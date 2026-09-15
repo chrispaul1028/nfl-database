@@ -42,15 +42,27 @@ export default async function handler(req, res) {
     // Positions: ESPN box scores don't carry them. Take Sleeper's (via espn_id),
     // else infer from the stat line. Without this every player is position-less
     // and the TD board filters all of them out.
-    let posByEspn = {};
+    let posByEspn = {}, posByName = {}, posByTeamName = {};
+    const nkey = (n) => String(n || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z ]/g, "").replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/\s+/g, " ").trim();
     try {
       const sl = await getJson("https://api.sleeper.app/v1/players/nfl");
-      for (const sp of Object.values(sl || {})) if (sp && sp.espn_id && sp.position) posByEspn[String(sp.espn_id)] = String(sp.position).toUpperCase();
+      for (const sp of Object.values(sl || {})) {
+        if (!sp || !sp.position) continue;
+        const pos = String(sp.position).toUpperCase();
+        if (sp.espn_id) posByEspn[String(sp.espn_id)] = pos;
+        // Name fallbacks: espn_id is missing for a chunk of Sleeper's rows, which
+        // silently mis-typed players (a TE with targets was inferred as a WR).
+        if (sp.full_name) {
+          posByName[nkey(sp.full_name)] = pos;
+          if (sp.team) posByTeamName[String(sp.team).toUpperCase() + "|" + nkey(sp.full_name)] = pos;
+        }
+      }
     } catch {}
     for (const P of Object.values(players)) {
       const g = P.games;
       const att = g.reduce((a, x) => a + (x.att || 0), 0), car = g.reduce((a, x) => a + (x.car || 0), 0), tgt = g.reduce((a, x) => a + (x.tgt || 0), 0), tkl = g.reduce((a, x) => a + (x.tkl || 0), 0);
-      P.pos = P.pos || posByEspn[P.id] || (att >= 5 ? "QB" : car > tgt && car > 0 ? "RB" : tgt > 0 ? "WR" : tkl > 0 ? "DEF" : "");
+      P.pos = P.pos || posByEspn[P.id] || posByTeamName[String(P.team || "").toUpperCase() + "|" + nkey(P.name)] || posByName[nkey(P.name)]
+        || (att >= 5 ? "QB" : car > tgt && car > 0 ? "RB" : tgt > 0 ? "WR" : tkl > 0 ? "DEF" : "");
       if (P.pos === "HB" || P.pos === "FB") P.pos = "RB";
     }
     // Allowed-by-position, rebuilt here now that positions are known
