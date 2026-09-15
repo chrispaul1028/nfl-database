@@ -51,7 +51,9 @@ export default async function handler(req, res) {
         away: side(comp, "away"),
         venue: comp.venue?.fullName || null,
         broadcast: ((comp.broadcasts || [])[0]?.names || [])[0] || null,
-        odds: odds ? { details: odds.details || null, overUnder: odds.overUnder ?? null } : null,
+        odds: odds ? { details: odds.details || null, overUnder: odds.overUnder ?? null, spread: odds.spread ?? null,
+          homeML: odds.homeTeamOdds?.moneyLine ?? null, awayML: odds.awayTeamOdds?.moneyLine ?? null,
+          homeFav: !!odds.homeTeamOdds?.favorite, awayFav: !!odds.awayTeamOdds?.favorite } : null,
         possession: sit.possession || null,         // team id with the ball (live)
         downDistance: sit.shortDownDistanceText || null,
         spot: sit.possessionText || null,               // e.g. "WAS 6"
