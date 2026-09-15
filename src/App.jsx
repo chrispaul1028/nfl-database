@@ -622,8 +622,7 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
     <span className="inline-flex flex-col items-start gap-0.5 min-w-0">
-      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}
-        style={{ animation: "hrbSoftPulse 1.8s ease-in-out infinite" }}>
+      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
         {label}
       </span>
 
@@ -2561,6 +2560,64 @@ function MatchCard({ g, onClick }) {
   );
 }
 
+// Side-profile football helmet drawn to scale: painted shell with gloss and
+// shadow, chrome-ish facemask in the team's alternate color, ear hole, chin
+// strap, and the team logo as the decal. `flip` mirrors it to face the other.
+function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
+  const uid = `${abbr}-${flip ? "r" : "l"}`;
+  const shell = color || teamColor(abbr) || "#334155";
+  const mask = alt || TEAM_ALT[abbr] || "#d1d5db";
+  const SHELL = "M30 74 C30 36 54 14 88 14 C124 14 146 38 146 70 C146 84 141 95 131 101 L118 106 C109 110 96 112 85 112 C56 112 30 100 30 74 Z";
+  return (
+    <svg viewBox="0 0 176 150" width={size} height={size * 150 / 176} style={style} onClick={onClick}
+      className={onClick ? "cursor-pointer" : undefined}>
+      <defs>
+        <clipPath id={`clip-${uid}`}><path d={SHELL} /></clipPath>
+        <linearGradient id={`paint-${uid}`} x1="0.2" y1="0" x2="0.7" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="38%" stopColor="#ffffff" stopOpacity="0.08" />
+          <stop offset="72%" stopColor="#000000" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
+        </linearGradient>
+        <radialGradient id={`gloss-${uid}`} cx="0.36" cy="0.22" r="0.42">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.75" /><stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <filter id={`drop-${uid}`} x="-30%" y="-30%" width="160%" height="170%">
+          <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#000" floodOpacity="0.45" />
+        </filter>
+      </defs>
+      <g filter={`url(#drop-${uid})`} transform={flip ? "translate(176,0) scale(-1,1)" : undefined}>
+        {/* painted shell */}
+        <path d={SHELL} fill={shell} />
+        <path d={SHELL} fill={`url(#paint-${uid})`} />
+        {/* decal */}
+        {logo && <image href={logo} x="62" y="34" width="74" height="56" preserveAspectRatio="xMidYMid meet" clipPath={`url(#clip-${uid})`} opacity="0.97" />}
+        {/* crown gloss */}
+        <ellipse cx="72" cy="36" rx="34" ry="16" fill={`url(#gloss-${uid})`} clipPath={`url(#clip-${uid})`} />
+        {/* shell edge */}
+        <path d={SHELL} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" />
+        {/* jaw pad + ear hole */}
+        <path d="M40 84 C46 100 64 110 85 112 C70 112 46 104 40 84 Z" fill="rgba(0,0,0,0.25)" />
+        <circle cx="58" cy="76" r="13" fill="rgba(0,0,0,0.55)" />
+        <circle cx="58" cy="76" r="9" fill="rgba(0,0,0,0.85)" />
+        {/* facemask: cage bars */}
+        <g fill="none" stroke={mask} strokeLinecap="round" strokeWidth="6">
+          <path d="M141 86 C154 92 160 106 156 120 C152 132 140 138 126 139" />
+          <path d="M133 96 C145 101 150 111 147 121" />
+          <path d="M92 139 C110 141 124 141 138 137" />
+          <path d="M86 116 C104 122 122 124 139 121" />
+        </g>
+        <g fill="none" stroke="rgba(255,255,255,0.25)" strokeLinecap="round" strokeWidth="1.6">
+          <path d="M141 86 C154 92 160 106 156 120" />
+        </g>
+        {/* chin strap */}
+        <path d="M52 96 C62 116 78 128 96 133" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="4" strokeLinecap="round" />
+        <path d="M52 96 C62 116 78 128 96 133" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" strokeLinecap="round" />
+      </g>
+    </svg>
+  );
+}
+
 // ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
 function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   const [d, setD] = useState(null);
@@ -2591,11 +2648,13 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
       </div>
     );
   };
-  const Team = ({ t }) => (
-    <button onClick={() => setFocus(focus === t.abbr ? null : t.abbr)} className={"flex flex-col items-center gap-1 rounded-2xl px-2 py-1 " + (focus === t.abbr ? "bg-white/20 ring-2 ring-white/70" : "")}>
-      <img key={focus === t.abbr ? "on" : "off"} src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-14 h-14 rounded-full bg-white object-contain shadow-lg"
-        style={focus === t.abbr ? { animation: "hrbNudge 0.45s ease-out 1" } : { animation: `${t.abbr === g.away.abbr ? "hrbHitL" : "hrbHitR"} 0.9s cubic-bezier(.2,.85,.3,1) 1` }} />
-      <div className="text-sm font-extrabold text-white">{t.abbr}</div>
+  const Team = ({ t, home }) => (
+    <button onClick={() => setFocus(focus === t.abbr ? null : t.abbr)} className={"flex flex-col items-center rounded-2xl px-1 py-1 " + (focus === t.abbr ? "bg-white/15 ring-2 ring-white/70" : "")}>
+      <div key={"hit-" + game.id + t.abbr} style={{ animation: `${home ? "hrbHitR" : "hrbHitL"} 1s cubic-bezier(.16,.9,.28,1) 1` }}>
+        <Helmet abbr={t.abbr} logo={t.logo || TEAM_LOGOS[t.abbr]} color={t.color || teamColor(t.abbr)} alt={t.altColor || TEAM_ALT[t.abbr]} flip={!!home} size={118}
+          style={focus === t.abbr ? { animation: "hrbNudge 0.45s ease-out 1" } : undefined} />
+      </div>
+      <div className="text-sm font-extrabold text-white -mt-1">{t.abbr}</div>
       {t.record && <div className="text-[10px] text-white/70 tabular-nums">{t.record}</div>}
     </button>
   );
@@ -2635,27 +2694,38 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
         @keyframes hrbNudge { 0% { transform: scale(1) } 35% { transform: scale(1.22) } 70% { transform: scale(0.96) } 100% { transform: scale(1) } }
         @keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
         /* helmets charge in, collide once, rock back, settle */
-        /* logos charge toward each other, meet, and settle — once, on open */
+        /* helmets charge in, clash hard, rock back, settle — once, on open */
         @keyframes hrbHitL {
-          0% { transform: translateX(-28px) scale(0.86); opacity: 0 }
-          45% { transform: translateX(10px) scale(1.06); opacity: 1 }
-          70% { transform: translateX(-3px) scale(0.99) }
-          100% { transform: translateX(0) scale(1) }
+          0% { transform: translateX(-120px) rotate(-16deg) scale(0.9); opacity: 0 }
+          10% { opacity: 1 }
+          42% { transform: translateX(34px) rotate(9deg) scale(1.06) }
+          52% { transform: translateX(22px) rotate(4deg) scale(1.02) }
+          68% { transform: translateX(-10px) rotate(-5deg) scale(1) }
+          84% { transform: translateX(4px) rotate(2deg) }
+          100% { transform: translateX(0) rotate(0deg) scale(1) }
         }
         @keyframes hrbHitR {
-          0% { transform: translateX(28px) scale(0.86); opacity: 0 }
-          45% { transform: translateX(-10px) scale(1.06); opacity: 1 }
-          70% { transform: translateX(3px) scale(0.99) }
-          100% { transform: translateX(0) scale(1) }
+          0% { transform: translateX(120px) rotate(16deg) scale(0.9); opacity: 0 }
+          10% { opacity: 1 }
+          42% { transform: translateX(-34px) rotate(-9deg) scale(1.06) }
+          52% { transform: translateX(-22px) rotate(-4deg) scale(1.02) }
+          68% { transform: translateX(10px) rotate(5deg) scale(1) }
+          84% { transform: translateX(-4px) rotate(-2deg) }
+          100% { transform: translateX(0) rotate(0deg) scale(1) }
+        }
+        @keyframes hrbShake {
+          0%, 38% { transform: translate(0,0) }
+          44% { transform: translate(-5px, 2px) }
+          50% { transform: translate(5px, -2px) }
+          56% { transform: translate(-3px, 1px) }
+          62% { transform: translate(2px, 0) }
+          70%, 100% { transform: translate(0,0) }
         }
       `}</style>
       <div className="px-4 pb-5 text-white" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
-        <div className="flex items-center justify-between mb-1">
-          <button onClick={onBack} className="text-sm font-semibold opacity-90">‹ Matchups</button>
-          {total > 1 && <span className="text-[10px] font-bold opacity-70 tabular-nums">{index} / {total} · swipe</span>}
-        </div>
+        <button onClick={onBack} className="text-sm font-semibold opacity-90 mb-1">‹ Matchups</button>
 
-        <div className="flex items-center justify-between">
+        <div key={"clash-" + game.id} className="flex items-center justify-between" style={{ animation: "hrbShake 1s ease-out 1" }}>
           <Team t={g.away} />
           <div className="text-center">
             <div className="flex items-baseline gap-3 text-4xl font-black tabular-nums">
@@ -2666,7 +2736,7 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
             <div className={"mt-1 text-[11px] font-extrabold uppercase tracking-wider " + (twoMin ? "text-rose-300" : "text-white")}>{isLive ? "● " : ""}{g.detail}</div>
             {isLive && g.situation && g.situation.downDistance && <div className="text-[11px] font-semibold text-white/90 mt-0.5">{g.situation.downDistance}{g.situation.yardLine ? " · " + g.situation.yardLine : ""}{g.situation.redZone ? " · RED ZONE" : ""}</div>}
           </div>
-          <Team t={g.home} />
+          <Team t={g.home} home />
         </div>
         {g.homeWinPct != null && !isFinal && (
           <div className="mt-4">
