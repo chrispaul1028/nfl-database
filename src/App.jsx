@@ -904,13 +904,13 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
         {/* end zone: team color with painted diagonal texture and big
             stenciled letters — reads like turf paint, not a UI header */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
-          style={{ height: "9%", background: teamColor(abbr) }}>
+          style={{ height: "9%", background: TEAM_ALT[abbr] || teamColor(abbr) }}>
           <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px)" }} />
           <div className="absolute inset-x-0 top-[18%] h-px bg-white/25" />
           <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/25" />
           {/* painted end-zone lettering: team nickname, outlined like turf paint */}
           <span className="font-black text-[22px] tracking-[0.3em] pl-[0.3em] uppercase select-none"
-            style={{ color: TEAM_ALT[abbr] || "#ffffff", WebkitTextStroke: "1px rgba(0,0,0,0.45)", textShadow: "0 2px 0 rgba(0,0,0,0.3), 0 0 14px rgba(0,0,0,0.3)" }}>
+            style={{ color: teamColor(abbr), WebkitTextStroke: "1px rgba(255,255,255,0.35)", textShadow: "0 2px 0 rgba(0,0,0,0.35), 0 0 14px rgba(0,0,0,0.25)" }}>
             {(team && team.name ? String(team.name).trim().split(" ").pop() : abbr)}
           </span>
         </div>
@@ -1016,8 +1016,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               {(() => {
                 const counts = {};
                 for (const b of bench) { const k = (baseOf(b) && norm(baseOf(b))) || String(b.pos || "").toUpperCase() || "?"; counts[k] = (counts[k] || 0) + 1; }
-                const plural = (k) => { const f = POS_FULL[k] || k; return /y$/i.test(f) ? f.replace(/y$/i, "ies") : f + "s"; };
-                return Object.entries(counts).map(([k, n]) => <span key={k} className="text-[9px] font-bold text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{plural(k)} ({n})</span>);
+                return Object.entries(counts).map(([k, n]) => <span key={k} className="text-[9px] font-bold text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{POS_FULL[k] || k} ({n})</span>);
               })()}
             </div>
           </div>
@@ -1924,26 +1923,27 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {cleanNo(p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(p.no)}</span>}{p.name}
                       </span>
-                      <span className="flex items-center gap-1.5 mt-1">
-                        <LiveStatus p={p} team={abbr} />
+                      {/* row 2: injury tag on the left, per-game tiles on the right */}
+                      <span className="flex items-center gap-2 mt-1.5">
+                        <span className="min-w-0 flex-1"><LiveStatus p={p} team={abbr} /></span>
+                        {(() => {
+                          const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
+                          if (!grp) return null;
+                          const G = S && S.totals && S.totals.gp ? S.perGame : null;
+                          return (
+                            <span className="flex gap-1 shrink-0">
+                              {STAT_TILES[grp].map(([lbl, k]) => (
+                                <span key={k} className="w-[42px] text-center rounded-md bg-slate-100 dark:bg-slate-800 py-1">
+                                  <span className="block text-[7px] font-semibold tracking-wider uppercase text-slate-400 leading-none">{lbl}</span>
+                                  <span className="block text-[12px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight mt-0.5">{G && G[k] != null ? G[k] : "—"}</span>
+                                </span>
+                              ))}
+                            </span>
+                          );
+                        })()}
                       </span>
-                      {(() => { const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null; return d ? <span className="block text-[11px] font-semibold text-rose-500 mt-0.5">{d.text}</span> : (p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 truncate mt-0.5">{p.injuryNotes}</span> : null); })()}
-                      {(() => {
-                        // per-game season tiles on their own line, never crowding the name
-                        const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
-                        if (!grp) return null;
-                        const G = S && S.totals && S.totals.gp ? S.perGame : null;
-                        return (
-                          <span className="flex gap-1 mt-1.5">
-                            {STAT_TILES[grp].map(([lbl, k]) => (
-                              <span key={k} className="w-14 text-center rounded-md bg-slate-100 dark:bg-slate-800 py-1">
-                                <span className="block text-[7px] font-semibold tracking-wider uppercase text-slate-400 leading-none">{lbl}</span>
-                                <span className="block text-[12px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight mt-0.5">{G && G[k] != null ? G[k] : "—"}</span>
-                              </span>
-                            ))}
-                          </span>
-                        );
-                      })()}
+                      {/* row 3: the detailed note, directly under the tag, nothing blocking it */}
+                      {(() => { const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null; return d ? <span className="block text-[11px] font-semibold text-rose-500 mt-1">{d.text}</span> : (p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 mt-1">{p.injuryNotes}</span> : null); })()}
                     </span>
                   </button>
                 ))}
@@ -2154,6 +2154,7 @@ function TdBoardTab({ players, teams, onSelect }) {
   const [selGame, setSelGame] = useState(null);
   const [digest, setDigest] = useState(null);       // { week, stats, games }
   const [history, setHistory] = useState(null);
+  const [bet, setBet] = useState("ml"); // ml | td | props
   const season = new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1;
   useEffect(() => {
     if (seg !== "digest") return;
@@ -2167,9 +2168,9 @@ function TdBoardTab({ players, teams, onSelect }) {
     return () => { alive = false; };
   }, [seg, digestWeek, sb?.week]);
   useEffect(() => {
-    if (seg !== "history" || history) return;
+    if (history) return;
     fetch(`/api/td-history?season=${season}`).then((r) => r.json()).then(setHistory).catch(() => setHistory({ weeks: [], error: "unreachable" }));
-  }, [seg]);
+  }, []);
   useEffect(() => {
     fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [], reason: "Couldn't reach the board endpoint." }));
   }, []);
@@ -2216,7 +2217,7 @@ function TdBoardTab({ players, teams, onSelect }) {
       <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
       <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : seg === "history" ? "History" : "TD Targets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span></h1>
+          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : "Bets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
             {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
@@ -2226,7 +2227,7 @@ function TdBoardTab({ players, teams, onSelect }) {
       </div>
       <div className="px-4 pt-3">
         <div className="flex gap-2 mb-3">
-          {[["matchups", "Matchups"], ["board", "TD Targets"], ["digest", "Digest"], ["history", "History"]].map(([k, lbl]) => (
+          {[["matchups", "Matchups"], ["digest", "Digest"], ["bets", "Bets"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-1.5 rounded-full text-xs font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
@@ -2307,51 +2308,83 @@ function TdBoardTab({ players, teams, onSelect }) {
               )}
             </>
           );
-        })() : seg === "history" ? (
+        })() : (
           <>
-            {!history && <div className="p-6 text-center text-xs text-slate-400">Loading the calibration log…</div>}
-            {history && history.error && <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-400">History needs the Airtable table <b>TD Log</b> (see setup) — {history.error}</div>}
-            {history && !history.error && history.weeks.length === 0 && (
-              <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-center">
-                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">No boards logged yet</div>
-                <div className="text-[11px] text-slate-400 mt-1">Each Saturday the top 25 is snapshotted to Airtable; after the games it's scored here against actual touchdowns.</div>
-              </div>
-            )}
-            {history && history.weeks.map((w) => (
-              <div key={w.week} className="mb-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-                <div className="px-3 py-2 flex items-baseline justify-between border-b border-slate-100 dark:border-slate-800">
-                  <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100">Week {w.week} <span className="text-slate-400 font-semibold">· {w.picks.length} picks{w.final ? "" : " · in progress"}</span></div>
-                  {w.n > 0 && <div className="text-[11px] font-bold tabular-nums"><span className={w.hits >= w.expected ? "text-emerald-500" : "text-amber-500"}>{w.hits} hit</span> <span className="text-slate-400">/ {w.expected} expected</span></div>}
-                </div>
-                {w.n > 0 && (
-                  <div className="px-3 py-1.5 flex gap-1.5 border-b border-slate-100 dark:border-slate-800">
-                    {w.buckets.map((b) => (
-                      <div key={b.range} className="flex-1 text-center rounded-md bg-slate-50 dark:bg-slate-800 py-1">
-                        <div className="text-[8px] text-slate-400 font-semibold">{b.range}</div>
-                        <div className="text-[11px] font-extrabold tabular-nums text-slate-700 dark:text-slate-200">{b.n ? `${b.hits}/${b.n}` : "—"}</div>
+            <div className="flex gap-2 mb-3">
+              {[["ml", "Moneyline"], ["td", "Touchdowns"], ["props", "Props"]].map(([k, lbl]) => (
+                <button key={k} onClick={() => setBet(k)}
+                  className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold " + (bet === k ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>{lbl}</button>
+              ))}
+            </div>
+            {bet === "ml" && (() => {
+              // American odds -> implied win probability (vig included)
+              const prob = (ml) => (ml == null ? null : ml < 0 ? (-ml) / (-ml + 100) : 100 / (ml + 100));
+              const games = (sb?.games || []).filter((g) => g.odds && (g.odds.homeML != null || g.odds.awayML != null || g.odds.details));
+              if (!sb) return <Loader label="Loading lines" />;
+              if (!games.length) return <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-center text-xs text-slate-400">No lines posted for this week yet.</div>;
+              const fmtML = (ml) => (ml == null ? "—" : ml > 0 ? "+" + ml : String(ml));
+              return (
+                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60 text-[9px] font-semibold tracking-widest uppercase text-slate-400"><span>Game</span><span className="w-12 text-right">ML</span><span className="w-10 text-right">Win%</span><span className="w-12 text-right">Spread</span></div>
+                  {games.map((g) => {
+                    const o = g.odds; const pa = prob(o.awayML), ph = prob(o.homeML);
+                    const norm = pa != null && ph != null ? pa + ph : null;
+                    const Row = ({ t, ml, p, fav }) => (
+                      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center py-1">
+                        <span className="flex items-center gap-2 min-w-0">{TEAM_LOGOS[t.abbr] && <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-6 h-6 rounded-full bg-white object-contain" />}<span className={"text-[12px] font-extrabold truncate " + (g.state === "post" ? (t.winner ? "text-emerald-600" : "text-slate-400") : "text-slate-900 dark:text-white")}>{t.abbr}</span>{g.state === "post" && <span className="text-[11px] font-bold tabular-nums text-slate-500">{t.score}</span>}</span>
+                        <span className={"w-12 text-right text-[12px] font-extrabold tabular-nums " + (ml != null && ml < 0 ? "text-slate-900 dark:text-white" : "text-slate-500")}>{fmtML(ml)}</span>
+                        <span className="w-10 text-right text-[11px] font-bold tabular-nums text-slate-500">{p != null ? Math.round((norm ? p / norm : p) * 100) + "%" : "—"}</span>
+                        <span className="w-12 text-right text-[11px] font-bold tabular-nums text-slate-500">{fav && o.spread != null ? (o.spread > 0 ? "-" + o.spread : String(o.spread)) : ""}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {w.picks.map((p) => (
-                    <div key={p.rank + p.player} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
-                      <span className="w-4 text-slate-400 tabular-nums">{p.rank}</span>
-                      <span className="flex-1 truncate font-bold text-slate-800 dark:text-slate-100">{p.player}<span className="text-slate-400 font-medium"> {p.pos} · {p.team} vs {p.opp}</span></span>
-                      <span className="text-slate-400 tabular-nums">{Math.round((p.tdPct || 0) * 100)}%</span>
-                      <span className={"w-5 text-center font-extrabold " + (p.hit == null ? "text-slate-300" : p.hit ? "text-emerald-500" : "text-rose-400")}>{p.hit == null ? "·" : p.hit ? "✓" : "✗"}</span>
-                    </div>
-                  ))}
+                    );
+                    return (
+                      <button key={g.id} onClick={() => setSelGame(g)} className="w-full text-left px-3 py-2 active:bg-slate-50 dark:active:bg-slate-800/60">
+                        <Row t={g.away} ml={o.awayML} p={pa} fav={o.awayFav} />
+                        <Row t={g.home} ml={o.homeML} p={ph} fav={o.homeFav} />
+                        <div className="text-[9px] text-slate-400 mt-1 flex justify-between"><span>{new Date(g.date).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}{g.state === "in" ? " · LIVE" : g.state === "post" ? " · Final" : ""}</span><span>{o.details}{o.overUnder != null ? ` · O/U ${o.overUnder}` : ""}</span></div>
+                      </button>
+                    );
+                  })}
+                  <div className="px-3 py-2 text-[9px] text-slate-400">Win% is the market's implied probability from the moneyline, with the vig removed. Lines from ESPN; they move until kickoff.</div>
                 </div>
+              );
+            })()}
+            {bet === "props" && (
+              <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Player props — next up</div>
+                <div className="text-[11px] text-slate-400 mt-1 leading-snug">This is where passing / rushing / receiving yardage lines and the anytime-TD prices go, graded against the box scores the same way the touchdown board is. ESPN doesn't publish prop lines, so this needs an odds feed (The Odds API is the standard one — free tier covers a weekly pull). Say the word and it's the next build.</div>
               </div>
-            ))}
-            {history && !history.error && (
-              <div className="text-[9px] text-slate-400 mt-1 px-1">Buckets show hits/picks by predicted TD% — a calibrated model hits ~40% of its 30–45% picks, ~50% of its 45–60% picks, and so on.</div>
             )}
-          </>
-        ) : (
-          <>
-            {!board && <div className="p-6 text-center text-xs text-slate-400">Building this week's board…</div>}
+            {bet === "td" && (() => {
+              // Once Saturday's snapshot exists for this week, the board is LOCKED to it —
+              // graded against what's happened so far. The live recompute only shows pre-lock.
+              const locked = history && history.weeks ? history.weeks.find((w) => w.week === week) : null;
+              if (locked) {
+                const hits = locked.picks.filter((p) => p.hit).length, played = locked.picks.filter((p) => p.hit != null).length;
+                return (
+                  <>
+                    <div className="mb-2 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-3 py-2 flex items-center justify-between">
+                      <div><div className="text-[10px] font-extrabold tracking-widest uppercase">Week {week} board · locked</div><div className="text-[10px] opacity-70">Snapshotted before kickoff — this is what gets graded.</div></div>
+                      <div className="text-right"><div className="text-lg font-black tabular-nums leading-none">{hits}<span className="text-xs opacity-60">/{played}</span></div><div className="text-[9px] opacity-70">hit · {locked.expected} exp.</div></div>
+                    </div>
+                    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                      {locked.picks.map((p) => (
+                        <div key={p.rank + p.player} className={"px-3 py-2 flex items-center gap-2 " + (p.hit ? "bg-emerald-50/60 dark:bg-emerald-900/10" : "")}>
+                          <span className="w-5 text-xs font-extrabold text-slate-400 tabular-nums">{p.rank}</span>
+                          <div className="flex-1 min-w-0"><div className="text-[12px] font-extrabold text-slate-900 dark:text-white truncate">{p.player}</div><div className="text-[9px] text-slate-400">{p.team} vs {p.opp}{p.tds != null ? ` · ${p.tds} TD` : p.played ? "" : " · not yet played"}</div></div>
+                          <span className="text-[11px] font-bold tabular-nums text-slate-500">{Math.round((p.tdPct || 0) * 100)}%</span>
+                          <span className={"w-5 text-center text-base font-black " + (p.hit == null ? "text-slate-300" : p.hit ? "text-emerald-500" : "text-rose-400")}>{p.hit == null ? "·" : p.hit ? "✓" : "✗"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              }
+              return null;
+            })()}
+            {bet === "td" && !(history && history.weeks && history.weeks.find((w) => w.week === week)) && (
+              <>
+                {!board && <div className="p-6 text-center text-xs text-slate-400">Building this week's board…</div>}
             {board && !live && (
               <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
                 <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Board isn't live yet</div>
@@ -2421,9 +2454,34 @@ function TdBoardTab({ players, teams, onSelect }) {
                 <div><b>TD share</b> — the slice of his team's touchdowns he scored last season. Blends toward this season 12% per week.</div>
                 <div><b>Imp total</b> — points Vegas expects his team to score this week (from the spread and over/under). More points, more touchdowns to go around.</div>
                 <div><b>TD%</b> — expected touchdowns = (imp total × 0.105) × share × matchup, converted to the chance of at least one. That's the ranking.</div>
-                <div className="text-slate-400">Out / IR players and teams that already played this week are excluded. Questionable and doubtful are shown and flagged.</div>
+                <div className="text-slate-400">Out / IR players and teams that already played this week are excluded. Locks to a snapshot Saturday morning; that snapshot is what History grades.</div>
               </div>
             </div>
+              </>
+            )}
+            {bet === "td" && history && !history.error && history.weeks.filter((w) => w.week !== week).length > 0 && (
+              <div className="mt-4">
+                <div className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 mb-1.5">Past weeks</div>
+                {history.weeks.filter((w) => w.week !== week).map((w) => (
+                  <div key={w.week} className="mb-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div className="px-3 py-2 flex items-baseline justify-between border-b border-slate-100 dark:border-slate-800">
+                      <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100">Week {w.week} <span className="text-slate-400 font-semibold">· {w.picks.length} picks</span></div>
+                      {w.n > 0 && <div className="text-[11px] font-bold tabular-nums"><span className={w.hits >= w.expected ? "text-emerald-500" : "text-amber-500"}>{w.hits} hit</span> <span className="text-slate-400">/ {w.expected} expected</span></div>}
+                    </div>
+                    {w.n > 0 && (
+                      <div className="px-3 py-1.5 flex gap-1.5">
+                        {w.buckets.map((b) => (
+                          <div key={b.range} className="flex-1 text-center rounded-md bg-slate-50 dark:bg-slate-800 py-1">
+                            <div className="text-[8px] text-slate-400 font-semibold">{b.range}</div>
+                            <div className="text-[11px] font-extrabold tabular-nums text-slate-700 dark:text-slate-200">{b.n ? `${b.hits}/${b.n}` : "—"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -2489,6 +2547,34 @@ function MatchCard({ g, onClick }) {
         </div>
       )}
     </button>
+  );
+}
+
+// Team helmet: shell painted in the team's color, facemask in the alternate,
+// team logo as the side decal. `flip` mirrors it so two helmets face each other.
+function Helmet({ abbr, logo, color, alt, flip, style }) {
+  const shell = color || teamColor(abbr) || "#334155";
+  const mask = alt || TEAM_ALT[abbr] || "#e5e7eb";
+  return (
+    <svg viewBox="0 0 120 100" className="w-[74px] h-[62px]" style={{ ...style, transform: `${flip ? "scaleX(-1) " : ""}${style && style.transform ? style.transform : ""}`.trim() || undefined }}>
+      <defs>
+        <clipPath id={`hc-${abbr}-${flip ? "r" : "l"}`}><path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" /></clipPath>
+        <linearGradient id={`hg-${abbr}-${flip ? "r" : "l"}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.35" /><stop offset="45%" stopColor="#fff" stopOpacity="0.05" /><stop offset="100%" stopColor="#000" stopOpacity="0.3" />
+        </linearGradient>
+      </defs>
+      {/* shell */}
+      <path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" fill={shell} stroke="rgba(0,0,0,0.35)" strokeWidth="2" />
+      <path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" fill={`url(#hg-${abbr}-${flip ? "r" : "l"})`} />
+      {/* decal */}
+      {logo && <image href={logo} x="34" y="24" width="46" height="36" preserveAspectRatio="xMidYMid meet" clipPath={`url(#hc-${abbr}-${flip ? "r" : "l"})`} style={flip ? { transform: "scaleX(-1)", transformOrigin: "57px 42px" } : undefined} />}
+      {/* ear hole + facemask */}
+      <ellipse cx="34" cy="52" rx="7" ry="8" fill="rgba(0,0,0,0.45)" />
+      <path d="M96 56c8 4 12 12 10 20-2 7-9 11-18 12M90 62c6 3 9 8 8 13M84 68c5 2 8 5 8 9" fill="none" stroke={mask} strokeWidth="5" strokeLinecap="round" />
+      <path d="M60 78c12 3 24 4 34 2" fill="none" stroke={mask} strokeWidth="5" strokeLinecap="round" />
+      {/* chin strap */}
+      <path d="M44 70c6 6 14 9 22 9" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -2561,11 +2647,37 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   const catOf = (n) => fb && fb.cats.find((c) => String(c.name).toLowerCase() === n);
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-28" {...swipe}>
-      <style>{`@keyframes hrbNudge { 0% { transform: scale(1) } 35% { transform: scale(1.22) } 70% { transform: scale(0.96) } 100% { transform: scale(1) } } @keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
+      <style>{`
+        @keyframes hrbNudge { 0% { transform: scale(1) } 35% { transform: scale(1.22) } 70% { transform: scale(0.96) } 100% { transform: scale(1) } }
+        @keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+        /* helmets charge in, collide once, rock back, settle */
+        @keyframes hrbHitL {
+          0% { transform: translateX(-46px) rotate(-14deg) }
+          38% { transform: translateX(14px) rotate(4deg) }
+          46% { transform: translateX(10px) rotate(2deg) }
+          60% { transform: translateX(-6px) rotate(-3deg) }
+          100% { transform: translateX(0) rotate(0deg) }
+        }
+        @keyframes hrbHitR {
+          0% { transform: translateX(46px) rotate(14deg) }
+          38% { transform: translateX(-14px) rotate(-4deg) }
+          46% { transform: translateX(-10px) rotate(-2deg) }
+          60% { transform: translateX(6px) rotate(3deg) }
+          100% { transform: translateX(0) rotate(0deg) }
+        }
+        @keyframes hrbSpark { 0%, 30% { opacity: 0; transform: scale(0.4) } 40% { opacity: 1; transform: scale(1.15) } 65% { opacity: 0; transform: scale(1.5) } 100% { opacity: 0 } }
+        @keyframes hrbShake { 0%, 32% { transform: translateX(0) } 40% { transform: translateX(-3px) } 46% { transform: translateX(3px) } 52% { transform: translateX(-2px) } 60%, 100% { transform: translateX(0) } }
+      `}</style>
       <div className="px-4 pb-5 text-white" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <button onClick={onBack} className="text-sm font-semibold opacity-90">‹ Matchups</button>
           {total > 1 && <span className="text-[10px] font-bold opacity-70 tabular-nums">{index} / {total} · swipe</span>}
+        </div>
+        {/* helmets face off and collide once when the page opens */}
+        <div key={"hit-" + game.id} className="relative flex items-end justify-center gap-1 mb-1" style={{ animation: "hrbShake 1.1s ease-out 1" }}>
+          <Helmet abbr={g.away.abbr} logo={g.away.logo || TEAM_LOGOS[g.away.abbr]} color={awayColor} alt={g.away.altColor} style={{ animation: "hrbHitL 1.1s cubic-bezier(.2,.9,.3,1) 1" }} />
+          <span className="absolute left-1/2 -translate-x-1/2 bottom-6 text-2xl select-none pointer-events-none" style={{ animation: "hrbSpark 1.1s ease-out 1" }}>💥</span>
+          <Helmet abbr={g.home.abbr} logo={g.home.logo || TEAM_LOGOS[g.home.abbr]} color={homeColor} alt={g.home.altColor} flip style={{ animation: "hrbHitR 1.1s cubic-bezier(.2,.9,.3,1) 1" }} />
         </div>
         <div className="flex items-center justify-between">
           <Team t={g.away} />
