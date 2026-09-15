@@ -266,6 +266,9 @@ function useSwipe({ onLeft, onRight }) {
   };
 }
 // Spinning-football loader (the basketball app's bouncing ball, football edition)
+function GlobalPulseStyles() {
+  return <style>{`@keyframes hrbSoftPulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } }`}</style>;
+}
 function Loader({ label = "Loading" }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3" style={{ minHeight: "60vh" }}>
@@ -276,7 +279,7 @@ function Loader({ label = "Loading" }) {
   );
 }
 // One-time attention pulse (used on injury badges when a formation opens)
-const PULSE_CSS = `@keyframes hrbPulse { 0% { transform: translate(-50%,0) scale(1) } 40% { transform: translate(-50%,0) scale(1.18) } 100% { transform: translate(-50%,0) scale(1) } }`;
+const PULSE_CSS = `@keyframes hrbPulse { 0%, 100% { transform: translate(-50%,0) scale(1); opacity: 1 } 50% { transform: translate(-50%,0) scale(1.1); opacity: 0.72 } }`;
 
 // Position group for stat tiles / peer ranking
 function posGroup(pos) {
@@ -619,7 +622,8 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
     <span className="inline-flex flex-col items-start gap-0.5 min-w-0">
-      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
+      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}
+        style={{ animation: "hrbSoftPulse 1.8s ease-in-out infinite" }}>
         {label}
       </span>
 
@@ -685,7 +689,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     return (
       <span className={"absolute -top-2 left-1/2 px-1.5 rounded-full font-extrabold text-white bg-red-600 border-2 border-white shadow whitespace-nowrap flex items-center justify-center " +
         (small ? "h-[13px] text-[6px] " : "h-[15px] text-[7px] ")}
-        style={{ transform: "translate(-50%,0)", animation: "hrbPulse 0.7s ease-out 0.5s 2" }}>
+        style={{ transform: "translate(-50%,0)", animation: "hrbPulse 1.8s ease-in-out infinite" }}>
         {txt}
       </span>
     );
@@ -1764,7 +1768,14 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         <div className={"grid gap-2 " + (seg === "roster" && unit ? "grid-cols-4" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
-            const pts = teamPts(team, started);
+            // Live points: box scores (including in-progress games) beat the
+            // season feed, which only updates after games go final.
+            const pts = (() => {
+              const base = teamPts(team, started);
+              const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, abbr)) : null;
+              if (bx && bx[1] && (bx[1].pf != null || bx[1].pa != null)) return { pf: bx[1].pf ?? base.pf, pa: bx[1].pa ?? base.pa };
+              return base;
+            })();
             const sx = team.stx || {}; // per-team stats merged from /api/standings
             // Rank line under each stat: top 10 green, 11-20 yellow, bottom 12 red.
             // (Passed as {label, cls} — the format Tile's sub actually renders;
@@ -2550,34 +2561,6 @@ function MatchCard({ g, onClick }) {
   );
 }
 
-// Team helmet: shell painted in the team's color, facemask in the alternate,
-// team logo as the side decal. `flip` mirrors it so two helmets face each other.
-function Helmet({ abbr, logo, color, alt, flip, style }) {
-  const shell = color || teamColor(abbr) || "#334155";
-  const mask = alt || TEAM_ALT[abbr] || "#e5e7eb";
-  return (
-    <svg viewBox="0 0 120 100" className="w-[74px] h-[62px]" style={{ ...style, transform: `${flip ? "scaleX(-1) " : ""}${style && style.transform ? style.transform : ""}`.trim() || undefined }}>
-      <defs>
-        <clipPath id={`hc-${abbr}-${flip ? "r" : "l"}`}><path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" /></clipPath>
-        <linearGradient id={`hg-${abbr}-${flip ? "r" : "l"}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.35" /><stop offset="45%" stopColor="#fff" stopOpacity="0.05" /><stop offset="100%" stopColor="#000" stopOpacity="0.3" />
-        </linearGradient>
-      </defs>
-      {/* shell */}
-      <path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" fill={shell} stroke="rgba(0,0,0,0.35)" strokeWidth="2" />
-      <path d="M18 46C18 24 38 10 62 10c26 0 40 15 40 34 0 9-3 15-8 19l-30 4c-24 0-46-8-46-21z" fill={`url(#hg-${abbr}-${flip ? "r" : "l"})`} />
-      {/* decal */}
-      {logo && <image href={logo} x="34" y="24" width="46" height="36" preserveAspectRatio="xMidYMid meet" clipPath={`url(#hc-${abbr}-${flip ? "r" : "l"})`} style={flip ? { transform: "scaleX(-1)", transformOrigin: "57px 42px" } : undefined} />}
-      {/* ear hole + facemask */}
-      <ellipse cx="34" cy="52" rx="7" ry="8" fill="rgba(0,0,0,0.45)" />
-      <path d="M96 56c8 4 12 12 10 20-2 7-9 11-18 12M90 62c6 3 9 8 8 13M84 68c5 2 8 5 8 9" fill="none" stroke={mask} strokeWidth="5" strokeLinecap="round" />
-      <path d="M60 78c12 3 24 4 34 2" fill="none" stroke={mask} strokeWidth="5" strokeLinecap="round" />
-      {/* chin strap */}
-      <path d="M44 70c6 6 14 9 22 9" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 // ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
 function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   const [d, setD] = useState(null);
@@ -2610,7 +2593,8 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   };
   const Team = ({ t }) => (
     <button onClick={() => setFocus(focus === t.abbr ? null : t.abbr)} className={"flex flex-col items-center gap-1 rounded-2xl px-2 py-1 " + (focus === t.abbr ? "bg-white/20 ring-2 ring-white/70" : "")}>
-      <img key={focus === t.abbr ? "on" : "off"} src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-12 h-12 rounded-full bg-white object-contain" style={focus === t.abbr ? { animation: "hrbNudge 0.45s ease-out 1" } : undefined} />
+      <img key={focus === t.abbr ? "on" : "off"} src={t.logo || TEAM_LOGOS[t.abbr] || ""} alt="" className="w-14 h-14 rounded-full bg-white object-contain shadow-lg"
+        style={focus === t.abbr ? { animation: "hrbNudge 0.45s ease-out 1" } : { animation: `${t.abbr === g.away.abbr ? "hrbHitL" : "hrbHitR"} 0.9s cubic-bezier(.2,.85,.3,1) 1` }} />
       <div className="text-sm font-extrabold text-white">{t.abbr}</div>
       {t.record && <div className="text-[10px] text-white/70 tabular-nums">{t.record}</div>}
     </button>
@@ -2651,34 +2635,26 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
         @keyframes hrbNudge { 0% { transform: scale(1) } 35% { transform: scale(1.22) } 70% { transform: scale(0.96) } 100% { transform: scale(1) } }
         @keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
         /* helmets charge in, collide once, rock back, settle */
+        /* logos charge toward each other, meet, and settle — once, on open */
         @keyframes hrbHitL {
-          0% { transform: translateX(-46px) rotate(-14deg) }
-          38% { transform: translateX(14px) rotate(4deg) }
-          46% { transform: translateX(10px) rotate(2deg) }
-          60% { transform: translateX(-6px) rotate(-3deg) }
-          100% { transform: translateX(0) rotate(0deg) }
+          0% { transform: translateX(-28px) scale(0.86); opacity: 0 }
+          45% { transform: translateX(10px) scale(1.06); opacity: 1 }
+          70% { transform: translateX(-3px) scale(0.99) }
+          100% { transform: translateX(0) scale(1) }
         }
         @keyframes hrbHitR {
-          0% { transform: translateX(46px) rotate(14deg) }
-          38% { transform: translateX(-14px) rotate(-4deg) }
-          46% { transform: translateX(-10px) rotate(-2deg) }
-          60% { transform: translateX(6px) rotate(3deg) }
-          100% { transform: translateX(0) rotate(0deg) }
+          0% { transform: translateX(28px) scale(0.86); opacity: 0 }
+          45% { transform: translateX(-10px) scale(1.06); opacity: 1 }
+          70% { transform: translateX(3px) scale(0.99) }
+          100% { transform: translateX(0) scale(1) }
         }
-        @keyframes hrbSpark { 0%, 30% { opacity: 0; transform: scale(0.4) } 40% { opacity: 1; transform: scale(1.15) } 65% { opacity: 0; transform: scale(1.5) } 100% { opacity: 0 } }
-        @keyframes hrbShake { 0%, 32% { transform: translateX(0) } 40% { transform: translateX(-3px) } 46% { transform: translateX(3px) } 52% { transform: translateX(-2px) } 60%, 100% { transform: translateX(0) } }
       `}</style>
       <div className="px-4 pb-5 text-white" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-center justify-between mb-1">
           <button onClick={onBack} className="text-sm font-semibold opacity-90">‹ Matchups</button>
           {total > 1 && <span className="text-[10px] font-bold opacity-70 tabular-nums">{index} / {total} · swipe</span>}
         </div>
-        {/* helmets face off and collide once when the page opens */}
-        <div key={"hit-" + game.id} className="relative flex items-end justify-center gap-1 mb-1" style={{ animation: "hrbShake 1.1s ease-out 1" }}>
-          <Helmet abbr={g.away.abbr} logo={g.away.logo || TEAM_LOGOS[g.away.abbr]} color={awayColor} alt={g.away.altColor} style={{ animation: "hrbHitL 1.1s cubic-bezier(.2,.9,.3,1) 1" }} />
-          <span className="absolute left-1/2 -translate-x-1/2 bottom-6 text-2xl select-none pointer-events-none" style={{ animation: "hrbSpark 1.1s ease-out 1" }}>💥</span>
-          <Helmet abbr={g.home.abbr} logo={g.home.logo || TEAM_LOGOS[g.home.abbr]} color={homeColor} alt={g.home.altColor} flip style={{ animation: "hrbHitR 1.1s cubic-bezier(.2,.9,.3,1) 1" }} />
-        </div>
+
         <div className="flex items-center justify-between">
           <Team t={g.away} />
           <div className="text-center">
@@ -2793,7 +2769,8 @@ export default function App() {
   const [players, setPlayers] = useState(null);
   const [teams, setTeams] = useState([]);
   const [stand, setStand] = useState(null); // records + stat ranks from /api/standings
-  const [nflWeek, setNflWeek] = useState(null); // current week, for the bottom-nav label
+  const [nflWeek, setNflWeek] = useState(null);
+  const [, setInjEspnTick] = useState(0); // current week, for the bottom-nav label
   const [seasonStats, setSeasonStats] = useState(null); // ESPN box-score aggregation (/api/season-stats)
 
   // Automated records/stats: merge ESPN data into the Airtable teams by abbr.
@@ -2879,7 +2856,7 @@ export default function App() {
     const loadInj = () => fetch("/api/injuries").then((r) => r.json()).then((d) => {
       for (const k of Object.keys(INJ_ESPN)) delete INJ_ESPN[k];
       Object.assign(INJ_ESPN, (d && d.injuries) || {});
-      setNflWeek((w) => w); // nudge a render
+      setInjEspnTick((t) => t + 1); // force a re-render so notes pick up the detail
     }).catch(() => {});
     loadInj();
     const t = setInterval(loadInj, 10 * 60 * 1000);
@@ -2916,6 +2893,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
+      <GlobalPulseStyles />
       {error && (
         <div className="m-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-2xl px-4 py-3">
           Couldn't load data: {error}
