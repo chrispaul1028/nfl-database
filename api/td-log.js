@@ -1,5 +1,6 @@
 // /api/td-log — snapshot this week's TD board (top 25) into Airtable "TD Log".
-// Runs Saturday morning via cron (before Sunday kickoffs) and can be triggered
+// Runs Thursday morning via cron — before Thursday Night Football, so TNF
+// players are in the graded board — and can also be triggered
 // by visiting the URL. Idempotent: a week is only written once.
 //
 // Airtable table "TD Log" (create it once) with fields:
