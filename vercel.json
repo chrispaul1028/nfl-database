@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/td-log",
-      "schedule": "0 14 * * 6"
+      "schedule": "0 14 * * 4"
     }
   ],
   "functions": {
