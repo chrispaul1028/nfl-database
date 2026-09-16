@@ -1036,8 +1036,9 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             <div className="flex flex-wrap justify-around gap-x-3 gap-y-0.5 mt-1">
               {(() => {
                 const counts = {};
-                for (const b of bench) { const k = (baseOf(b) && norm(baseOf(b))) || String(b.pos || "").toUpperCase() || "?"; counts[k] = (counts[k] || 0) + 1; }
-                return Object.entries(counts).map(([k, n]) => <span key={k} className="text-[9px] font-bold text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{POS_FULL[k] || k} ({n})</span>);
+                // Group by the Position field from Airtable, shown as its abbreviation
+                for (const b of bench) { const k = String(b.pos || "").toUpperCase().trim() || (baseOf(b) && norm(baseOf(b))) || "?"; counts[k] = (counts[k] || 0) + 1; }
+                return Object.entries(counts).map(([k, n]) => <span key={k} className="text-[9px] font-bold text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{k} ({n})</span>);
               })()}
             </div>
           </div>
@@ -2184,6 +2185,7 @@ function TdBoardTab({ players, teams, onSelect }) {
   const [digest, setDigest] = useState(null);       // { week, stats, games }
   const [history, setHistory] = useState(null);
   const [bet, setBet] = useState("ml"); // ml | td | props
+  const [nextSb, setNextSb] = useState(null); // next week's board, for lines once this week ends
   const season = new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1;
   useEffect(() => {
     if (seg !== "digest") return;
@@ -2196,6 +2198,14 @@ function TdBoardTab({ players, teams, onSelect }) {
     ]).then(([stats, games]) => { if (alive) setDigest({ week: w, stats, games }); });
     return () => { alive = false; };
   }, [seg, digestWeek, sb?.week]);
+  // Lines disappear from a game once it's final, so when the slate is done we
+  // pull the following week to keep the Moneyline tab useful.
+  useEffect(() => {
+    if (!sb || !sb.games || !sb.games.length) return;
+    const allDone = sb.games.every((g) => g.state === "post");
+    if (!allDone || nextSb) return;
+    fetch(`/api/scoreboard?week=${(sb.week || 1) + 1}`).then((r) => r.json()).then((d) => { if (d && d.games) setNextSb(d); }).catch(() => {});
+  }, [sb, nextSb]);
   useEffect(() => {
     if (history) return;
     fetch(`/api/td-history?season=${season}`).then((r) => r.json()).then(setHistory).catch(() => setHistory({ weeks: [], error: "unreachable" }));
@@ -2348,13 +2358,17 @@ function TdBoardTab({ players, teams, onSelect }) {
             {bet === "ml" && (() => {
               // American odds -> implied win probability (vig included)
               const prob = (ml) => (ml == null ? null : ml < 0 ? (-ml) / (-ml + 100) : 100 / (ml + 100));
-              const games = (sb?.games || []).filter((g) => g.odds && (g.odds.homeML != null || g.odds.awayML != null || g.odds.details));
+              const withOdds = (d) => (d?.games || []).filter((g) => g.odds && (g.odds.homeML != null || g.odds.awayML != null || g.odds.details));
+              const thisWk = withOdds(sb), nextWk = withOdds(nextSb);
+              const useNext = thisWk.filter((g) => g.state !== "post").length === 0 && nextWk.length > 0;
+              const games = useNext ? nextWk : thisWk;
+              const shownWeek = useNext ? (nextSb.week || (sb.week || 1) + 1) : (sb?.week || week);
               if (!sb) return <Loader label="Loading lines" />;
-              if (!games.length) return <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-center text-xs text-slate-400">No lines posted for this week yet.</div>;
+              if (!games.length) return <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 text-center text-xs text-slate-400">No lines posted yet — books usually hang the next week's numbers by Monday night.</div>;
               const fmtML = (ml) => (ml == null ? "—" : ml > 0 ? "+" + ml : String(ml));
               return (
                 <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60 text-[9px] font-semibold tracking-widest uppercase text-slate-400"><span>Game</span><span className="w-12 text-right">ML</span><span className="w-10 text-right">Win%</span><span className="w-12 text-right">Spread</span></div>
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60 text-[9px] font-semibold tracking-widest uppercase text-slate-400"><span>Week {shownWeek}</span><span className="w-12 text-right">ML</span><span className="w-10 text-right">Win%</span><span className="w-12 text-right">Spread</span></div>
                   {games.map((g) => {
                     const o = g.odds; const pa = prob(o.awayML), ph = prob(o.homeML);
                     const norm = pa != null && ph != null ? pa + ph : null;
