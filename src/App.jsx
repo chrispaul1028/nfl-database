@@ -2399,7 +2399,8 @@ function TdBoardTab({ players, teams, onSelect }) {
               </div>
             )}
             {bet === "td" && (() => {
-              // Once Saturday's snapshot exists for this week, the board is LOCKED to it —
+              // Once the Thursday-morning snapshot exists for this week, the board is
+              // LOCKED to it —
               // graded against what's happened so far. The live recompute only shows pre-lock.
               const locked = history && history.weeks ? history.weeks.find((w) => w.week === week) : null;
               if (locked) {
@@ -2497,7 +2498,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                 <div><b>TD share</b> — the slice of his team's touchdowns he scored last season. Blends toward this season 12% per week.</div>
                 <div><b>Imp total</b> — points Vegas expects his team to score this week (from the spread and over/under). More points, more touchdowns to go around.</div>
                 <div><b>TD%</b> — expected touchdowns = (imp total × 0.105) × share × matchup, converted to the chance of at least one. That's the ranking.</div>
-                <div className="text-slate-400">Out / IR players and teams that already played this week are excluded. Locks to a snapshot Saturday morning; that snapshot is what History grades.</div>
+                <div className="text-slate-400">Out / IR players and teams that already played this week are excluded. Locks Thursday morning, before Thursday night kickoff; that snapshot is what History grades.</div>
               </div>
             </div>
               </>
