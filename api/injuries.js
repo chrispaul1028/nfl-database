@@ -18,6 +18,18 @@ export default async function handler(req, res) {
         };
       }
     }
+    // /api/injuries?debug=1 shows how many records actually carry a return date,
+    // and ?find=<name> dumps one player's raw ESPN record.
+    if (req.query?.debug || req.query?.find) {
+      const all = Object.entries(out);
+      const find = String(req.query.find || "").toLowerCase();
+      return res.status(200).json({
+        total: all.length,
+        withReturnDate: all.filter(([, v]) => v.returnDate).length,
+        sampleWithDate: all.filter(([, v]) => v.returnDate).slice(0, 10).map(([id, v]) => ({ id, name: v.name, status: v.status, returnDate: v.returnDate })),
+        match: find ? all.filter(([, v]) => String(v.name).toLowerCase().includes(find)).map(([id, v]) => ({ id, ...v })) : undefined,
+      });
+    }
     res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
     return res.status(200).json({ updatedAt: new Date().toISOString(), count: Object.keys(out).length, injuries: out });
   } catch (e) {
