@@ -26,6 +26,7 @@ const FIELDS = {
   playerStatus: ["Status", "Player Status", "Availability"],
   player2K: ["Madden Rating", "Madden", "Madden Overall", "OVR", "Madden 26 Rating", "Overall"],
   playerInjury: ["Injury Notes", "Injury Note", "Injury", "Injury Status", "Injury Report"],
+  playerEstReturn: ["Est Return", "Estimated Return", "Return Date", "Expected Return"],
   playerPhoto: ["Photo", "Headshot", "Headshots", "Player Photo", "Image", "Img", "Pic", "Picture", "Attachment", "Attachments"],
   playerHeight: ["Height"],
   playerWeight: ["Weight"],
@@ -386,6 +387,9 @@ export default async function handler(req, res) {
         status: asText(getField(p.fields, FIELDS.playerStatus)),
         rating2k: coerceNum(getField(p.fields, FIELDS.player2K)),
         injuryNotes: asText(getField(p.fields, FIELDS.playerInjury)),
+        // Manual override: ESPN leaves returnDate blank for most players, so an
+        // "Est Return" date field in Airtable wins when you fill one in.
+        estReturn: asText(getField(p.fields, FIELDS.playerEstReturn)) || null,
         photo: photoUrl(getField(p.fields, FIELDS.playerPhoto)) || findAnyPhoto(p.fields),
         height: asText(getField(p.fields, FIELDS.playerHeight)),
         weight: asText(getField(p.fields, FIELDS.playerWeight)),
