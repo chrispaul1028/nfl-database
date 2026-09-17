@@ -61,6 +61,20 @@ const teamColorSafe = (a) => { try { return teamColor(a) || "#334155"; } catch {
 // Logo chips sit on the team's own color instead of plain white, the way the
 // matchup header does. Dark colors get a subtle top gloss so the mark reads.
 // Luminance of a hex color, 0 (black) to 1 (white)
+// Is the app currently rendering dark? Inline styles can't use Tailwind's
+// dark: variant, so team colors have to be computed.
+function useDark() {
+  const [dark, setDark] = useState(() => typeof window !== "undefined" && window.matchMedia
+    && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const on = (e) => setDark(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on); };
+  }, []);
+  return dark;
+}
 const lumOf = (hex) => {
   const h = String(hex || "").replace("#", "");
   if (h.length !== 6) return 0.5;
@@ -77,6 +91,13 @@ const shade = (hex, pct) => {
     return Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
   });
   return "#" + v.join("");
+};
+// The readable version of a team color for the current theme: dark navies get
+// lifted on dark backgrounds, pale golds get deepened on light ones.
+const teamInk = (abbr, dark) => {
+  const c = teamColorSafe(abbr), l = lumOf(c);
+  if (dark) return l < 0.34 ? shade(c, 34 - l * 100) : c;
+  return l > 0.68 ? shade(c, -(l * 100 - 55)) : c;
 };
 // ESPN publishes a light "dark-background" mark for every team. Giants, Jets,
 // Rams and friends vanish on their own navy without it.
@@ -185,10 +206,12 @@ function ordinal(n) {
   return n + suffix;
 }
 
-function Tile({ value, label, sub, accent, valueClass, compact }) {
+function Tile({ value, label, sub, accent, valueClass, compact, tint }) {
   return (
-    <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}>
-      <div className={"font-semibold text-slate-400 tracking-widest uppercase mb-1 " + (compact ? "text-[8px]" : "text-[10px]")}>{label}</div>
+    <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}
+      style={tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined}>
+      <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
+        style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}</div>
       <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}</div>
       {sub && (
         <div className={"text-[10px] font-bold mt-0.5 " + (typeof sub === "object" && sub.cls ? sub.cls : "text-blue-600 dark:text-blue-400")}>
@@ -626,7 +649,7 @@ function photoOf(p, teamAbbr) {
 // type from Sleeper (instant); return date from ESPN when the team gave one.
 function InjuryLine({ p }) {
   const abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
-  if (!injHasFlag(p, abbr)) return p.injuryNotes ? <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full">{p.injuryNotes}</div> : null;
+  if (!injHasFlag(p, abbr)) return p.injuryNotes ? <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full lowercase">({p.injuryNotes})</div> : null;
   const d = injuryDetail(p, abbr);
   if (!d) return null;
   return <div className="mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2.5 py-0.5 inline-block max-w-full truncate">{d.text}</div>;
@@ -1152,12 +1175,14 @@ function injuryDetail(p, abbr) {
   } else if (inj && (inj.injury_body_part || inj.injury_notes)) {
     label = [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" ");
   }
-  label = label.replace(/\s+/g, " ").trim();
-  if (label) label = label[0].toUpperCase() + label.slice(1).toLowerCase().replace(/\bacl\b/g, "ACL").replace(/\bmcl\b/g, "MCL").replace(/\bpcl\b/g, "PCL").replace(/\bir\b/g, "IR");
-  const ret = e && e.returnDate ? new Date(e.returnDate) : null;
-  const retTxt = ret && !isNaN(ret) ? ret.toLocaleDateString([], { month: "short", day: "numeric" }) : null;
+  label = label.replace(/\s+/g, " ").trim().toLowerCase();
+  // Airtable's "Est Return" wins when ESPN hasn't published a date of its own.
+  const raw = (e && e.returnDate) || p.estReturn || null;
+  const ret = raw ? new Date(raw) : null;
+  const retTxt = ret && !isNaN(ret) ? ret.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase() : null;
   if (!label && !retTxt) return null;
-  return { label, retTxt, text: (label || "Injury") + (retTxt ? ` (Est. return ${retTxt})` : "") };
+  const inner = [label || "injury", retTxt ? `est. return ${retTxt}` : null].filter(Boolean).join(" · ");
+  return { label, retTxt, text: `(${inner})` };
 }
 
 function TeamPill({ team }) {
@@ -1195,6 +1220,7 @@ function PlayersHub({ players, onSelect }) {
 
 function PlayersTab({ players, onSelect, pills, forceInj }) {
   const [q, setQ] = useState("");
+  const dark = useDark();
   const injOnly = !!forceInj;
   const list = useMemo(
     () => players
@@ -1211,8 +1237,10 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
-            <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
-              <span className="w-7 text-center text-[11px] font-extrabold text-slate-400 uppercase shrink-0">{p.pos || "—"}</span>
+            <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
+              style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { borderLeft: `3px solid ${teamInk(a, dark)}${dark ? "66" : "33"}` } : undefined; })()}>
+              <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
+                style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); if (!a) return undefined; const c = teamInk(a, dark); return { color: c, backgroundColor: c + (dark ? "2e" : "1a") }; })()}>{p.pos || "—"}</span>
               <Avatar p={p} />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -1475,6 +1503,7 @@ function TeamsTab({ teams, players, onSelect }) {
       : winPct(b) - winPct(a) || (b.wins ?? 0) - (a.wins ?? 0)
   );
   const pickConf = (k) => { setConf(k); setDiv(null); };
+  const dark = useDark();
   return (
     <div>
       <div className="px-4 pb-28" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
@@ -1503,7 +1532,7 @@ function TeamsTab({ teams, players, onSelect }) {
         <div className="space-y-2 mt-4">
           {list.map((t) => {
             const abbr = t.abbr || toAbbr(t.name);
-            const bg = teamColorSafe(abbr);
+            const bg = teamInk(abbr, dark);
             // light shells (Chargers powder, Packers gold) need dark type
             const ink = lumOf(bg) > 0.62 ? "#0f172a" : "#ffffff";
             const sub = lumOf(bg) > 0.62 ? "rgba(15,23,42,0.6)" : "rgba(255,255,255,0.72)";
@@ -1755,6 +1784,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
     return t && (t === abbr || String(p.teamName).toLowerCase() === String(team.name).toLowerCase());
   });
   const payroll = roster.reduce((a, p) => a + currentSalary(p), 0);
+  const dark = useDark();
+  const ink = teamInk(abbr, dark);            // readable on the current theme
+  const tint = (a) => ink + a;                // team-tinted fill
 
   // Offense absorbs the offensive line, Defense absorbs the defensive line;
   // Special Teams stays its own section for when that depth chart is filled in.
@@ -1768,7 +1800,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
-      <div className="px-5 pb-6 text-white" style={{ backgroundColor: teamColor(abbr), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+      <div className="px-5 pb-6 text-white" style={{ backgroundColor: ink, paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
@@ -1901,11 +1933,11 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             const diff = pts.pf != null && pts.pa != null ? Math.round(pts.pf - pts.pa) : null;
             return (
               <>
-                <Tile value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored"
+                <Tile tint={ink} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored"
                   sub={team.ppg != null ? team.ppg.toFixed(1) + "/gm" : null} />
-                <Tile value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed"
+                <Tile tint={ink} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed"
                   sub={team.oppPpg != null ? team.oppPpg.toFixed(1) + "/gm" : null} />
-                <Tile value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff"
+                <Tile tint={ink} value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff"
                   valueClass={diff == null ? null : diff > 0 ? "text-emerald-600 dark:text-emerald-400" : diff < 0 ? "text-red-600 dark:text-red-400" : null} />
               </>
             );
@@ -1918,7 +1950,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
                 ? "text-white"
                 : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
-              style={seg === k ? { backgroundColor: teamColor(abbr) } : undefined}>
+              style={seg === k ? { backgroundColor: ink } : undefined}>
               {lbl}
             </button>
           ))}
@@ -1931,7 +1963,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold transition-colors " + (rosterView === k
                   ? "text-white"
                   : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
-                style={rosterView === k ? { backgroundColor: teamColor(abbr) } : undefined}>
+                style={rosterView === k ? { backgroundColor: ink } : undefined}>
                 {lbl}
               </button>
             ))}
@@ -1964,9 +1996,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               })()
                 .map((p) => (
                   <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
-                    style={{ borderLeft: `3px solid ${teamColorSafe(abbr)}33` }}>
+                    style={{ borderLeft: `3px solid ${tint(dark ? "66" : "33")}` }}>
                     <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
-                      style={{ color: teamColorSafe(abbr), backgroundColor: teamColorSafe(abbr) + "1a" }}>{p.sortLabel || p.pos || "—"}</span>
+                      style={{ color: ink, backgroundColor: tint(dark ? "2e" : "1a") }}>{p.sortLabel || p.pos || "—"}</span>
                     <Avatar p={p} />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -1985,8 +2017,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                                 // fixed height + no label wrap, so "RUSH YDS" can't push its
                                 // number a line lower than the tiles beside it
                                 <span key={k} className="w-[52px] h-[38px] flex flex-col items-center justify-center rounded-md border"
-                                  style={{ backgroundColor: teamColorSafe(abbr) + "14", borderColor: teamColorSafe(abbr) + "33" }}>
-                                  <span className="block text-[7px] font-bold tracking-wide uppercase leading-none whitespace-nowrap" style={{ color: teamColorSafe(abbr), opacity: 0.85 }}>{lbl}</span>
+                                  style={{ backgroundColor: tint(dark ? "24" : "14"), borderColor: tint(dark ? "59" : "33") }}>
+                                  <span className="block text-[7px] font-bold tracking-wide uppercase leading-none whitespace-nowrap" style={{ color: ink, opacity: dark ? 1 : 0.85 }}>{lbl}</span>
                                   <span className="block text-[13px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-none mt-1">{G && G[k] != null ? G[k] : "—"}</span>
                                 </span>
                               ))}
@@ -1995,7 +2027,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                         })()}
                       </span>
                       {/* row 3: the detailed note, directly under the tag, nothing blocking it */}
-                      {(() => { const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null; return d ? <span className="block text-[11px] font-semibold text-rose-500 mt-1">{d.text}</span> : (p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 mt-1">{p.injuryNotes}</span> : null); })()}
+                      {(() => { const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null; return d ? <span className="block text-[11px] font-semibold text-rose-500 mt-1">{d.text}</span> : (p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 mt-1 lowercase">({p.injuryNotes})</span> : null); })()}
                     </span>
                   </button>
                 ))}
