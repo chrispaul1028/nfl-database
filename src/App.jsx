@@ -1974,18 +1974,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                       </span>
                       {/* row 2: injury tag on the left, per-game tiles on the right */}
                       <span className="flex items-center gap-2 mt-1.5">
-                        <span className="min-w-0 flex-1"><LiveStatus p={p} team={abbr} /></span>
+                        <span className="min-w-0 flex-1 self-center"><LiveStatus p={p} team={abbr} /></span>
                         {(() => {
                           const grp = posGroup(p.pos), S = playerSeasonRow(p, seasonStats);
                           if (!grp) return null;
                           const G = S && S.totals && S.totals.gp ? S.perGame : null;
                           return (
-                            <span className="flex gap-1 shrink-0">
+                            <span className="flex gap-1 shrink-0 items-stretch">
                               {STAT_TILES[grp].map(([lbl, k]) => (
-                                <span key={k} className="w-[42px] text-center rounded-md py-1 border"
+                                // fixed height + no label wrap, so "RUSH YDS" can't push its
+                                // number a line lower than the tiles beside it
+                                <span key={k} className="w-[52px] h-[38px] flex flex-col items-center justify-center rounded-md border"
                                   style={{ backgroundColor: teamColorSafe(abbr) + "14", borderColor: teamColorSafe(abbr) + "33" }}>
-                                  <span className="block text-[7px] font-bold tracking-wider uppercase leading-none" style={{ color: teamColorSafe(abbr), opacity: 0.85 }}>{lbl}</span>
-                                  <span className="block text-[12px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-tight mt-0.5">{G && G[k] != null ? G[k] : "—"}</span>
+                                  <span className="block text-[7px] font-bold tracking-wide uppercase leading-none whitespace-nowrap" style={{ color: teamColorSafe(abbr), opacity: 0.85 }}>{lbl}</span>
+                                  <span className="block text-[13px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-none mt-1">{G && G[k] != null ? G[k] : "—"}</span>
                                 </span>
                               ))}
                             </span>
