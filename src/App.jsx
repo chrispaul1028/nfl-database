@@ -67,15 +67,26 @@ const lumOf = (hex) => {
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
+// Nudge a hex lighter (+) or darker (−) by a percentage — used for the subtle
+// gradient on team-colored rows.
+const shade = (hex, pct) => {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return hex;
+  const v = [0, 2, 4].map((i) => {
+    const n = parseInt(h.slice(i, i + 2), 16) + Math.round(255 * (pct / 100));
+    return Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
+  });
+  return "#" + v.join("");
+};
 // ESPN publishes a light "dark-background" mark for every team. Giants, Jets,
 // Rams and friends vanish on their own navy without it.
 const darkLogo = (abbr) => (abbr ? `https://a.espncdn.com/i/teamlogos/nfl/500-dark/${String(abbr).toLowerCase()}.png` : null);
 const logoFor = (abbr, fallback, onDark) => (onDark && abbr ? darkLogo(abbr) : (fallback || TEAM_LOGOS[abbr] || null));
 // White disc keeps every mark legible (they're drawn for white); identity comes
 // from a team-color ring with an alternate-color hairline inside it.
-const logoChip = (abbr) => ({
+const logoChip = (abbr, onColor) => ({
   background: "#ffffff",
-  boxShadow: `0 0 0 2px ${teamColorSafe(abbr)}, 0 0 0 3.5px ${TEAM_ALT[abbr] || "rgba(255,255,255,0.9)"}`,
+  boxShadow: `0 0 0 2.5px ${TEAM_ALT[abbr] || teamColorSafe(abbr)}${onColor ? ", 0 0 0 4px rgba(255,255,255,0.55)" : ""}`,
 });
 const teamColor = (abbr) => TEAM_COLORS[String(abbr).toUpperCase()] || "#334155";
 // Current-team color first; falls back to the contract team if no current team.
@@ -1466,9 +1477,8 @@ function TeamsTab({ teams, players, onSelect }) {
   const pickConf = (k) => { setConf(k); setDiv(null); };
   return (
     <div>
-      <ListHeader title="Teams" q={q} setQ={setQ} noSearch />
-      <div className="px-4 pb-28">
-        <div className="flex gap-2 mt-4">
+      <div className="px-4 pb-28" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+        <div className="flex gap-2 mt-1">
           {[["all", "All"], ["afc", "AFC"], ["nfc", "NFC"]].map(([k, lbl]) => (
             <button key={k} onClick={() => pickConf(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (conf === k
@@ -1490,19 +1500,24 @@ function TeamsTab({ teams, players, onSelect }) {
             ))}
           </div>
         )}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden mt-4">
+        <div className="space-y-2 mt-4">
           {list.map((t) => {
             const abbr = t.abbr || toAbbr(t.name);
+            const bg = teamColorSafe(abbr);
+            // light shells (Chargers powder, Packers gold) need dark type
+            const ink = lumOf(bg) > 0.62 ? "#0f172a" : "#ffffff";
+            const sub = lumOf(bg) > 0.62 ? "rgba(15,23,42,0.6)" : "rgba(255,255,255,0.72)";
             return (
-              <button key={t.id} onClick={() => onSelect(t)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
+              <button key={t.id} onClick={() => onSelect(t)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-2xl shadow-sm active:opacity-90 transition-opacity"
+                style={{ background: `linear-gradient(100deg, ${bg} 0%, ${bg} 62%, ${shade(bg, -14)} 100%)`, color: ink }}>
                 {t.logo ? (
-                  <img src={t.logo} alt="" className="w-11 h-11 rounded-full object-contain p-1 shrink-0" style={logoChip(t.abbr || toAbbr(t.name))} />
+                  <img src={t.logo} alt="" className="w-11 h-11 rounded-full object-contain p-1 shrink-0" style={logoChip(abbr, true)} />
                 ) : (
-                  <span className="w-11 h-11 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }} />
+                  <span className="w-11 h-11 rounded-full shrink-0 bg-white/90" />
                 )}
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{t.name}</span>
-                  <span className="block text-[11px] text-slate-400 font-medium truncate">
+                  <span className="block text-sm font-extrabold truncate">{t.name}</span>
+                  <span className="block text-[11px] font-semibold truncate" style={{ color: sub }}>
                     {t.division ? (divRank[t.id] ? `${divRank[t.id]} in ${t.division}` : t.division) : "—"}
                   </span>
                 </span>
@@ -1510,8 +1525,8 @@ function TeamsTab({ teams, players, onSelect }) {
                   <span className="flex gap-2.5 shrink-0">
                     {(() => { const r = teamRec(t, seasonStarted(teams)); return [["W", r.w], ["L", r.l], ...(r.t > 0 ? [["T", r.t]] : [])]; })().map(([lbl, v]) => (
                       <span key={lbl} className="w-7 text-center">
-                        <span className="block text-[8px] font-bold text-slate-400 uppercase">{lbl}</span>
-                        <span className="block text-xs font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{v}</span>
+                        <span className="block text-[8px] font-bold uppercase" style={{ color: sub }}>{lbl}</span>
+                        <span className="block text-sm font-black tabular-nums">{v}</span>
                       </span>
                     ))}
                   </span>
@@ -1741,12 +1756,15 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   });
   const payroll = roster.reduce((a, p) => a + currentSalary(p), 0);
 
+  // Offense absorbs the offensive line, Defense absorbs the defensive line;
+  // Special Teams stays its own section for when that depth chart is filled in.
+  const SECTION_OF = { "Offense": "Offense", "Offensive Line": "Offense", "Defense": "Defense", "Defensive Line": "Defense", "Special Teams": "Special Teams" };
   const groups = {};
   for (const p of roster) {
-    const role = unitOf(p);
+    const role = SECTION_OF[unitOf(p)] || "Roster";
     (groups[role] ??= []).push(p);
   }
-  const orderedRoles = [...ROLE_ORDER.filter((r) => groups[r]), ...(groups["Roster"] ? ["Roster"] : [])];
+  const orderedRoles = [...["Offense", "Defense", "Special Teams"].filter((r) => groups[r]), ...(groups["Roster"] ? ["Roster"] : [])];
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
@@ -1940,19 +1958,15 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                   return [i === -1 ? 99 : i, m && m[2] ? Number(m[2]) : 99];
                 };
                 const bench = sorted.filter((p) => !isStarter(p)).sort((a, b) => { const ka = benchKey(a), kb = benchKey(b); return ka[0] - kb[0] || ka[1] - kb[1]; });
-                const withHeaders = [];
-                if (starters.length) withHeaders.push({ __hdr: "Starters" }, ...starters);
-                if (bench.length) withHeaders.push({ __hdr: "Bench" }, ...bench);
-                return withHeaders;
+                // No Starters/Bench headers — the depth-chart label already says
+                // WR3 or RB2, so the split would just be telling you twice.
+                return [...starters, ...bench];
               })()
-                .map((p) => p.__hdr ? (
-                  <div key={"hdr-" + p.__hdr} className="px-4 py-1.5 text-[9px] font-extrabold tracking-widest uppercase"
-                    style={{ color: teamColorSafe(abbr), backgroundColor: teamColorSafe(abbr) + "12", borderLeft: `3px solid ${teamColorSafe(abbr)}` }}>{p.__hdr}</div>
-                ) : (
+                .map((p) => (
                   <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
                     style={{ borderLeft: `3px solid ${teamColorSafe(abbr)}33` }}>
-                    <span className="w-8 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
-                      style={{ color: teamColorSafe(abbr), backgroundColor: teamColorSafe(abbr) + "1a" }}>{p.pos || "—"}</span>
+                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
+                      style={{ color: teamColorSafe(abbr), backgroundColor: teamColorSafe(abbr) + "1a" }}>{p.sortLabel || p.pos || "—"}</span>
                     <Avatar p={p} />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -2659,92 +2673,106 @@ function MatchCard({ g, onClick }) {
   );
 }
 
-// Side-profile football helmet. The shell wraps the back and crown and stops at
-// a front rim, leaving the face opening you actually see on a real helmet, with
-// the facemask bars crossing that gap.
+// Real helmet shells — a team's helmet is NOT always its primary color
+// (Buffalo, Arizona, Indianapolis, Miami and the Chargers all wear white).
+// [shell, facemask]
+const HELMET_KIT = {
+  ARI: ["#ffffff", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d"], BAL: ["#12100f", "#12100f"],
+  BUF: ["#ffffff", "#f2f4f7"], CAR: ["#101214", "#101214"], CHI: ["#0B162A", "#8d9298"],
+  CIN: ["#FB4F14", "#111214"], CLE: ["#FF3C00", "#d7dade"], DAL: ["#b9bfc6", "#9aa1a9"],
+  DEN: ["#0C2340", "#FA4616"], DET: ["#b8c2cb", "#0076B6"], GB: ["#d5b43c", "#8d9298"],
+  HOU: ["#03202F", "#03202F"], IND: ["#ffffff", "#a7adb5"], JAX: ["#101214", "#9F792C"],
+  KC: ["#E31837", "#f2f4f7"], LV: ["#c3c8ce", "#0b0b0d"], LAC: ["#ffffff", "#0080C6"],
+  LAR: ["#003594", "#f2f4f7"], MIA: ["#ffffff", "#008E97"], MIN: ["#4F2683", "#dfe3e8"],
+  NE: ["#c3c8ce", "#C60C30"], NO: ["#101214", "#9F8958"], NYG: ["#0B2265", "#a7adb5"],
+  NYJ: ["#115740", "#115740"], PHI: ["#1A4E42", "#9aa1a9"], PIT: ["#101214", "#9aa1a9"],
+  SF: ["#B3995D", "#f2f4f7"], SEA: ["#002244", "#002244"], TB: ["#5b6770", "#5b6770"],
+  TEN: ["#0C2340", "#f2f4f7"], WSH: ["#5A1414", "#FFB612"], WAS: ["#5A1414", "#FFB612"],
+};
+// Side profile of a modern shell: rounded crown, front rim, an open face with the
+// facemask cage bridging it, jaw flap and ear hole. Facing right; flip mirrors it.
 function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
   const uid = `${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
-  const shell = color || teamColor(abbr) || "#334155";
-  const mask = alt || TEAM_ALT[abbr] || "#e5e7eb";
-  const dark = lumOf(shell) < 0.45;
-  // shell: crown + back + jaw flap, cut away at the front for the face opening
-  const SHELL = "M26 78 C26 38 52 14 88 14 C122 14 146 36 148 68 C149 80 146 88 141 92 L128 92 C124 76 112 66 96 64 C86 63 78 66 72 72 C66 79 64 90 66 101 C63 106 58 108 52 106 C36 100 26 92 26 78 Z";
-  const JAW = "M66 101 C70 114 82 122 98 124 C86 126 70 120 62 110 Z";
+  const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
+  const shell = kit[0], mask = kit[1];
+  const darkShell = lumOf(shell) < 0.42;
+  const SHELL = "M30 96 C20 62 40 28 74 17 C108 6 146 20 156 50 C160 62 158 74 152 84 C146 96 138 104 128 110 C118 116 104 118 90 116 C64 112 40 110 30 96 Z";
+  const JAW = "M104 108 C118 108 130 104 138 98 C142 112 140 124 132 132 C120 138 106 138 96 132 C100 124 103 116 104 108 Z";
   return (
-    <svg viewBox="0 0 176 150" width={size} height={size * 150 / 176} style={style} onClick={onClick} className={onClick ? "cursor-pointer" : undefined}>
+    <svg viewBox="0 0 200 170" width={size} height={size * 170 / 200} style={style} onClick={onClick} className={onClick ? "cursor-pointer" : undefined}>
       <defs>
         <clipPath id={`clip-${uid}`}><path d={SHELL} /></clipPath>
-        <linearGradient id={`paint-${uid}`} x1="0.15" y1="0" x2="0.75" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.5" />
-          <stop offset="28%" stopColor="#ffffff" stopOpacity="0.14" />
-          <stop offset="58%" stopColor="#000000" stopOpacity="0.05" />
-          <stop offset="82%" stopColor="#000000" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.5" />
+        <linearGradient id={`paint-${uid}`} x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="30%" stopColor="#ffffff" stopOpacity="0.1" />
+          <stop offset="62%" stopColor="#000000" stopOpacity="0.04" />
+          <stop offset="88%" stopColor="#000000" stopOpacity="0.26" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.42" />
         </linearGradient>
-        <linearGradient id={`spec-${uid}`} x1="0" y1="0" x2="0.3" y2="1">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.85" /><stop offset="55%" stopColor="#fff" stopOpacity="0.12" /><stop offset="100%" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-        <radialGradient id={`gloss-${uid}`} cx="0.34" cy="0.2" r="0.4">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.9" /><stop offset="70%" stopColor="#fff" stopOpacity="0.1" /><stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        <radialGradient id={`gloss-${uid}`} cx="0.35" cy="0.22" r="0.42">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.95" /><stop offset="65%" stopColor="#fff" stopOpacity="0.12" /><stop offset="100%" stopColor="#fff" stopOpacity="0" />
         </radialGradient>
-        <linearGradient id={`chrome-${uid}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-          <stop offset="38%" stopColor={mask} /><stop offset="72%" stopColor={mask} />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.5" />
-        </linearGradient>
-        {/* the face opening reads as shadow, like looking into a helmet */}
-        <radialGradient id={`face-${uid}`} cx="0.4" cy="0.35" r="0.8">
-          <stop offset="0%" stopColor="#3b3026" /><stop offset="100%" stopColor="#0d0b09" />
+        <radialGradient id={`face-${uid}`} cx="0.35" cy="0.4" r="0.8">
+          <stop offset="0%" stopColor="#4a3b2e" /><stop offset="55%" stopColor="#241c16" /><stop offset="100%" stopColor="#0b0908" />
         </radialGradient>
+        <linearGradient id={`bar-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+          <stop offset="35%" stopColor={mask} /><stop offset="78%" stopColor={mask} />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
+        </linearGradient>
         <filter id={`halo-${uid}`} x="-40%" y="-40%" width="180%" height="180%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#ffffff" floodOpacity="0.9" />
-          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#000000" floodOpacity="0.3" />
+          <feDropShadow dx="0" dy="0" stdDeviation="1.6" floodColor={darkShell ? "#ffffff" : "#000000"} floodOpacity={darkShell ? 0.85 : 0.22} />
         </filter>
-        <filter id={`drop-${uid}`} x="-35%" y="-35%" width="175%" height="180%">
-          <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#000" floodOpacity="0.5" />
+        <filter id={`drop-${uid}`} x="-30%" y="-30%" width="170%" height="175%">
+          <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
         </filter>
       </defs>
-      <g filter={`url(#drop-${uid})`} transform={flip ? "translate(176,0) scale(-1,1)" : undefined}>
-        {/* face opening sits behind the shell so the rim overlaps it cleanly */}
-        <path d="M128 92 C124 74 110 62 94 60 C80 59 70 64 64 74 C58 85 58 98 64 110 C74 124 96 130 116 126 C130 122 136 110 132 96 Z" fill={`url(#face-${uid})`} />
-        <path d="M120 74 C112 68 102 66 94 68" fill="none" stroke="#fff" strokeOpacity="0.1" strokeWidth="6" />
+      <g filter={`url(#drop-${uid})`} transform={flip ? "translate(200,0) scale(-1,1)" : undefined}>
+        {/* the open face: drawn first, the shell covers all but the front crescent */}
+        <path d="M148 62 C168 66 182 82 180 100 C178 118 162 130 142 134 C126 137 116 130 114 118 L114 78 C120 68 134 59 148 62 Z" fill={`url(#face-${uid})`} />
         {/* shell */}
         <path d={SHELL} fill={shell} />
         <path d={SHELL} fill={`url(#paint-${uid})`} />
         {logo && (
-          <g clipPath={`url(#clip-${uid})`} transform={flip ? "translate(176,0) scale(-1,1)" : undefined}>
-            <image href={dark ? (darkLogo(abbr) || logo) : logo} x={flip ? 44 : 56} y="26" width="76" height="50" preserveAspectRatio="xMidYMid meet"
+          <g clipPath={`url(#clip-${uid})`} transform={flip ? "translate(200,0) scale(-1,1)" : undefined}>
+            {/* decal sits on the flat of the side panel, above the ear hole */}
+            <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x={flip ? 62 : 56} y="30" width="82" height="52" preserveAspectRatio="xMidYMid meet"
               filter={`url(#halo-${uid})`} onError={(e) => { if (e.currentTarget.getAttribute("href") !== logo) e.currentTarget.setAttribute("href", logo); }} />
           </g>
         )}
         <g clipPath={`url(#clip-${uid})`}>
-          <path d="M30 66 C36 34 60 16 92 18 C74 24 54 38 44 62 C40 72 38 82 40 94 C32 86 28 78 30 66 Z" fill={`url(#spec-${uid})`} opacity="0.7" />
-          <ellipse cx="72" cy="32" rx="30" ry="12" fill={`url(#gloss-${uid})`} />
-          <ellipse cx="118" cy="26" rx="13" ry="4.5" fill="#fff" opacity="0.45" />
-          <path d="M27 78 C27 42 51 17 84 15" fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="3" />
+          <ellipse cx="80" cy="34" rx="34" ry="13" fill={`url(#gloss-${uid})`} />
+          <ellipse cx="126" cy="30" rx="14" ry="5" fill="#fff" opacity="0.4" />
+          <path d="M31 92 C24 60 44 30 76 20" fill="none" stroke="#fff" strokeOpacity="0.4" strokeWidth="3" />
+          <path d="M34 104 C58 114 92 116 120 108" fill="none" stroke="#000" strokeOpacity="0.18" strokeWidth="10" />
         </g>
-        <path d={SHELL} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinejoin="round" />
-        {/* jaw flap below the ear */}
+        <path d={SHELL} fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="2.5" strokeLinejoin="round" />
+        {/* jaw flap + ear hole */}
         <path d={JAW} fill={shell} />
-        <path d={JAW} fill="rgba(0,0,0,0.35)" />
-        <path d={JAW} fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="2" />
-        {/* ear hole */}
-        <circle cx="62" cy="86" r="11" fill="rgba(0,0,0,0.5)" />
-        <circle cx="62" cy="86" r="8" fill="#0b0f16" />
-        <circle cx="62" cy="86" r="8" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
-        {/* facemask: bars cross the face opening and anchor to the shell */}
-        <g fill="none" stroke={`url(#chrome-${uid})`} strokeLinecap="round" strokeWidth="6">
-          <path d="M136 92 C150 100 154 116 146 128 C138 138 120 141 104 138" />
-          <path d="M70 108 C88 114 112 116 134 110" />
-          <path d="M72 124 C90 132 114 135 136 129" />
-          <path d="M132 94 C138 106 139 120 132 130" />
+        <path d={JAW} fill="rgba(0,0,0,0.3)" />
+        <path d={JAW} fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="2" strokeLinejoin="round" />
+        <circle cx="86" cy="86" r="12" fill="rgba(0,0,0,0.45)" />
+        <circle cx="86" cy="86" r="9" fill="#0a0d12" />
+        <circle cx="86" cy="86" r="9" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="1.4" />
+        {/* facemask cage: dark backing bars, then the painted bars on top */}
+        <g fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="9" strokeLinecap="round">
+          <path d="M150 70 C174 76 188 92 183 110 C178 126 160 136 138 136" />
+          <path d="M126 96 C146 92 166 94 181 100" />
+          <path d="M129 116 C148 114 166 116 180 113" />
+          <path d="M170 80 C177 94 177 112 170 126" />
         </g>
-        <g fill="none" stroke="#fff" strokeOpacity="0.55" strokeLinecap="round" strokeWidth="1.4">
-          <path d="M135 90 C149 98 153 114 145 126" />
-          <path d="M71 106 C89 112 113 114 135 108" />
+        <g fill="none" stroke={`url(#bar-${uid})`} strokeWidth="6" strokeLinecap="round">
+          <path d="M150 70 C174 76 188 92 183 110 C178 126 160 136 138 136" />
+          <path d="M126 96 C146 92 166 94 181 100" />
+          <path d="M129 116 C148 114 166 116 180 113" />
+          <path d="M170 80 C177 94 177 112 170 126" />
+        </g>
+        <g fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M151 68 C174 74 187 90 182 108" />
+          <path d="M127 94 C147 90 166 92 180 98" />
         </g>
         {/* chin strap */}
-        <path d="M56 104 C64 120 80 130 98 134" fill="none" stroke="#f8fafc" strokeOpacity="0.8" strokeWidth="4" strokeLinecap="round" />
+        <path d="M104 122 C116 134 130 140 144 140" fill="none" stroke="#f1f5f9" strokeOpacity="0.85" strokeWidth="4.5" strokeLinecap="round" />
       </g>
     </svg>
   );
