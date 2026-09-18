@@ -87,10 +87,20 @@ export default async function handler(req, res) {
       P.totals = tot;
       P.perGame = {}; for (const k of SUM) P.perGame[k] = tot.gp ? Number((tot[k] / tot.gp).toFixed(1)) : null;
     }
-    // Target share (of team targets) for skill players
-    const teamTgts = {};
-    for (const P of Object.values(players)) teamTgts[P.team] = (teamTgts[P.team] || 0) + (P.totals.tgt || 0);
-    for (const P of Object.values(players)) P.totals.tgtShare = teamTgts[P.team] ? Number((P.totals.tgt / teamTgts[P.team]).toFixed(3)) : null;
+    // Share of the team's targets and of the team's carries. Carry share is the
+    // backfield equivalent of target share — for a back like Gibbs it's the
+    // number that actually describes the role.
+    const teamTgts = {}, teamCar = {};
+    for (const P of Object.values(players)) {
+      teamTgts[P.team] = (teamTgts[P.team] || 0) + (P.totals.tgt || 0);
+      teamCar[P.team] = (teamCar[P.team] || 0) + (P.totals.car || 0);
+    }
+    for (const P of Object.values(players)) {
+      P.totals.tgtShare = teamTgts[P.team] ? Number((P.totals.tgt / teamTgts[P.team]).toFixed(3)) : null;
+      P.totals.carShare = teamCar[P.team] ? Number((P.totals.car / teamCar[P.team]).toFixed(3)) : null;
+      // touches = carries + receptions, and its share of the team's touches
+      P.totals.touches = (P.totals.car || 0) + (P.totals.rec || 0);
+    }
 
     // Team per-game + ranks (offense: more = better; defense: fewer = better)
     const list = Object.entries(teams);
