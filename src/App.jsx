@@ -646,7 +646,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "f7";
+const NFL_VERSION = "v12";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -2499,7 +2499,7 @@ function TdBoardTab({ players, teams, onSelect }) {
       <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
       <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : "Bets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span></h1>
+          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : "Bets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span> <span className="text-[10px] font-bold text-white/60 align-middle">{NFL_VERSION}</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
             {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
