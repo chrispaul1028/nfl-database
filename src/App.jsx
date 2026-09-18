@@ -3471,3 +3471,5 @@ export default function App() {
     </div>
   );
 }
+
+// ─── END OF FILE · v12 · if you do not see this line, the upload was truncated ───
