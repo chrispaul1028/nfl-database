@@ -111,12 +111,21 @@ const logoChip = (abbr, onColor) => ({
 });
 const teamColor = (abbr) => TEAM_COLORS[String(abbr).toUpperCase()] || "#334155";
 // Current-team color first; falls back to the contract team if no current team.
-function playerHeaderColor(p) {
+// Sleeper carries birth_date for every rostered player ("1994-10-31"); the
+// Airtable base doesn't need a field for it.
+function birthDateOf(p) {
+  const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
+  const raw = (inj && inj.birth_date) || p.birthDate || null;
+  if (!raw) return null;
+  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(raw);
+  if (isNaN(d)) return null;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+function playerHeaderColor(p, dark) {
   if (HEADER_COLOR !== "team") return HEADER_COLOR;
-  const current = toAbbr(p.teamName);
-  if (current) return teamColor(current);
-  const act = activeOf(p);
-  return teamColor(act?.team || "");
+  const abbr = toAbbr(p.teamName) || activeOf(p)?.team || "";
+  return dark ? teamInk(abbr, true) : teamColor(abbr);
 }
 
 const TYPE_LABEL = { G: "Guaranteed", PO: "Player Option", TO: "Team Option", NG: "Non-Guaranteed", PG: "Partially Gtd", UFA: "Free Agent", RFA: "Restricted FA" };
@@ -354,8 +363,10 @@ const STAT_TILES = {
   DEF: [["Tackles", "tkl"], ["Sacks", "sacks"], ["INT", "defInt"]],
 };
 // ── Season stats box + game-by-game graph (from /api/season-stats) ──
+const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
 function SeasonStatsBox({ p, seasonStats }) {
   const [metric, setMetric] = useState(null);
+  const dark = useDark();
   if (!seasonStats || !seasonStats.players) return null;
   // match by name (+team when ambiguous)
   const nm = hrbNrmSafe(p.name);
@@ -364,61 +375,81 @@ function SeasonStatsBox({ p, seasonStats }) {
   const P = cands.length > 1 ? cands.find((q) => injTeamEq(q.team, abbr)) || cands[0] : cands[0];
   if (!P || !P.totals || !P.totals.gp) return null;
   const T = P.totals, G = P.perGame;
+  const ink = playerHeaderColor(p, dark) || "#2563eb";   // team color, theme-corrected
   const pos = String(p.pos || P.pos || "").toUpperCase();
   const isQB = pos === "QB", isRB = ["RB", "HB", "FB"].includes(pos), isRec = ["WR", "TE"].includes(pos);
   const isDef = !isQB && !isRB && !isRec && (T.tkl > 0 || T.sacks > 0 || T.defInt > 0);
   // Columns per position: [label, total, per-game, graphKey]
   const cols = isQB ? [["Cmp", T.cmp, G.cmp, "cmp"], ["Att", T.att, G.att, "att"], ["Pass Yds", T.passYds, G.passYds, "passYds"], ["Pass TD", T.passTd, G.passTd, "passTd"], ["INT", T.int, G.int, "int"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
-    : isRB ? [["Carries", T.car, G.car, "car"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Y/Car", T.ypcar, null, null], ["Rush TD", T.rushTd, G.rushTd, "rushTd"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec", T.rec, G.rec, "rec"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Tgt Share", T.tgtShare != null ? Math.round(T.tgtShare * 100) + "%" : null, null, null]]
-    : isRec ? [["Rec", T.rec, G.rec, "rec"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Y/Rec", T.ypc, null, null], ["Tgt Share", T.tgtShare != null ? Math.round(T.tgtShare * 100) + "%" : null, null, null], ["Carries", T.car, G.car, "car"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
+    : isRB ? [["Carries", T.car, G.car, "car"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Y/Car", T.ypcar, null, null], ["Rush TD", T.rushTd, G.rushTd, "rushTd"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec", T.rec, G.rec, "rec"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Car Share", pctOf(T.carShare), null, null], ["Tgt Share", pctOf(T.tgtShare), null, null], ["Touches", T.touches ?? null, null, null]]
+    : isRec ? [["Rec", T.rec, G.rec, "rec"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Y/Rec", T.ypc, null, null], ["Tgt Share", pctOf(T.tgtShare), null, null], ["Carries", T.car, G.car, "car"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
     : isDef ? [["Tackles", T.tkl, G.tkl, "tkl"], ["Solo", T.solo, G.solo, "solo"], ["Sacks", T.sacks, G.sacks, "sacks"], ["TFL", T.tfl, G.tfl, "tfl"], ["INT", T.defInt, G.defInt, "defInt"], ["PD", T.pd, G.pd, "pd"], ["TD", T.defTd, G.defTd, "defTd"]]
     : [];
   if (!cols.length) return null;
   const graphable = cols.filter((c) => c[3]);
   const key = metric || (isRec ? "tgt" : isRB ? "car" : isQB ? "passYds" : "tkl");
   const series = P.games.map((g) => ({ week: g.week, opp: g.opp, v: g[key] || 0 }));
-  const max = Math.max(1, ...series.map((d) => d.v));
-  const W = 320, H = 110, padL = 22, padB = 18, padT = 10;
+  const raw = Math.max(1, ...series.map((d) => d.v));
+  const max = raw * 1.18;                 // headroom so the top value label clears the frame
+  const W = 320, H = 150, padL = 24, padB = 20, padT = 18;
   const x = (i) => padL + (series.length > 1 ? (i * (W - padL - 6)) / (series.length - 1) : (W - padL) / 2);
   const y = (v) => padT + (H - padT - padB) * (1 - v / max);
   const path = series.map((d, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(d.v).toFixed(1)).join(" ");
   const label = graphable.find((c) => c[3] === key)?.[0] || key;
+  const gid = String(p.id || p.name || "g").replace(/\W/g, "");
   return (
     <>
       <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{seasonStats.season} Season · {T.gp} GP</div>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-4 divide-x divide-y divide-slate-100 dark:divide-slate-800">
-          {cols.map(([lbl, tot, pg]) => (
-            <div key={lbl} className="px-2 py-2.5 text-center">
-              <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{lbl}</div>
-              <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">{tot ?? "—"}</div>
-              {pg != null && <div className="text-[9px] font-semibold text-slate-400 tabular-nums">{pg}/g</div>}
-            </div>
-          ))}
+        <div className="grid grid-cols-4">
+          {(() => {
+            // pad to a full row of 4 so the block ends square instead of ragged
+            const padded = [...cols];
+            while (padded.length % 4) padded.push(null);
+            return padded.map((c, i) => (
+              <div key={i} className="px-2 py-3 text-center border-slate-100 dark:border-slate-800"
+                style={{ borderTopWidth: i >= 4 ? 1 : 0, borderLeftWidth: i % 4 ? 1 : 0, borderStyle: "solid" }}>
+                {c ? (<>
+                  <div className="text-[8px] font-bold tracking-widest uppercase leading-none whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: ink, opacity: 0.9 }}>{c[0]}</div>
+                  <div className="text-[17px] leading-none font-black tabular-nums text-slate-900 dark:text-white mt-1.5">{c[1] ?? "—"}</div>
+                  <div className="text-[9px] font-semibold text-slate-400 tabular-nums mt-1 h-3">{c[2] != null ? c[2] + "/g" : ""}</div>
+                </>) : <div className="h-[52px]" />}
+              </div>
+            ));
+          })()}
         </div>
         {/* game-by-game line: is the role trending up or down? */}
         <div className="border-t border-slate-100 dark:border-slate-800 px-3 pt-2.5 pb-2">
           <div className="flex items-center gap-1.5 overflow-x-auto mb-1" style={{ scrollbarWidth: "none" }}>
             {graphable.map(([lbl,,, k]) => (
               <button key={k} onClick={() => setMetric(k)}
-                className={"shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold " + (key === k ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}>
+                className={"shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold " + (key === k ? "text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}
+                style={key === k ? { backgroundColor: ink } : undefined}>
                 {lbl}
               </button>
             ))}
           </div>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+            <defs>
+              <linearGradient id={`area-${gid}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ink} stopOpacity="0.32" />
+                <stop offset="100%" stopColor={ink} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
             {[0, 0.5, 1].map((f) => (
               <g key={f}>
-                <line x1={padL} x2={W - 6} y1={y(max * f)} y2={y(max * f)} stroke="currentColor" className="text-slate-200 dark:text-slate-700" strokeWidth="1" />
-                <text x={padL - 4} y={y(max * f) + 3} fontSize="8" textAnchor="end" className="fill-slate-400">{Math.round(max * f)}</text>
+                <line x1={padL} x2={W - 6} y1={y(raw * f)} y2={y(raw * f)} stroke="currentColor" className="text-slate-200 dark:text-slate-700" strokeWidth="1" strokeDasharray={f === 0 ? "" : "3 3"} />
+                <text x={padL - 5} y={y(raw * f) + 3} fontSize="8" textAnchor="end" className="fill-slate-400">{Math.round(raw * f)}</text>
               </g>
             ))}
-            <path d={path} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            {/* filled area under the line, in the team's color */}
+            <path d={`${path} L ${x(series.length - 1).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`} fill={`url(#area-${gid})`} />
+            <path d={path} fill="none" stroke={ink} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
             {series.map((d, i) => (
               <g key={i}>
-                <circle cx={x(i)} cy={y(d.v)} r="3.5" fill="#2563eb" stroke="white" strokeWidth="1.5" />
-                <text x={x(i)} y={y(d.v) - 7} fontSize="8" textAnchor="middle" fontWeight="700" className="fill-slate-700 dark:fill-slate-200">{d.v}</text>
-                <text x={x(i)} y={H - 4} fontSize="7.5" textAnchor="middle" className="fill-slate-400">W{d.week}</text>
+                <circle cx={x(i)} cy={y(d.v)} r="4" fill={ink} stroke="white" strokeWidth="1.8" />
+                <text x={x(i)} y={y(d.v) - 9} fontSize="8.5" textAnchor="middle" fontWeight="800" className="fill-slate-700 dark:fill-slate-200">{d.v}</text>
+                <text x={x(i)} y={H - 5} fontSize="7.5" textAnchor="middle" className="fill-slate-400">W{d.week}</text>
               </g>
             ))}
           </svg>
@@ -430,6 +461,7 @@ function SeasonStatsBox({ p, seasonStats }) {
 }
 
 function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
+  const dark = useDark();
   const swipe = useSwipe({ onRight: onBack });
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const act = activeOf(p);
@@ -437,7 +469,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
   const no = cleanNo(p.no);
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
-      <div className="relative px-5 pb-8 text-white" style={{ backgroundColor: playerHeaderColor(p), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+      <div className="relative px-5 pb-8 text-white" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
           <div className="rounded-full p-[3px] bg-white/90 shadow-lg shrink-0"><Avatar p={p} size="lg" /></div>
@@ -451,7 +483,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
             <div className="flex items-center gap-2 mt-1.5 min-w-0 flex-wrap">
               {injHasFlag(p, toAbbr(teamOfPlayer(p) || p.teamName || ""))
                 ? <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg noNote />
-                : <StatusBadge status="Active" />}
+                : <span className="inline-block rounded-full bg-emerald-600 text-white text-[10px] font-extrabold tracking-wider px-2.5 py-1">ACTIVE</span>}
             </div>
             <InjuryLine p={p} />
           </div>
@@ -481,8 +513,8 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
                 const r = rankOf(k, asc);
                 return (
                   <div key={k} className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-3 pb-2.5 text-center">
-                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: playerHeaderColor(p) }} />
-                    <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{yr} {lbl}</div>
+                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: playerHeaderColor(p, dark) }} />
+                    <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{lbl}</div>
                     <div className="text-[26px] leading-tight font-black tabular-nums text-slate-900 dark:text-white">{T ? (T[k] ?? "—") : "—"}</div>
                     <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + (grp === "WR" || grp === "TE" ? " of " + grp + "s" : "") : "—"}</div>
                   </div>
@@ -496,7 +528,8 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
           <>
             <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">Bio</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
-              <BioRow k="Height / Weight" v={[p.height, p.weight].filter(Boolean).join(" · ")} />
+              <BioRow k="Height / Weight" v={[p.height, p.weight].filter(Boolean).join(", ")} />
+              <BioRow k="Date of Birth" v={birthDateOf(p)} />
               <BioRow k="Age" v={p.age} />
               <BioRow k="Draft" v={[p.draftYear, p.draft].filter(Boolean).join(": ")} />
               <BioRow k="Experience" v={experienceOf(p)} />
