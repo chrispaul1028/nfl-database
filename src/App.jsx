@@ -355,6 +355,15 @@ function posGroup(pos) {
   return null;
 }
 // [label, statKey, ascending?]  (ascending = fewer is better, e.g. INT)
+// Tapping a stat anywhere on a player page opens the Leaders board for that
+// stat, filtered to the player's position group, scrolled to his row.
+const STAT_JUMP = {
+  passYds: ["passing", "passYds"], passTd: ["passing", "passTd"], cmp: ["passing", "cmp"], att: ["passing", "att"], int: ["passing", "int"],
+  rushYds: ["rushing", "rushYds"], rushTd: ["rushing", "rushTd"], car: ["rushing", "car"], ypcar: ["rushing", "ypcar"], carShare: ["rushing", "car"],
+  recYds: ["receiving", "recYds"], recTd: ["receiving", "recTd"], rec: ["receiving", "rec"], tgt: ["receiving", "tgt"], tgtShare: ["receiving", "tgt"],
+  touches: ["rushing", "car"],
+  tkl: ["defense", "tkl"], solo: ["defense", "tkl"], sacks: ["defense", "sacks"], defInt: ["defense", "defInt"], tfl: ["defense", "tfl"], pd: ["defense", "pd"],
+};
 const STAT_TILES = {
   WR: [["Rec", "rec"], ["Rec Yds", "recYds"], ["Rec TD", "recTd"]],
   TE: [["Rec", "rec"], ["Rec Yds", "recYds"], ["Rec TD", "recTd"]],
@@ -364,7 +373,7 @@ const STAT_TILES = {
 };
 // ── Season stats box + game-by-game graph (from /api/season-stats) ──
 const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
-function SeasonStatsBox({ p, seasonStats }) {
+function SeasonStatsBox({ p, seasonStats, onStatJump }) {
   const [metric, setMetric] = useState(null);
   const dark = useDark();
   if (!seasonStats || !seasonStats.players) return null;
@@ -381,8 +390,8 @@ function SeasonStatsBox({ p, seasonStats }) {
   const isDef = !isQB && !isRB && !isRec && (T.tkl > 0 || T.sacks > 0 || T.defInt > 0);
   // Columns per position: [label, total, per-game, graphKey]
   const cols = isQB ? [["Cmp", T.cmp, G.cmp, "cmp"], ["Att", T.att, G.att, "att"], ["Pass Yds", T.passYds, G.passYds, "passYds"], ["Pass TD", T.passTd, G.passTd, "passTd"], ["INT", T.int, G.int, "int"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
-    : isRB ? [["Carries", T.car, G.car, "car"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Y/Car", T.ypcar, null, null], ["Rush TD", T.rushTd, G.rushTd, "rushTd"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec", T.rec, G.rec, "rec"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Car Share", pctOf(T.carShare), null, null], ["Tgt Share", pctOf(T.tgtShare), null, null], ["Touches", T.touches ?? null, null, null]]
-    : isRec ? [["Rec", T.rec, G.rec, "rec"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Y/Rec", T.ypc, null, null], ["Tgt Share", pctOf(T.tgtShare), null, null], ["Carries", T.car, G.car, "car"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
+    : isRB ? [["Carries", T.car, G.car, "car"], ["Rush Yds", T.rushYds, G.rushYds, "rushYds"], ["Y/Car", T.ypcar, null, null, "ypcar"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec", T.rec, G.rec, "rec"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Car Share", pctOf(T.carShare), null, null, "carShare"], ["Tgt Share", pctOf(T.tgtShare), null, null, "tgtShare"], ["Touches", T.touches ?? null, null, null, "touches"]]
+    : isRec ? [["Rec", T.rec, G.rec, "rec"], ["Targets", T.tgt, G.tgt, "tgt"], ["Rec Yds", T.recYds, G.recYds, "recYds"], ["Rec TD", T.recTd, G.recTd, "recTd"], ["Y/Rec", T.ypc, null, null], ["Tgt Share", pctOf(T.tgtShare), null, null, "tgtShare"], ["Carries", T.car, G.car, "car"], ["Rush TD", T.rushTd, G.rushTd, "rushTd"]]
     : isDef ? [["Tackles", T.tkl, G.tkl, "tkl"], ["Solo", T.solo, G.solo, "solo"], ["Sacks", T.sacks, G.sacks, "sacks"], ["TFL", T.tfl, G.tfl, "tfl"], ["INT", T.defInt, G.defInt, "defInt"], ["PD", T.pd, G.pd, "pd"], ["TD", T.defTd, G.defTd, "defTd"]]
     : [];
   if (!cols.length) return null;
@@ -407,14 +416,15 @@ function SeasonStatsBox({ p, seasonStats }) {
             const padded = [...cols];
             while (padded.length % 4) padded.push(null);
             return padded.map((c, i) => (
-              <div key={i} className="px-2 py-3 text-center border-slate-100 dark:border-slate-800"
+              <button key={i} onClick={c && STAT_JUMP[c[4] || c[3]] && onStatJump ? () => onStatJump({ key: c[4] || c[3], name: p.name, team: abbr, pos: posGroup(pos) }) : undefined}
+                className="px-2 py-3 text-center border-slate-100 dark:border-slate-800 active:bg-slate-50 dark:active:bg-slate-800/60"
                 style={{ borderTopWidth: i >= 4 ? 1 : 0, borderLeftWidth: i % 4 ? 1 : 0, borderStyle: "solid" }}>
                 {c ? (<>
                   <div className="text-[8px] font-bold tracking-widest uppercase leading-none whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: ink, opacity: 0.9 }}>{c[0]}</div>
                   <div className="text-[17px] leading-none font-black tabular-nums text-slate-900 dark:text-white mt-1.5">{c[1] ?? "—"}</div>
                   <div className="text-[9px] font-semibold text-slate-400 tabular-nums mt-1 h-3">{c[2] != null ? c[2] + "/g" : ""}</div>
                 </>) : <div className="h-[52px]" />}
-              </div>
+              </button>
             ));
           })()}
         </div>
@@ -422,7 +432,7 @@ function SeasonStatsBox({ p, seasonStats }) {
         <div className="border-t border-slate-100 dark:border-slate-800 px-3 pt-2.5 pb-2">
           <div className="flex items-center gap-1.5 overflow-x-auto mb-1" style={{ scrollbarWidth: "none" }}>
             {graphable.map(([lbl,,, k]) => (
-              <button key={k} onClick={() => setMetric(k)}
+              <button key={k} onClick={() => { if (key === k && onStatJump && STAT_JUMP[k]) onStatJump({ key: k, name: p.name, team: abbr, pos: posGroup(pos) }); else setMetric(k); }}
                 className={"shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold " + (key === k ? "text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}
                 style={key === k ? { backgroundColor: ink } : undefined}>
                 {lbl}
@@ -453,14 +463,14 @@ function SeasonStatsBox({ p, seasonStats }) {
               </g>
             ))}
           </svg>
-          <div className="text-[9px] text-slate-400 text-center">{label} by game</div>
+          <div className="text-[9px] text-slate-400 text-center">{label} by game · tap the selected pill for league ranks</div>
         </div>
       </div>
     </>
   );
 }
 
-function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
+function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStatJump }) {
   const dark = useDark();
   const swipe = useSwipe({ onRight: onBack });
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -503,21 +513,27 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
           const peers = Object.values(seasonStats.players).filter((q) => posGroup(q.pos) === grp && q.totals && q.totals.gp);
           const rankOf = (k, asc) => {
             if (!T) return null;
+            const mine = T[k] || 0;
             const vals = peers.map((q) => q.totals[k] || 0).sort((a, b) => (asc ? a - b : b - a));
-            return vals.indexOf(T[k] || 0) + 1;
+            // standard competition ranking: five backs on 4 TDs are all 1st (tie)
+            return { r: vals.indexOf(mine) + 1, tie: vals.filter((v) => v === mine).length > 1 };
           };
           const tier = (r, n) => (r == null ? "text-slate-400" : r <= Math.max(5, n * 0.15) ? "text-emerald-500" : r <= n * 0.5 ? "text-amber-500" : "text-slate-400");
           return (
             <div className="grid grid-cols-3 gap-2">
               {spec.map(([lbl, k, asc]) => {
-                const r = rankOf(k, asc);
+                const rk = rankOf(k, asc);
+                const r = rk ? rk.r : null;
+                const jump = STAT_JUMP[k];
                 return (
-                  <div key={k} className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-3 pb-2.5 text-center">
+                  <button key={k} onClick={jump && onStatJump ? () => onStatJump({ key: k, name: p.name, team: toAbbr(teamOfPlayer(p) || p.teamName || ""), pos: grp }) : undefined}
+                    className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-3 pb-2.5 text-center active:scale-[0.97] transition-transform">
                     <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: playerHeaderColor(p, dark) }} />
                     <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{lbl}</div>
                     <div className="text-[26px] leading-tight font-black tabular-nums text-slate-900 dark:text-white">{T ? (T[k] ?? "—") : "—"}</div>
-                    <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + (grp === "WR" || grp === "TE" ? " of " + grp + "s" : "") : "—"}</div>
-                  </div>
+                    <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + (rk.tie ? " (tie)" : "") : "—"}</div>
+                    {(grp === "WR" || grp === "TE") && <div className="text-[8px] font-semibold tracking-wide uppercase text-slate-400 mt-0.5">{grp === "WR" ? "Wide Receiver Rank" : "TE Rank"}</div>}
+                  </button>
                 );
               })}
             </div>
@@ -538,7 +554,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats }) {
             </div>
           </>
         )}
-        {mode === "full" && <SeasonStatsBox p={p} seasonStats={seasonStats} />}
+        {mode === "full" && <SeasonStatsBox p={p} seasonStats={seasonStats} onStatJump={onStatJump} />}
 
         {mode === "full" && p.stats && p.stats.length > 0 && (
           <>
@@ -2188,10 +2204,29 @@ function teamLeaderRows(seasonStats, key) {
   const asc = key === "papg" || key === "ydsAgainst";
   return rows.filter((r) => r.val[key] > 0).sort((a, b) => (asc ? a.val[key] - b.val[key] : b.val[key] - a.val[key]));
 }
-function StatsTab({ players, onSelect, seasonStats }) {
+function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
   const [catId, setCatId] = useState("passing");
   const [statKey, setStatKey] = useState(null);
   const [posPick, setPosPick] = useState("ALL");
+  const [hilite, setHilite] = useState(null);   // normalized name of the row we jumped to
+  const rowRef = useRef(null);
+  // A tap on a player-page stat lands here: switch the board to that stat and
+  // position group, then scroll his row into the middle of the screen.
+  useEffect(() => {
+    if (!jump) return;
+    const j = STAT_JUMP[jump.key];
+    if (!j) return;
+    setCatId(j[0]); setStatKey(j[1]);
+    const c = LEADER_CATS.find((x) => x.id === j[0]);
+    setPosPick(c && c.positions && c.positions.includes(jump.pos) ? jump.pos : "ALL");
+    setHilite(hrbNrmSafe(jump.name));
+    onJumpUsed && onJumpUsed();
+  }, [jump]);
+  useEffect(() => {
+    if (!hilite || !rowRef.current) return;
+    const t = setTimeout(() => rowRef.current && rowRef.current.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
+    return () => clearTimeout(t);
+  }, [hilite, catId, statKey, posPick]);
   const cat = LEADER_CATS.find((c) => c.id === catId);
   const key = statKey && cat.stats.some(([k]) => k === statKey) ? statKey : cat.stats[0][0];
   const teamRows = useMemo(() => (cat.id === "teams" ? teamLeaderRows(seasonStats, key) : []), [seasonStats, catId, key]);
@@ -2207,10 +2242,20 @@ function StatsTab({ players, onSelect, seasonStats }) {
       return ["QB", "RB", "WR", "TE"].includes(g) && (posPick === "ALL" || g === posPick);
     };
     const val = (P) => (key === "fpts" ? fantasyPts(P.totals) : (P.totals[key] || 0));
-    return all.filter((P) => P.totals && P.totals.gp && inCat(P) && val(P) > 0)
+    const sorted = all.filter((P) => P.totals && P.totals.gp && inCat(P) && val(P) > 0)
       .map((P) => ({ P, v: val(P) }))
-      .sort((a, b) => b.v - a.v).slice(0, 50);
-  }, [seasonStats, catId, key, posPick]);
+      .sort((a, b) => b.v - a.v);
+    // ranks are shared: same value, same number, flagged as a tie
+    let lastV = null, lastR = 0;
+    sorted.forEach((row, i) => {
+      if (row.v !== lastV) { lastR = i + 1; lastV = row.v; }
+      row.rank = lastR;
+    });
+    for (const row of sorted) row.tie = sorted.filter((o) => o.v === row.v).length > 1;
+    // if we jumped to a player outside the top 50, extend the list far enough to show him
+    const hi = sorted.findIndex((r) => hrbNrmSafe(r.P.name) === hilite);
+    return sorted.slice(0, Math.max(50, hi + 1));
+  }, [seasonStats, catId, key, posPick, hilite]);
   const yr = seasonStats ? seasonStats.season : "";
   const findP = (P) => players.find((p) => hrbNrmSafe(p.name) === hrbNrmSafe(P.name));
   const statLabel = cat.stats.find(([k]) => k === key)?.[1] || key;
@@ -2221,7 +2266,7 @@ function StatsTab({ players, onSelect, seasonStats }) {
         <div className="flex items-baseline gap-2"><h1 className="text-xl font-extrabold">Leaders</h1><span className="text-[11px] font-semibold text-blue-200">{yr}{seasonStats && seasonStats.weeksWithGames ? ` · thru Wk ${seasonStats.weeksWithGames}` : ""}</span></div>
         <div className="flex gap-1.5 mt-3">
           {LEADER_CATS.map((c) => (
-            <button key={c.id} onClick={() => { setCatId(c.id); setStatKey(null); setPosPick("ALL"); }}
+            <button key={c.id} onClick={() => { setCatId(c.id); setStatKey(null); setPosPick("ALL"); setHilite(null); }}
               className={"flex-1 py-1.5 rounded-full text-[10px] font-extrabold " + (catId === c.id ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100")}>{c.label}</button>
           ))}
         </div>
@@ -2279,13 +2324,18 @@ function StatsTab({ players, onSelect, seasonStats }) {
               <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Player</span>
               <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{statLabel}{key !== "fpts" && key !== "ypcar" ? " · per game" : ""}</span>
             </div>
-            {rows.map(({ P, v }, i) => {
+            {rows.map(({ P, v, rank, tie }, i) => {
               const p = findP(P);
               const pg = P.totals.gp ? v / P.totals.gp : null;
+              const on = hilite && hrbNrmSafe(P.name) === hilite;
               return (
-                <button key={P.id} onClick={p ? () => onSelect(p) : undefined} className="w-full text-left pr-3 py-2 flex items-center gap-2.5 active:bg-slate-50 dark:active:bg-slate-800/60">
+                <button key={P.id} ref={on ? rowRef : undefined} onClick={p ? () => onSelect(p) : undefined}
+                  className={"w-full text-left pr-3 py-2 flex items-center gap-2.5 active:bg-slate-50 dark:active:bg-slate-800/60 " + (on ? "bg-slate-200/80 dark:bg-slate-700/60" : "")}>
                   <div className="self-stretch w-1 rounded-r" style={{ backgroundColor: teamColor(P.team) }} />
-                  <div className={"w-6 text-center text-[13px] font-black tabular-nums " + (i < 3 ? "text-blue-600" : "text-slate-400")}>{i + 1}</div>
+                  <div className={"w-8 text-center shrink-0 " + ((rank || i + 1) <= 3 ? "text-blue-600" : "text-slate-400")}>
+                    <div className="text-[13px] font-black tabular-nums leading-none">{rank || i + 1}</div>
+                    {tie && <div className="text-[7px] font-bold lowercase tracking-wide opacity-70">tie</div>}
+                  </div>
                   <img src={`https://a.espncdn.com/i/headshots/nfl/players/full/${P.id}.png`} alt="" className="w-10 h-10 rounded-full object-cover object-top bg-white shrink-0 ring-2 ring-white dark:ring-slate-800 shadow" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">{P.name}</div>
@@ -2743,25 +2793,28 @@ function MatchCard({ g, onClick }) {
 // Real helmet shells — a team's helmet is NOT always its primary color
 // (Buffalo, Arizona, Indianapolis, Miami and the Chargers all wear white).
 // [shell, facemask]
+// [shell, facemask, centre stripe] — a helmet is often not the team's primary
+// colour, and the crown stripe is usually a third colour again (Buffalo: white
+// shell, white mask, red stripe).
 const HELMET_KIT = {
-  ARI: ["#ffffff", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d"], BAL: ["#12100f", "#12100f"],
-  BUF: ["#ffffff", "#f2f4f7"], CAR: ["#101214", "#101214"], CHI: ["#0B162A", "#8d9298"],
-  CIN: ["#FB4F14", "#111214"], CLE: ["#FF3C00", "#d7dade"], DAL: ["#b9bfc6", "#9aa1a9"],
-  DEN: ["#0C2340", "#FA4616"], DET: ["#b8c2cb", "#0076B6"], GB: ["#d5b43c", "#8d9298"],
-  HOU: ["#03202F", "#03202F"], IND: ["#ffffff", "#a7adb5"], JAX: ["#101214", "#9F792C"],
-  KC: ["#E31837", "#f2f4f7"], LV: ["#c3c8ce", "#0b0b0d"], LAC: ["#ffffff", "#0080C6"],
-  LAR: ["#003594", "#f2f4f7"], MIA: ["#ffffff", "#008E97"], MIN: ["#4F2683", "#dfe3e8"],
-  NE: ["#c3c8ce", "#C60C30"], NO: ["#101214", "#9F8958"], NYG: ["#0B2265", "#a7adb5"],
-  NYJ: ["#115740", "#115740"], PHI: ["#1A4E42", "#9aa1a9"], PIT: ["#101214", "#9aa1a9"],
-  SF: ["#B3995D", "#f2f4f7"], SEA: ["#002244", "#002244"], TB: ["#5b6770", "#5b6770"],
-  TEN: ["#0C2340", "#f2f4f7"], WSH: ["#5A1414", "#FFB612"], WAS: ["#5A1414", "#FFB612"],
+  ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", "#A71930"], BAL: ["#12100f", "#12100f", "#241773"],
+  BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
+  CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
+  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#d5b43c", "#8d9298", "#203731"],
+  HOU: ["#03202F", "#03202F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
+  KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
+  LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
+  NE: ["#c3c8ce", "#C60C30", "#002244"], NO: ["#101214", "#9F8958", "#9F8958"], NYG: ["#0B2265", "#a7adb5", "#A71930"],
+  NYJ: ["#115740", "#115740", "#ffffff"], PHI: ["#1A4E42", "#9aa1a9", "#A5ACAF"], PIT: ["#101214", "#9aa1a9", "#FFB612"],
+  SF: ["#B3995D", "#f2f4f7", "#AA0000"], SEA: ["#002244", "#002244", "#69BE28"], TB: ["#5b6770", "#5b6770", "#D50A0A"],
+  TEN: ["#0C2340", "#f2f4f7", "#4B92DB"], WSH: ["#5A1414", "#FFB612", "#FFB612"], WAS: ["#5A1414", "#FFB612", "#FFB612"],
 };
 // Side profile of a modern shell: rounded crown, front rim, an open face with the
 // facemask cage bridging it, jaw flap and ear hole. Facing right; flip mirrors it.
 function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
   const uid = `${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
   const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
-  const shell = kit[0], mask = kit[1];
+  const shell = kit[0], mask = kit[1], stripe = kit[2] || alt || TEAM_ALT[abbr] || null;
   const darkShell = lumOf(shell) < 0.42;
   const SHELL = "M30 96 C20 62 40 28 74 17 C108 6 146 20 156 50 C160 62 158 74 152 84 C146 96 138 104 128 110 C118 116 104 118 90 116 C64 112 40 110 30 96 Z";
   const JAW = "M104 108 C118 108 130 104 138 98 C142 112 140 124 132 132 C120 138 106 138 96 132 C100 124 103 116 104 108 Z";
@@ -2800,10 +2853,21 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
         {/* shell */}
         <path d={SHELL} fill={shell} />
         <path d={SHELL} fill={`url(#paint-${uid})`} />
+        {/* centre stripe over the crown — in profile you see it as a band along
+            the top ridge, with a thin liner either side */}
+        {stripe && (
+          <g clipPath={`url(#clip-${uid})`}>
+            <path d="M40 60 C58 30 96 14 130 20 C146 23 156 32 160 44" fill="none" stroke={stripe} strokeWidth="13" strokeLinecap="round" opacity="0.95" />
+            <path d="M40 60 C58 30 96 14 130 20 C146 23 156 32 160 44" fill="none" stroke="#ffffff" strokeOpacity="0.5" strokeWidth="2" strokeLinecap="round" transform="translate(0,-6.5)" />
+            <path d="M40 60 C58 30 96 14 130 20 C146 23 156 32 160 44" fill="none" stroke="#000000" strokeOpacity="0.22" strokeWidth="2" strokeLinecap="round" transform="translate(0,6.5)" />
+          </g>
+        )}
         {logo && (
-          <g clipPath={`url(#clip-${uid})`} transform={flip ? "translate(200,0) scale(-1,1)" : undefined}>
-            {/* decal sits on the flat of the side panel, above the ear hole */}
-            <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x={flip ? 62 : 56} y="30" width="82" height="52" preserveAspectRatio="xMidYMid meet"
+          <g clipPath={`url(#clip-${uid})`}>
+            {/* decal sits on the flat of the side panel, above the ear hole. It is
+                NOT counter-flipped: on a left-facing shell the mark faces left too,
+                exactly as a real decal is mirrored on the opposite side. */}
+            <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x="56" y="30" width="82" height="52" preserveAspectRatio="xMidYMid meet"
               filter={`url(#halo-${uid})`} onError={(e) => { if (e.currentTarget.getAttribute("href") !== logo) e.currentTarget.setAttribute("href", logo); }} />
           </g>
         )}
@@ -3120,6 +3184,7 @@ export default function App() {
     });
   }, [teams, stand, seasonStats]);
   const [selTeam, setSelTeam] = useState(null);
+  const [statJump, setStatJump] = useState(null);   // stat tapped on a player page
   const [error, setError] = useState(null);
 
   const [, setInjTick] = useState(0);
@@ -3199,6 +3264,7 @@ export default function App() {
         backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
         mode="full"
         seasonStats={seasonStats}
+        onStatJump={(j) => { setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
       />
     );
   }
@@ -3228,7 +3294,7 @@ export default function App() {
       <div className="pb-28">
         {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} />}
         {players && tab === "players" && <PlayersHub players={players} onSelect={setSel} />}
-        {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} />}
+        {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} jump={statJump} onJumpUsed={() => setStatJump(null)} />}
       </div>
 
       <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)] z-20">
