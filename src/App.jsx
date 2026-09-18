@@ -494,7 +494,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
     const id = inj && inj.espn_id;
     if (!id) return;
     let alive = true;
-    fetch(`/api/player-injury?espn=${id}`).then((r) => r.json())
+    fetch(`/api/injuries?espn=${id}`).then((r) => r.json())
       .then((d) => { if (alive && d && d.injury) setDeepInj(d.injury); }).catch(() => {});
     return () => { alive = false; };
   }, [p.id, p.name]);
@@ -2451,10 +2451,10 @@ function TdBoardTab({ players, teams, onSelect }) {
   }, [sb, nextSb]);
   useEffect(() => {
     if (history) return;
-    fetch(`/api/td-history?season=${season}`).then((r) => r.json()).then(setHistory).catch(() => setHistory({ weeks: [], error: "unreachable" }));
+    fetch(`/api/td?mode=history&season=${season}`).then((r) => r.json()).then(setHistory).catch(() => setHistory({ weeks: [], error: "unreachable" }));
   }, []);
   useEffect(() => {
-    fetch("/api/td-board").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [], reason: "Couldn't reach the board endpoint." }));
+    fetch("/api/td").then((r) => r.json()).then(setBoard).catch(() => setBoard({ ready: false, cards: [], reason: "Couldn't reach the board endpoint." }));
   }, []);
   useEffect(() => {
     let alive = true;
