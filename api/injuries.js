@@ -1,12 +1,10 @@
 // /api/injuries — ESPN's league-wide injury report: every team's injured
 // players with type / location / side / detail, the team's status, and the
 // estimated return date when one has been published. Keyed by ESPN athlete id.
-import playerInjury from "../lib/player-injury.js";
-
 export default async function handler(req, res) {
   // /api/injuries?espn=<id> — the deep, single-player record (was its own
   // endpoint; folded in here to stay under Vercel's 12-function Hobby cap).
-  if (req.query?.espn) return playerInjury(req, res);
+  if (req.query?.espn) return playerInjuryHandler(req, res);
 
   try {
     const r = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries", { headers: { accept: "application/json" } });
@@ -40,5 +38,41 @@ export default async function handler(req, res) {
     return res.status(200).json({ updatedAt: new Date().toISOString(), count: Object.keys(out).length, injuries: out });
   } catch (e) {
     return res.status(200).json({ injuries: {}, error: String(e.message || e) });
+  }
+}
+
+// /api/player-injury?espn=<athleteId> — ESPN's current injury entry for a
+// player: type/location/detail and, when the team has one, an estimated
+// return date. Sleeper doesn't publish return dates; ESPN often does.
+async function playerInjuryHandler(req, res) {
+  const id = String(req.query.espn || "").replace(/\D/g, "");
+  if (!id) return res.status(400).json({ error: "espn id required" });
+  try {
+    const r = await fetch(`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/athletes/${id}/injuries?limit=5`, { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    const items = await Promise.all((d.items || []).slice(0, 3).map(async (it) => {
+      if (it.$ref && !it.status) { try { const rr = await fetch(it.$ref); return rr.ok ? await rr.json() : null; } catch { return null; } }
+      return it;
+    }));
+    let cur = items.filter(Boolean).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
+    if (!cur || !cur.details?.returnDate) {
+      // Second source: the athlete overview often carries the current injury with a return date
+      try {
+        const o = await (await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${id}`, { headers: { accept: "application/json" } })).json();
+        const oi = (o.injuries || [])[0];
+        if (oi && (oi.details?.returnDate || !cur)) cur = { ...(cur || {}), ...oi, details: { ...(cur?.details || {}), ...(oi.details || {}) } };
+      } catch {}
+    }
+    res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
+    if (!cur) return res.status(200).json({ injury: null });
+    const det = cur.details || {};
+    return res.status(200).json({ injury: {
+      status: cur.status || null, date: cur.date || null,
+      type: det.type || null, location: det.location || null, detail: det.detail || null, side: det.side || null,
+      returnDate: det.returnDate || null, comment: cur.shortComment || cur.longComment || null,
+    } });
+  } catch (e) {
+    return res.status(200).json({ injury: null, error: String(e.message || e) });
   }
 }
