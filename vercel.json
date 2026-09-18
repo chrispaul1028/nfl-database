@@ -10,7 +10,7 @@
     }
   ],
   "functions": {
-    "api/td-board.js": {
+    "api/td.js": {
       "maxDuration": 60,
       "memory": 1024
     },
@@ -22,7 +22,7 @@
       "maxDuration": 60,
       "memory": 1024
     },
-    "api/td-history.js": {
+    "api/td-log.js": {
       "maxDuration": 60
     }
   }
