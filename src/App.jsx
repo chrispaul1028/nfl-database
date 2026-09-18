@@ -472,6 +472,21 @@ function SeasonStatsBox({ p, seasonStats, onStatJump }) {
 
 function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStatJump }) {
   const dark = useDark();
+  // Deeper injury record for this one player (ESPN's athlete feed), which
+  // carries a return date far more often than the league-wide report does.
+  const [deepInj, setDeepInj] = useState(null);
+  useEffect(() => {
+    setDeepInj(null);
+    const a = toAbbr(teamOfPlayer(p) || p.teamName || "");
+    if (!injHasFlag(p, a)) return;
+    const inj = injFor(p.name, a);
+    const id = inj && inj.espn_id;
+    if (!id) return;
+    let alive = true;
+    fetch(`/api/player-injury?espn=${id}`).then((r) => r.json())
+      .then((d) => { if (alive && d && d.injury) setDeepInj(d.injury); }).catch(() => {});
+    return () => { alive = false; };
+  }, [p.id, p.name]);
   const swipe = useSwipe({ onRight: onBack });
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const act = activeOf(p);
@@ -495,7 +510,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
                 ? <InjBadge p={p} team={toAbbr(teamOfPlayer(p) || p.teamName || "")} lg noNote />
                 : <span className="inline-block rounded-full bg-emerald-600 text-white text-[10px] font-extrabold tracking-wider px-2.5 py-1">ACTIVE</span>}
             </div>
-            <InjuryLine p={p} />
+            <InjuryLine p={p} deep={deepInj} />
           </div>
         </div>
       </div>
@@ -696,10 +711,10 @@ function photoOf(p, teamAbbr) {
 // Badge only when NOT plain healthy-active (keeps rows quiet)
 // Player-page injury line: "Ankle sprain · Est. return Oct 20". Body part +
 // type from Sleeper (instant); return date from ESPN when the team gave one.
-function InjuryLine({ p }) {
+function InjuryLine({ p, deep }) {
   const abbr = toAbbr(teamOfPlayer(p) || p.teamName || "");
   if (!injHasFlag(p, abbr)) return p.injuryNotes ? <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full lowercase">({p.injuryNotes})</div> : null;
-  const d = injuryDetail(p, abbr);
+  const d = injuryDetail(p, abbr, deep);
   if (!d) return null;
   return <div className="mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2.5 py-0.5 inline-block max-w-full truncate">{d.text}</div>;
 }
@@ -1212,7 +1227,7 @@ const TEAM_ALT = {};     // abbr -> alternate color (from ESPN scoreboard)
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
 const POS_FULL = { QB: "Quarterback", RB: "Running Back", HB: "Running Back", FB: "Fullback", WR: "Wide Receiver", TE: "Tight End", LT: "Left Tackle", RT: "Right Tackle", OT: "Offensive Tackle", T: "Offensive Tackle", LG: "Left Guard", RG: "Right Guard", G: "Guard", OG: "Guard", C: "Center", OL: "Offensive Line", DE: "Defensive End", LDE: "Defensive End", RDE: "Defensive End", DT: "Defensive Tackle", LDT: "Defensive Tackle", RDT: "Defensive Tackle", NT: "Nose Tackle", EDGE: "Edge Rusher", DL: "Defensive Line", LB: "Linebacker", ILB: "Inside Linebacker", OLB: "Outside Linebacker", MLB: "Middle Linebacker", LOLB: "Outside Linebacker", ROLB: "Outside Linebacker", CB: "Cornerback", LCB: "Cornerback", RCB: "Cornerback", NB: "Nickel Back", DB: "Defensive Back", S: "Safety", FS: "Free Safety", SS: "Strong Safety", K: "Kicker", P: "Punter", LS: "Long Snapper" };
 // "Right ankle sprain (Est. return Oct 20)" — ESPN's injury detail for a player, via Sleeper's espn_id
-function injuryDetail(p, abbr) {
+function injuryDetail(p, abbr, deep) {
   const inj = injFor(p.name, abbr);
   const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
   let label = "";
@@ -1226,7 +1241,7 @@ function injuryDetail(p, abbr) {
   }
   label = label.replace(/\s+/g, " ").trim().toLowerCase();
   // Airtable's "Est Return" wins when ESPN hasn't published a date of its own.
-  const raw = (e && e.returnDate) || p.estReturn || null;
+  const raw = p.estReturn || (e && e.returnDate) || (deep && deep.returnDate) || null;
   const ret = raw ? new Date(raw) : null;
   const retTxt = ret && !isNaN(ret) ? ret.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase() : null;
   if (!label && !retTxt) return null;
@@ -1853,8 +1868,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
-            <img src={darkLogo(abbr) || team.logo} alt="" onError={(e) => { if (team.logo && e.currentTarget.src !== team.logo) e.currentTarget.src = team.logo; }}
-              className="w-16 h-16 rounded-full object-contain p-1.5 shrink-0" style={{ background: "rgba(255,255,255,0.14)", boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.45)" }} />
+            <img src={team.logo} alt="" className="w-16 h-16 rounded-full object-contain p-1.5 shrink-0" style={logoChip(abbr, true)} />
           ) : (
             <span className="text-3xl">🏈</span>
           )}
@@ -1980,13 +1994,35 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               );
             }
             const diff = pts.pf != null && pts.pa != null ? Math.round(pts.pf - pts.pa) : null;
+            // League ranks for the three headline numbers. Same value = same rank,
+            // flagged as a tie, exactly like the player boards.
+            const allPts = teams.map((t) => {
+              const ab = t.abbr || toAbbr(t.name);
+              const base = teamPts(t, started);
+              const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, ab)) : null;
+              const pf = bx && bx[1] && bx[1].pf != null ? bx[1].pf : base.pf;
+              const pa = bx && bx[1] && bx[1].pa != null ? bx[1].pa : base.pa;
+              return { pf, pa, d: pf != null && pa != null ? pf - pa : null };
+            });
+            const rankIn = (vals, mine, asc) => {
+              if (mine == null) return null;
+              const v = vals.filter((x) => x != null).sort((a, b) => (asc ? a - b : b - a));
+              const r = v.indexOf(mine) + 1;
+              return r ? { rank: r, tie: v.filter((x) => x === mine).length > 1 } : null;
+            };
+            // scoring: most is best. allowed: fewest is best. differential: most is best.
+            const rkT = (o) => o == null ? null : {
+              label: ordinal(o.rank) + (o.tie ? " (tie)" : ""),
+              cls: o.rank <= 10 ? "text-green-600 dark:text-green-400" : o.rank <= 20 ? "text-yellow-600 dark:text-yellow-400" : "text-red-500 dark:text-red-400",
+            };
+            const pfRank = rankIn(allPts.map((x) => x.pf), pts.pf, false);
+            const paRank = rankIn(allPts.map((x) => x.pa), pts.pa, true);
+            const dRank = rankIn(allPts.map((x) => x.d), pts.pf != null && pts.pa != null ? pts.pf - pts.pa : null, false);
             return (
               <>
-                <Tile tint={ink} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored"
-                  sub={team.ppg != null ? team.ppg.toFixed(1) + "/gm" : null} />
-                <Tile tint={ink} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed"
-                  sub={team.oppPpg != null ? team.oppPpg.toFixed(1) + "/gm" : null} />
-                <Tile tint={ink} value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff"
+                <Tile tint={ink} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
+                <Tile tint={ink} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rkT(paRank)} />
+                <Tile tint={ink} value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff" sub={rkT(dRank)}
                   valueClass={diff == null ? null : diff > 0 ? "text-emerald-600 dark:text-emerald-400" : diff < 0 ? "text-red-600 dark:text-red-400" : null} />
               </>
             );
@@ -2046,8 +2082,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 .map((p) => (
                   <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
                     style={{ borderLeft: `3px solid ${tint(dark ? "66" : "33")}` }}>
-                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
-                      style={{ color: ink, backgroundColor: tint(dark ? "2e" : "1a") }}>{p.sortLabel || p.pos || "—"}</span>
+                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white"
+                      style={{ backgroundColor: ink }}>{p.sortLabel || p.pos || "—"}</span>
                     <Avatar p={p} />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -2588,12 +2624,7 @@ function TdBoardTab({ players, teams, onSelect }) {
                 </div>
               );
             })()}
-            {bet === "props" && (
-              <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
-                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Player props — next up</div>
-                <div className="text-[11px] text-slate-400 mt-1 leading-snug">This is where passing / rushing / receiving yardage lines and the anytime-TD prices go, graded against the box scores the same way the touchdown board is. ESPN doesn't publish prop lines, so this needs an odds feed (The Odds API is the standard one — free tier covers a weekly pull). Say the word and it's the next build.</div>
-              </div>
-            )}
+            {bet === "props" && <PropsBoard />}
             {bet === "td" && (() => {
               // Once the Thursday-morning snapshot exists for this week, the board is
               // LOCKED to it —
@@ -2906,6 +2937,89 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
         <path d="M104 122 C116 134 130 140 144 140" fill="none" stroke="#f1f5f9" strokeOpacity="0.85" strokeWidth="4.5" strokeLinecap="round" />
       </g>
     </svg>
+  );
+}
+
+// ═══════════════ PLAYER PROPS (The Odds API via /api/props) ══════
+const AMER = (v) => (v == null ? "—" : v > 0 ? "+" + v : String(v));
+function PropsBoard() {
+  const [meta, setMeta] = useState(null);      // { configured, events }
+  const [open, setOpen] = useState(null);      // event id being shown
+  const [lines, setLines] = useState({});      // event id -> markets payload
+  const [mkt, setMkt] = useState("player_anytime_td");
+  useEffect(() => { fetch("/api/props").then((r) => r.json()).then(setMeta).catch(() => setMeta({ configured: false })); }, []);
+  const load = (id) => {
+    setOpen(open === id ? null : id);
+    if (lines[id] || open === id) return;
+    fetch(`/api/props?event=${id}`).then((r) => r.json()).then((d) => setLines((L) => ({ ...L, [id]: d }))).catch(() => {});
+  };
+  if (!meta) return <Loader label="Loading props" />;
+  if (!meta.configured) {
+    return (
+      <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Props need an odds key</div>
+        <div className="text-[11px] text-slate-400 mt-1 leading-snug">
+          ESPN publishes spreads and moneylines but no player props, so this board reads The Odds API. Get a free key at the-odds-api.com,
+          then in Vercel → your project → Settings → Environment Variables add <span className="font-bold">ODDS_API_KEY</span> and redeploy.
+          Lines appear here automatically once it's set — no code change needed.
+        </div>
+      </div>
+    );
+  }
+  const games = meta.events || [];
+  return (
+    <div className="space-y-2">
+      {games.length === 0 && <div className="text-center text-xs text-slate-400 py-8">No upcoming games posted yet.</div>}
+      {games.map((g) => {
+        const d = lines[g.id];
+        const isOpen = open === g.id;
+        const av = d && d.markets ? Object.keys(d.markets) : [];
+        const useKey = av.includes(mkt) ? mkt : av[0];
+        return (
+          <div key={g.id} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <button onClick={() => load(g.id)} className="w-full px-3 py-2.5 flex items-center justify-between text-left">
+              <div className="min-w-0">
+                <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">{g.away} @ {g.home}</div>
+                <div className="text-[10px] font-semibold text-slate-400">{new Date(g.start).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</div>
+              </div>
+              <span className="text-slate-400 text-xs font-bold">{isOpen ? "−" : "+"}</span>
+            </button>
+            {isOpen && (
+              <div className="border-t border-slate-100 dark:border-slate-800">
+                {!d && <div className="px-3 py-4 text-[11px] text-slate-400">Loading lines…</div>}
+                {d && av.length === 0 && <div className="px-3 py-4 text-[11px] text-slate-400">{d.error ? "Odds feed error: " + d.error : "No props posted for this game yet — books usually put them up 1–2 days out."}</div>}
+                {d && av.length > 0 && (
+                  <>
+                    <div className="flex gap-1.5 px-3 py-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                      {av.map((k) => (
+                        <button key={k} onClick={() => setMkt(k)}
+                          className={"shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold " + (useKey === k ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}>
+                          {d.markets[k].label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {d.markets[useKey].rows.map((r) => (
+                        <div key={r.player} className="px-3 py-2 flex items-center justify-between gap-2">
+                          <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">{r.player}</span>
+                          <span className="shrink-0 flex items-center gap-2 tabular-nums">
+                            {r.line != null && <span className="text-[12px] font-extrabold text-slate-900 dark:text-white">{r.line}</span>}
+                            {r.price != null && <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">{AMER(r.price)}</span>}
+                            {r.over != null && <span className="text-[10px] font-semibold text-slate-400">o {AMER(r.over)}</span>}
+                            {r.under != null && <span className="text-[10px] font-semibold text-slate-400">u {AMER(r.under)}</span>}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="px-3 py-2 text-[9px] text-slate-400">{d.markets[useKey].rows[0]?.book ? "Lines from " + d.markets[useKey].rows[0].book : ""}{meta.remaining ? ` · ${meta.remaining} API credits left this month` : ""}</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
