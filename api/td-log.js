@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const token = (process.env.AIRTABLE_TOKEN || "").trim(), base = (process.env.AIRTABLE_BASE_ID || "").trim();
     if (!token || !base) return res.status(500).json({ error: "Missing AIRTABLE_TOKEN / AIRTABLE_BASE_ID" });
     const origin = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}`;
-    const board = await (await fetch(`${origin}/api/td-board`)).json();
+    const board = await (await fetch(`${origin}/api/td`)).json();
     if (!board.ready) return res.status(200).json({ ok: false, reason: board.reason || "board not ready" });
 
     const at = (path, opts = {}) => fetch(`https://api.airtable.com/v0/${base}/${encodeURIComponent(TABLE)}${path}`, {

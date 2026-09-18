@@ -1,7 +1,13 @@
 // /api/injuries — ESPN's league-wide injury report: every team's injured
 // players with type / location / side / detail, the team's status, and the
 // estimated return date when one has been published. Keyed by ESPN athlete id.
+import playerInjury from "../lib/player-injury.js";
+
 export default async function handler(req, res) {
+  // /api/injuries?espn=<id> — the deep, single-player record (was its own
+  // endpoint; folded in here to stay under Vercel's 12-function Hobby cap).
+  if (req.query?.espn) return playerInjury(req, res);
+
   try {
     const r = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries", { headers: { accept: "application/json" } });
     if (!r.ok) throw new Error("HTTP " + r.status);
