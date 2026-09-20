@@ -335,7 +335,7 @@ function GlobalPulseStyles() {
 }
 function Loader({ label = "Loading" }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3" style={{ minHeight: "60vh" }}>
+    <div className="fixed inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <style>{`@keyframes hrbSpin { 0% { transform: rotate(-20deg) translateY(0) } 50% { transform: rotate(20deg) translateY(-10px) } 100% { transform: rotate(-20deg) translateY(0) } }`}</style>
       <div className="text-4xl" style={{ animation: "hrbSpin 0.9s ease-in-out infinite", display: "inline-block" }}>🏈</div>
       <div className="text-xs font-bold tracking-widest uppercase text-slate-400">{label}</div>
@@ -655,7 +655,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v19";
+const NFL_VERSION = "v20";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1245,6 +1245,7 @@ const TEAM_LOGOS = {};
 const TEAM_NAMES = {};   // abbr -> full name
 const TEAM_ALT = {};     // abbr -> alternate color (from ESPN scoreboard)
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
+const INJ_META = { count: 0, error: null, at: null };   // what the last /api/injuries call returned
 const POS_FULL = { QB: "Quarterback", RB: "Running Back", HB: "Running Back", FB: "Fullback", WR: "Wide Receiver", TE: "Tight End", LT: "Left Tackle", RT: "Right Tackle", OT: "Offensive Tackle", T: "Offensive Tackle", LG: "Left Guard", RG: "Right Guard", G: "Guard", OG: "Guard", C: "Center", OL: "Offensive Line", DE: "Defensive End", LDE: "Defensive End", RDE: "Defensive End", DT: "Defensive Tackle", LDT: "Defensive Tackle", RDT: "Defensive Tackle", NT: "Nose Tackle", EDGE: "Edge Rusher", DL: "Defensive Line", LB: "Linebacker", ILB: "Inside Linebacker", OLB: "Outside Linebacker", MLB: "Middle Linebacker", LOLB: "Outside Linebacker", ROLB: "Outside Linebacker", CB: "Cornerback", LCB: "Cornerback", RCB: "Cornerback", NB: "Nickel Back", DB: "Defensive Back", S: "Safety", FS: "Free Safety", SS: "Strong Safety", K: "Kicker", P: "Punter", LS: "Long Snapper" };
 // "Right ankle sprain (Est. return Oct 20)" — ESPN's injury detail for a player, via Sleeper's espn_id
 function injuryDetail(p, abbr, deep) {
@@ -1274,7 +1275,7 @@ function TeamPill({ team }) {
   if (!abbr) return null;
   const logo = TEAM_LOGOS[abbr];
   if (logo) {
-    return <img src={chipLogo(abbr, logo)} alt={abbr} className="w-8 h-8 rounded-full object-contain p-0.5 shrink-0" style={logoChip(abbr)} />;
+    return <img src={logo} alt={abbr} className="w-11 h-11 object-contain shrink-0 drop-shadow" />;
   }
   return (
     <span className="text-[10px] font-bold text-white px-2 py-1 rounded-full shrink-0" style={{ backgroundColor: teamColor(abbr) }}>
@@ -1360,7 +1361,9 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
       const inj = injFor(p.name, a);
       const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
       const d = injuryDetail(p, a);
-      const when = e && e.date ? new Date(e.date) : null;
+      // Timestamp: ESPN's last-touched date; else Sleeper's injury start date
+      const rawWhen = (e && e.date) || (inj && inj.injury_start_date) || null;
+      const when = rawWhen ? new Date(rawWhen) : null;
       const ret = p.estReturn || (e && e.returnDate) || null;
       const retD = ret ? new Date(ret) : null;
       out.push({
@@ -1387,21 +1390,28 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
     <div>
       <ListHeader title={<>Injury Report <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
       <div className="px-4 pb-28 mt-4 space-y-4">
+        <div className={"text-[10px] font-semibold px-1 " + (INJ_META.error || !INJ_META.count ? "text-rose-500" : "text-slate-400")}>
+          {INJ_META.error ? "ESPN injury feed error: " + INJ_META.error
+            : INJ_META.count ? `ESPN feed · ${INJ_META.count} records${INJ_META.at ? " · " + INJ_META.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""} · newest update first`
+            : INJ_META.at ? "ESPN injury feed returned no records — dates and return dates come from it" : "Loading ESPN injury feed…"}
+        </div>
         {rows.length === 0 && <div className="text-center text-sm text-slate-400 py-12 px-6">No injuries reported right now.</div>}
         {groups.map((g) => (
           <div key={g.key}>
             <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400 mb-1.5 px-1">{g.key}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
               {g.rows.map((r) => (
-                <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left px-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
+                <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left pr-3 pl-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
                   style={{ borderLeft: `3px solid ${teamInk(r.a, dark)}${dark ? "66" : "33"}` }}>
                   <div className="flex items-center gap-2.5">
+                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{r.p.pos || "—"}</span>
                     <Avatar p={r.p} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{r.p.name}</span>
-                        <span className="text-[10px] font-extrabold uppercase rounded px-1.5 py-0.5 text-white shrink-0" style={{ backgroundColor: teamInk(r.a, dark) }}>{r.p.pos || "—"}</span>
-                        {r.a && <img src={chipLogo(r.a)} alt="" className="w-4 h-4 rounded-full object-contain p-px shrink-0" style={logoChip(r.a)} />}
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {cleanNo(r.p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(r.p.no)}</span>}{r.p.name}
+                        </span>
+                        {r.a && <img src={TEAM_LOGOS[r.a]} alt="" className="w-7 h-7 object-contain shrink-0" />}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1 min-w-0">
                         {r.status && <span className={"text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 shrink-0 " + statusCls(r.status)}>{r.status}</span>}
@@ -2671,10 +2681,10 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
   }
   return (
     <div>
-      <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } } @keyframes hrbSoftPulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } } @keyframes hrbSpinBall { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+      <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } } @keyframes hrbSoftPulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } } @keyframes hrbSpin { 0% { transform: rotate(-20deg) translateY(0) } 50% { transform: rotate(20deg) translateY(-10px) } 100% { transform: rotate(-20deg) translateY(0) } }`}</style>
       <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : "Bets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span> <span className="text-[10px] font-bold text-white/60 align-middle">{NFL_VERSION}</span></h1>
+          <h1 className="text-xl font-extrabold text-white">Week {seg === "digest" ? (digestWeek ?? week) : week} <span className="text-[10px] font-bold text-white/60 align-middle">{NFL_VERSION}</span></h1>
           <span className="text-[11px] font-semibold text-blue-200">
             {seg === "matchups"
               ? (sb ? "scores " + new Date(sb.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ↻" : "loading…")
@@ -2948,9 +2958,9 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
   );
 }
 // Badge in the field-view injury-tag style. pulse=true breathes like those tags.
-function RedTag({ children, pulse, className = "" }) {
+function RedTag({ children, pulse, plain, className = "" }) {
   return (
-    <span className={"inline-flex items-center justify-center h-[15px] px-1.5 rounded-full text-[7px] font-extrabold tracking-wider text-white bg-red-600 border-2 border-white shadow whitespace-nowrap " + className}
+    <span className={"inline-flex items-center justify-center h-[15px] px-1.5 text-[7px] font-extrabold tracking-wider text-white bg-red-600 whitespace-nowrap " + (plain ? "rounded-[3px] " : "rounded-full border-2 border-white shadow ") + className}
       style={pulse ? { animation: "hrbSoftPulse 1.6s ease-in-out infinite" } : undefined}>{children}</span>
   );
 }
@@ -2979,32 +2989,32 @@ function MatchCard({ g, onClick }) {
   );
   // Score, with record and timeouts stacked beneath it (broadcast-bug layout).
   const tos = (t, side) => { const n = side === "home" ? g.homeTimeouts : g.awayTimeouts; return isLive && n != null ? n : null; };
-  const Score = ({ t, side }) => {
+  const Score = ({ t }) => (
+    <div className="w-14 h-[64px] flex items-center justify-center">
+      <div className={"text-[32px] leading-none font-black tabular-nums drop-shadow " + (lost(t) ? "text-white/55" : "text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
+    </div>
+  );
+  // Record + timeouts, for the bottom row corners
+  const Foot = ({ t, side, align }) => {
     const n = tos(t, side);
     return (
-      <div className="w-14 flex flex-col items-center">
-        <div className={"text-[30px] leading-none font-black tabular-nums drop-shadow " + (lost(t) ? "text-white/55" : "text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
-        <div className="mt-1 flex items-center gap-1.5">
-          {t.record && <span className="text-[9px] font-bold text-white/80 tabular-nums leading-none">{t.record}</span>}
-          {n != null && (
-            <span className="flex items-center gap-[3px]">
-              {[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}
-            </span>
-          )}
-        </div>
+      <div className={"flex items-center gap-1.5 w-[84px] " + (align === "right" ? "justify-end" : "justify-start")}>
+        {align === "right" && n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
+        {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
+        {align === "left" && n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
       </div>
     );
   };
-  // Possession: a slowly turning football beside the team that has it.
+  // Possession: the loading-screen football, same wobble, beside the team with the ball.
   const Ball = ({ on }) => (
-    <span className={"w-4 text-[11px] leading-none text-center " + (on ? "" : "invisible")} style={on ? { display: "inline-block", animation: "hrbSpinBall 3.2s linear infinite" } : undefined}>🏈</span>
+    <span className={"w-4 text-[12px] leading-none text-center " + (on ? "" : "invisible")} style={on ? { display: "inline-block", animation: "hrbSpin 0.9s ease-in-out infinite" } : undefined}>🏈</span>
   );
   return (
     <button onClick={onClick} style={cardBg}
       className="w-full text-left rounded-xl shadow-sm px-2 py-2.5 active:opacity-90 border overflow-hidden border-black/20 dark:border-white/10">
       <div className="flex items-center justify-between">
         <Side t={g.away} />
-        <Score t={g.away} side="away" />
+        <Score t={g.away} />
         <div className="flex-1 flex flex-col items-center px-0.5">
           <div className="flex items-center gap-1">
             <Ball on={hasBall(g.away)} />
@@ -3027,15 +3037,18 @@ function MatchCard({ g, onClick }) {
             <div className="text-[9px] font-semibold text-white/80 mt-1 tabular-nums text-center">{g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}</div>
           )}
         </div>
-        <Score t={g.home} side="home" />
+        <Score t={g.home} />
         <Side t={g.home} />
       </div>
-      {isLive && (g.downDistance || g.spot) && (
-        <div className="mt-1 flex flex-col items-center">
-          {g.redZone && <RedTag pulse className="mb-0.5">RED ZONE</RedTag>}
-          <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>
+      {/* bottom row: away record/timeouts · situation · home record/timeouts */}
+      <div className="mt-1 flex items-end justify-between">
+        <Foot t={g.away} side="away" align="left" />
+        <div className="flex-1 flex flex-col items-center">
+          {isLive && g.redZone && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
+          {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
         </div>
-      )}
+        <Foot t={g.home} side="home" align="right" />
+      </div>
     </button>
   );
 }
@@ -3616,8 +3629,9 @@ export default function App() {
     const loadInj = () => fetch("/api/injuries").then((r) => r.json()).then((d) => {
       for (const k of Object.keys(INJ_ESPN)) delete INJ_ESPN[k];
       Object.assign(INJ_ESPN, (d && d.injuries) || {});
+      INJ_META.count = Object.keys(INJ_ESPN).length; INJ_META.error = (d && d.error) || null; INJ_META.at = new Date();
       setInjEspnTick((t) => t + 1); // force a re-render so notes pick up the detail
-    }).catch(() => {});
+    }).catch((e) => { INJ_META.error = String(e && e.message || e); INJ_META.at = new Date(); setInjEspnTick((t) => t + 1); });
     loadInj();
     const t = setInterval(loadInj, 10 * 60 * 1000);
     return () => clearInterval(t);
