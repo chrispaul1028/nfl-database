@@ -35,6 +35,11 @@ export default async function handler(req, res) {
         const T = (teams[abbr] ??= { games: 0, pf: 0, pa: 0, off: { passYds: 0, passTd: 0, rushYds: 0, rushTd: 0 }, def: { passYds: 0, passTd: 0, rushYds: 0, rushTd: 0 }, allowed: { RB: { td: 0, yds: 0 }, WR: { td: 0, yds: 0 }, TE: { td: 0, yds: 0 } } });
         T.games += t.games; T.pf += t.pf; T.pa += t.pa;
         for (const k of Object.keys(T.off)) { T.off[k] += t.off[k] || 0; T.def[k] += t.def[k] || 0; }
+        // Week-by-week log so the app can show whether a number is trending up
+        // or down (latest game vs the average of everything before it).
+        (T.log ??= []).push({ week: wk.week ?? null, pf: t.pf || 0, pa: t.pa || 0,
+          offPassYds: t.off?.passYds || 0, offPassTd: t.off?.passTd || 0, offRushYds: t.off?.rushYds || 0, offRushTd: t.off?.rushTd || 0,
+          defPassYds: t.def?.passYds || 0, defPassTd: t.def?.passTd || 0, defRushYds: t.def?.rushYds || 0, defRushTd: t.def?.rushTd || 0 });
         for (const pos of ["RB", "WR", "TE"]) { T.allowed[pos].td += t.allowed?.[pos]?.td || 0; T.allowed[pos].yds += t.allowed?.[pos]?.yds || 0; }
       }
     }
@@ -110,9 +115,19 @@ export default async function handler(req, res) {
       t.defPg = { passYds: pg(t, "def", "passYds"), rushYds: pg(t, "def", "rushYds") };
       t.ranks = {};
     }
+    // Standard competition ranking: equal values share a rank, and the next
+    // distinct value takes the position after all of them (nine teams at 0
+    // rushing TDs allowed are all 1st; the next team is 10th). ranksTie[key]
+    // says whether the rank is shared.
     const rank = (key, get, dir) => {
       const arr = list.filter(([, t]) => get(t) != null).sort((a, b) => (dir === "asc" ? get(a[1]) - get(b[1]) : get(b[1]) - get(a[1])));
-      arr.forEach(([, t], i) => { t.ranks[key] = i + 1; });
+      let lastV = null, lastR = 0;
+      arr.forEach(([, t], i) => {
+        const v = get(t);
+        if (v !== lastV) { lastR = i + 1; lastV = v; }
+        t.ranks[key] = lastR;
+      });
+      for (const [, t] of arr) { (t.ranksTie ??= {})[key] = arr.filter(([, o]) => get(o) === get(t)).length > 1; }
     };
     rank("offPassYds", (t) => t.offPg.passYds, "desc"); rank("offPassTd", (t) => t.off.passTd, "desc");
     rank("offRushYds", (t) => t.offPg.rushYds, "desc"); rank("offRushTd", (t) => t.off.rushTd, "desc");
