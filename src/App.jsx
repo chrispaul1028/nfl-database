@@ -655,7 +655,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v18";
+const NFL_VERSION = "v19";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1451,30 +1451,44 @@ function DraftTab({ players, onSelect, pills }) {
       <div className="px-4 pb-28 mt-4">
         {years.length === 0 && <div className="text-center text-sm text-slate-400 py-12 px-6">No draft data yet — fill Draft Year and Draft on the Players table in Airtable.</div>}
         {years.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-3" style={{ scrollbarWidth: "none" }}>
-            {years.map((y) => (
-              <button key={y} onClick={() => setYear(y)}
-                className={"shrink-0 px-3 py-1 rounded-full text-[11px] font-extrabold " + (yr === y ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}>{y}</button>
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400">Draft class</div>
+            <label className="relative inline-flex items-center">
+              <select value={yr || ""} onChange={(e) => setYear(Number(e.target.value))}
+                className="appearance-none bg-blue-600 text-white text-[13px] font-extrabold rounded-full pl-4 pr-9 py-1.5 shadow-sm focus:outline-none">
+                {years.map((y) => <option key={y} value={y}>{y} class</option>)}
+              </select>
+              <span className="pointer-events-none absolute right-3 text-white text-[10px]">▼</span>
+            </label>
           </div>
         )}
         <div className="space-y-4">
           {rounds.map((g) => (
             <div key={g.round}>
-              <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400 mb-1.5 px-1">{g.round === 99 ? "Round unknown" : "Round " + g.round}</div>
+              <div className="flex items-center gap-2 mb-1.5 px-1">
+                <span className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400">{g.round === 99 ? "Round unknown" : "Round " + g.round}</span>
+                <span className="text-[9px] font-bold text-slate-400">· {g.rows.length} {g.rows.length === 1 ? "player" : "players"}</span>
+              </div>
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
                 {g.rows.map(({ p, pick, by }) => {
                   const a = toAbbr(teamOfPlayer(p) || p.teamName || "");
+                  const c = a ? teamInk(a, dark) : "#64748b";
                   return (
-                    <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-2.5 text-left active:bg-slate-50 dark:active:bg-slate-800"
-                      style={a ? { borderLeft: `3px solid ${teamInk(a, dark)}${dark ? "66" : "33"}` } : undefined}>
-                      <span className="w-8 text-center text-[13px] font-black tabular-nums text-slate-400">{pick === 999 ? "—" : pick}</span>
+                    <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-3 pl-3 py-2.5 text-left active:bg-slate-50 dark:active:bg-slate-800"
+                      style={{ borderLeft: `3px solid ${c}${dark ? "66" : "33"}` }}>
+                      <span className="w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0 text-white" style={{ backgroundColor: c }}>
+                        <span className="text-[6px] font-bold uppercase tracking-wider leading-none opacity-80">pick</span>
+                        <span className="text-[14px] font-black tabular-nums leading-none mt-0.5">{pick === 999 ? "—" : pick}</span>
+                      </span>
                       <Avatar p={p} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
-                        <span className="block text-[11px] text-slate-400 font-medium truncate">{[p.pos, p.college, by && by !== a ? "drafted by " + by : null].filter(Boolean).join(" · ")}</span>
+                        <span className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                          <span className="text-[9px] font-extrabold uppercase rounded px-1.5 py-0.5 text-white shrink-0" style={{ backgroundColor: c }}>{p.pos || "—"}</span>
+                          <span className="text-[11px] text-slate-400 font-medium truncate">{[p.college, by && by !== a ? "drafted by " + by : null].filter(Boolean).join(" · ")}</span>
+                        </span>
                       </span>
-                      <TeamPill team={teamOfPlayer(p) || p.teamName || activeOf(p)?.team} />
+                      {a && <img src={TEAM_LOGOS[a]} alt="" className="w-11 h-11 object-contain shrink-0 drop-shadow" />}
                     </button>
                   );
                 })}
@@ -1764,7 +1778,7 @@ function TeamsTab({ teams, players, onSelect }) {
               <button key={t.id} onClick={() => onSelect(t)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-2xl shadow-sm active:opacity-90 transition-opacity"
                 style={{ background: `linear-gradient(100deg, ${bg} 0%, ${bg} 62%, ${shade(bg, -14)} 100%)`, color: ink }}>
                 {t.logo ? (
-                  <img src={chipLogo(abbr, t.logo)} alt="" className="w-11 h-11 rounded-full object-contain p-1 shrink-0" style={logoChip(abbr, true)} />
+                  <img src={darkLogo(abbr) || t.logo || TEAM_LOGOS[abbr]} alt="" className="w-[52px] h-[52px] object-contain shrink-0 drop-shadow-md" />
                 ) : (
                   <span className="w-11 h-11 rounded-full shrink-0 bg-white/90" />
                 )}
