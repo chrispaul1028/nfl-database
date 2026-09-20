@@ -671,7 +671,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v23";
+const NFL_VERSION = "v24";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1226,7 +1226,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               <div key={k} className="min-w-0">
                 <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
                 <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
-                {yrs && <div className="text-[9px] font-semibold text-slate-400 truncate">{ordinal(yrs)} season · since {since}</div>}
+                {yrs && <div className="text-[9px] font-semibold text-slate-400 truncate">{ordinal(yrs)} season</div>}
               </div>
             );
           })}
@@ -3015,15 +3015,17 @@ function MatchCard({ g, onClick }) {
   );
   // Record over timeouts, stacked and centred in the score's own column so it
   // sits directly beneath the number.
-  const Foot = ({ t, side }) => {
-    const n = tos(t, side);
-    const pips = n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>;
-    const rec = t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>;
-    // away: record at the card's left edge, pips inboard · home: mirrored
-    return side === "away"
-      ? <div className="flex items-center gap-1.5 pl-1 shrink-0">{rec}{pips}</div>
-      : <div className="flex items-center gap-1.5 pr-1 shrink-0">{pips}{rec}</div>;
+  const Pips = ({ side }) => {
+    const n = tos(null, side);
+    if (n == null) return null;
+    return <span className="flex items-center gap-[3px] shrink-0">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>;
   };
+  // Record only, pinned to the card edge (away left, home right)
+  const Foot = ({ t, side }) => (
+    <div className={"w-[52px] shrink-0 " + (side === "away" ? "pl-1 text-left" : "pr-1 text-right")}>
+      {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
+    </div>
+  );
   // Possession: a still football beside the team that has it.
   const Ball = ({ on }) => (
     <span className={"w-4 text-[12px] leading-none text-center inline-block " + (on ? "" : "invisible")}>🏈</span>
@@ -3065,7 +3067,13 @@ function MatchCard({ g, onClick }) {
         <Foot t={g.away} side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
-          {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
+          {isLive && (
+            <div className="flex items-center gap-2.5">
+              <Pips side="away" />
+              {(g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
+              <Pips side="home" />
+            </div>
+          )}
         </div>
         <Foot t={g.home} side="home" />
       </div>
