@@ -13,6 +13,17 @@ export default async function handler(req, res) {
       "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries?region=us&lang=en",
       "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries?region=us&lang=en&contentorigin=espn",
     ];
+    // ESPN's report nests as injuries[team].injuries[entry]. The team level has
+    // an id and displayName but no abbreviation, and the athlete carries NO id
+    // field — it's only in his player-card link (".../id/4428633/name"). Both
+    // are why a naive read finds nothing.
+    const TEAM_ID = { 1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LAR", 15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ", 21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB", 28: "WSH", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU" };
+    const athleteId = (a) => {
+      if (!a) return null;
+      if (a.id) return String(a.id);
+      for (const l of a.links || []) { const m = String(l.href || "").match(/\/id\/(\d+)/); if (m) return m[1]; }
+      return null;
+    };
     let out = {}, used = null, topKeys = null, tried = [], raw = null;
     for (const url of SOURCES) {
       try {
@@ -31,7 +42,8 @@ export default async function handler(req, res) {
         const walk = (node, teamAbbr) => {
           if (!node || typeof node !== "object") return;
           if (Array.isArray(node)) { for (const x of node) walk(x, teamAbbr); return; }
-          const abbr = node.team && node.team.abbreviation ? String(node.team.abbreviation).toUpperCase() : teamAbbr;
+          const abbr = node.team && node.team.abbreviation ? String(node.team.abbreviation).toUpperCase()
+            : (Array.isArray(node.injuries) && node.id && TEAM_ID[node.id]) ? TEAM_ID[node.id] : teamAbbr;
           // An injury entry: something with a status (or details) attached to a
           // person, whether the person sits under "athlete", "player", or inline.
           const person = node.athlete || node.player || null;
@@ -39,7 +51,8 @@ export default async function handler(req, res) {
           if (hasStatus && (person || node.displayName || node.athleteId)) {
             const a = person || { id: node.athleteId || node.id, displayName: node.displayName, team: node.team };
             const det = node.details || {};
-            if (a.id) found[String(a.id)] = {
+            const aid = athleteId(a);
+            if (aid) found[aid] = {
               name: a.displayName || a.fullName || null, team: (a.team && a.team.abbreviation ? String(a.team.abbreviation).toUpperCase() : abbr) || null,
               status: node.status || null, date: node.date || null,
               type: det.type || (typeof node.type === "object" ? node.type?.description : node.type) || null,
@@ -47,7 +60,7 @@ export default async function handler(req, res) {
               returnDate: det.returnDate || node.returnDate || null, comment: node.longComment || node.shortComment || null,
             };
           }
-          for (const v of Object.values(node)) if (v && typeof v === "object") walk(v, abbr);
+          for (const [k, v] of Object.entries(node)) if (v && typeof v === "object" && k !== "links" && k !== "headshot" && k !== "logos") walk(v, abbr);
         };
         walk(d, null);
         if (Object.keys(found).length > Object.keys(out).length) { out = found; used = url; topKeys = Object.keys(d); }
