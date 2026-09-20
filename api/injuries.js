@@ -10,15 +10,20 @@ export default async function handler(req, res) {
     // Two hosts serve this report; try both, keep whichever returns more.
     const SOURCES = [
       "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries",
-      "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries",
+      "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries?region=us&lang=en",
+      "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries?region=us&lang=en&contentorigin=espn",
     ];
-    let out = {}, used = null, topKeys = null, tried = [];
+    let out = {}, used = null, topKeys = null, tried = [], raw = null;
     for (const url of SOURCES) {
       try {
         const r = await fetch(url, { headers: { accept: "application/json", "user-agent": "Mozilla/5.0" } });
         tried.push(url + " → " + r.status);
         if (!r.ok) continue;
-        const d = await r.json();
+        const text = await r.text();
+        tried[tried.length - 1] += ` (${text.length} bytes)`;
+        if (!raw) raw = text.slice(0, 900);          // for ?debug=1 — shows the actual shape
+        let d; try { d = JSON.parse(text); } catch { tried[tried.length - 1] += " not JSON"; continue; }
+        if (!topKeys) topKeys = Object.keys(d || {});
         // ESPN has shuffled this payload's nesting before. Rather than trust one
         // shape, walk the whole document and collect anything that looks like
         // an injury entry: an object with an athlete and a status or details.
@@ -27,14 +32,19 @@ export default async function handler(req, res) {
           if (!node || typeof node !== "object") return;
           if (Array.isArray(node)) { for (const x of node) walk(x, teamAbbr); return; }
           const abbr = node.team && node.team.abbreviation ? String(node.team.abbreviation).toUpperCase() : teamAbbr;
-          if (node.athlete && (node.status || node.details || node.type)) {
-            const a = node.athlete || {}; const det = node.details || {};
+          // An injury entry: something with a status (or details) attached to a
+          // person, whether the person sits under "athlete", "player", or inline.
+          const person = node.athlete || node.player || null;
+          const hasStatus = typeof node.status === "string" || node.details || node.returnDate;
+          if (hasStatus && (person || node.displayName || node.athleteId)) {
+            const a = person || { id: node.athleteId || node.id, displayName: node.displayName, team: node.team };
+            const det = node.details || {};
             if (a.id) found[String(a.id)] = {
               name: a.displayName || a.fullName || null, team: (a.team && a.team.abbreviation ? String(a.team.abbreviation).toUpperCase() : abbr) || null,
               status: node.status || null, date: node.date || null,
               type: det.type || (typeof node.type === "object" ? node.type?.description : node.type) || null,
               location: det.location || null, side: det.side || null, detail: det.detail || null,
-              returnDate: det.returnDate || null, comment: node.longComment || node.shortComment || null,
+              returnDate: det.returnDate || node.returnDate || null, comment: node.longComment || node.shortComment || null,
             };
           }
           for (const v of Object.values(node)) if (v && typeof v === "object") walk(v, abbr);
@@ -50,7 +60,7 @@ export default async function handler(req, res) {
       const all = Object.entries(out);
       const find = String(req.query.find || "").toLowerCase();
       return res.status(200).json({
-        source: used, tried, topKeys,
+        source: used, tried, topKeys, raw,
         total: all.length,
         withReturnDate: all.filter(([, v]) => v.returnDate).length,
         sampleWithDate: all.filter(([, v]) => v.returnDate).slice(0, 10).map(([id, v]) => ({ id, name: v.name, status: v.status, returnDate: v.returnDate })),
