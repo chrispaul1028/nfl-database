@@ -226,13 +226,13 @@ function ordinal(n) {
   return n + suffix;
 }
 
-function Tile({ value, label, sub, accent, valueClass, compact, tint }) {
+function Tile({ value, label, sub, accent, valueClass, compact, tint, trend }) {
   return (
     <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}
       style={tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined}>
       <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
         style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}</div>
-      <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}</div>
+      <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}<Trend t={trend} /></div>
       {sub && (
         <div className={"text-[10px] font-bold mt-0.5 " + (typeof sub === "object" && sub.cls ? sub.cls : "text-blue-600 dark:text-blue-400")}>
           {typeof sub === "object" ? sub.label : sub}
@@ -384,6 +384,25 @@ const STAT_TILES = {
 };
 // ── Season stats box + game-by-game graph (from /api/season-stats) ──
 const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
+// Direction of travel for a team stat: compare the most recent game with the
+// average of every game before it. null until there are two games to compare.
+// lowerBetter flips the colour (giving up fewer points is an improvement).
+function trendOf(log, key, lowerBetter) {
+  if (!Array.isArray(log) || log.length < 2) return null;
+  const vals = log.map((g) => Number(g[key]) || 0);
+  const last = vals[vals.length - 1];
+  const prior = vals.slice(0, -1);
+  const avg = prior.reduce((a, b) => a + b, 0) / prior.length;
+  if (!avg && !last) return null;
+  const diff = last - avg;
+  if (Math.abs(diff) < Math.max(0.5, avg * 0.03)) return null;   // flat enough to leave alone
+  const up = diff > 0;
+  return { up, good: lowerBetter ? !up : up, delta: Math.abs(diff) };
+}
+function Trend({ t }) {
+  if (!t) return null;
+  return <span className={"ml-1 text-[10px] font-black align-middle " + (t.good ? "text-emerald-500" : "text-rose-500")}>{t.up ? "▲" : "▼"}</span>;
+}
 function SeasonStatsBox({ p, seasonStats, onStatJump }) {
   const [metric, setMetric] = useState(null);
   const dark = useDark();
@@ -1862,6 +1881,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   const dark = useDark();
   const ink = teamInk(abbr, dark);            // readable on the current theme
   const tint = (a) => ink + a;                // team-tinted fill
+  const fill = LOGO_BG[abbr] || teamColor(abbr);  // big filled areas: the real shade
 
   // Offense absorbs the offensive line, Defense absorbs the defensive line;
   // Special Teams stays its own section for when that depth chart is filled in.
@@ -1875,7 +1895,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
-      <div className="px-5 pb-6 text-white" style={{ backgroundColor: ink, paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+      <div className="px-5 pb-6 text-white" style={{ backgroundColor: fill, paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
@@ -1926,6 +1946,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             // (Passed as {label, cls} — the format Tile's sub actually renders;
             // a JSX element here silently displays nothing, which is why ranks
             // were invisible before.)
+            const tLog = (() => {
+              const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, abbr)) : null;
+              return bx && bx[1] ? bx[1].log : null;
+            })();
             const rk = (rank) => rank == null ? null : {
               label: ordinal(rank),
               cls: rank <= 10 ? "text-green-600 dark:text-green-400"
@@ -1935,20 +1959,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             if (seg === "roster" && unit === "offense") {
               return (
                 <>
-                  <Tile compact value={sx.offPassYpg != null ? sx.offPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.offPassYpgRank)} />
-                  <Tile compact value={sx.offPassTd != null ? sx.offPassTd : "—"} label="Pass TD" sub={rk(sx.offPassTdRank)} />
-                  <Tile compact value={sx.offRushYpg != null ? sx.offRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.offRushYpgRank)} />
-                  <Tile compact value={sx.offRushTd != null ? sx.offRushTd : "—"} label="Rush TD" sub={rk(sx.offRushTdRank)} />
+                  <Tile compact trend={trendOf(tLog, "offPassYds", false)} value={sx.offPassYpg != null ? sx.offPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.offPassYpgRank)} />
+                  <Tile compact trend={trendOf(tLog, "offPassTd", false)} value={sx.offPassTd != null ? sx.offPassTd : "—"} label="Pass TD" sub={rk(sx.offPassTdRank)} />
+                  <Tile compact trend={trendOf(tLog, "offRushYds", false)} value={sx.offRushYpg != null ? sx.offRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.offRushYpgRank)} />
+                  <Tile compact trend={trendOf(tLog, "offRushTd", false)} value={sx.offRushTd != null ? sx.offRushTd : "—"} label="Rush TD" sub={rk(sx.offRushTdRank)} />
                 </>
               );
             }
             if (seg === "roster" && unit === "defense") {
               return (
                 <>
-                  <Tile compact value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.defPassYpgRank)} />
-                  <Tile compact value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" sub={rk(sx.defPassTdRank)} />
-                  <Tile compact value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.defRushYpgRank)} />
-                  <Tile compact value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" sub={rk(sx.defRushTdRank)} />
+                  <Tile compact trend={trendOf(tLog, "defPassYds", true)} value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.defPassYpgRank)} />
+                  <Tile compact trend={trendOf(tLog, "defPassTd", true)} value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" sub={rk(sx.defPassTdRank)} />
+                  <Tile compact trend={trendOf(tLog, "defRushYds", true)} value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.defRushYpgRank)} />
+                  <Tile compact trend={trendOf(tLog, "defRushTd", true)} value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" sub={rk(sx.defRushTdRank)} />
                 </>
               );
             }
@@ -2026,13 +2050,17 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               label: ordinal(o.rank) + (o.tie ? " (tie)" : ""),
               cls: o.rank <= 10 ? "text-green-600 dark:text-green-400" : o.rank <= 20 ? "text-yellow-600 dark:text-yellow-400" : "text-red-500 dark:text-red-400",
             };
+            const tlog = (() => {
+              const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, abbr)) : null;
+              return bx && bx[1] ? bx[1].log : null;
+            })();
             const pfRank = rankIn(allPts.map((x) => x.pf), pts.pf, false);
             const paRank = rankIn(allPts.map((x) => x.pa), pts.pa, true);
             const dRank = rankIn(allPts.map((x) => x.d), pts.pf != null && pts.pa != null ? pts.pf - pts.pa : null, false);
             return (
               <>
-                <Tile tint={ink} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
-                <Tile tint={ink} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rkT(paRank)} />
+                <Tile tint={ink} trend={trendOf(tlog, "pf", false)} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
+                <Tile tint={ink} trend={trendOf(tlog, "pa", true)} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rkT(paRank)} />
                 <Tile tint={ink} value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff" sub={rkT(dRank)}
                   valueClass={diff == null ? null : diff > 0 ? "text-emerald-600 dark:text-emerald-400" : diff < 0 ? "text-red-600 dark:text-red-400" : null} />
               </>
@@ -2112,10 +2140,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                               {STAT_TILES[grp].map(([lbl, k]) => (
                                 // fixed height + no label wrap, so "RUSH YDS" can't push its
                                 // number a line lower than the tiles beside it
-                                <span key={k} className="w-[52px] h-[38px] flex flex-col items-center justify-center rounded-md border"
+                                <span key={k} className="w-[52px] h-[38px] flex flex-col items-stretch justify-start rounded-md border overflow-hidden"
                                   style={{ backgroundColor: tint(dark ? "24" : "14"), borderColor: tint(dark ? "59" : "33") }}>
-                                  <span className="block text-[7px] font-bold tracking-wide uppercase leading-none whitespace-nowrap" style={{ color: ink, opacity: dark ? 1 : 0.85 }}>{lbl}</span>
-                                  <span className="block text-[13px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-none mt-1">{G && G[k] != null ? G[k] : "—"}</span>
+                                  <span className="block text-[7px] font-extrabold tracking-wide uppercase leading-none whitespace-nowrap text-white text-center py-[3px]" style={{ backgroundColor: ink }}>{lbl}</span>
+                                  <span className="flex-1 flex items-center justify-center text-[13px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-none">{G && G[k] != null ? G[k] : "—"}</span>
                                 </span>
                               ))}
                             </span>
@@ -3315,7 +3343,14 @@ export default function App() {
     const find = (abbr) => stand.teams.find((s) => injTeamEq(s.abbr, abbr));
     return teams.map((t) => {
       const s = find(t.abbr || toAbbr(t.name)) || {};
-      const bx = seasonStats && seasonStats.teams ? seasonStats.teams[t.abbr || toAbbr(t.name)] : null;
+      // Alias-safe lookup: ESPN files Washington as WSH, Airtable as WAS (same
+      // story for JAX/JAC, LAR/LA). A direct key miss left the Commanders' tiles blank.
+      const bx = (() => {
+        if (!seasonStats || !seasonStats.teams) return null;
+        const want = t.abbr || toAbbr(t.name);
+        const hit = Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, want));
+        return hit ? hit[1] : null;
+      })();
       const stx = {
         // defense splits from box scores (pass/rush yds & TDs allowed, ranked)
         offPassYpg: bx ? bx.offPg.passYds : null, offPassYpgRank: bx ? bx.ranks.offPassYds : null,
