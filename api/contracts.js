@@ -146,8 +146,9 @@ function photoUrl(val) {
 
 // Fallback: scan every field for an attachment-shaped value (array of
 // objects with a url). Finds the headshot no matter what the field is named.
-function findAnyPhoto(fields) {
-  for (const val of Object.values(fields)) {
+function findAnyPhoto(fields, skipWords = []) {
+  for (const [k, val] of Object.entries(fields)) {
+    if (skipWords.some((w) => String(k).toLowerCase().includes(w))) continue;
     const url = photoUrl(val);
     if (url) return url;
   }
@@ -281,7 +282,11 @@ export default async function handler(req, res) {
           tiesPrev: coerceNum(getField(t.fields, FIELDS.teamTiesPrev)),
           pfPrev: coerceNum(getField(t.fields, FIELDS.teamPFPrev)),
           paPrev: coerceNum(getField(t.fields, FIELDS.teamPAPrev)),
-          logo: findAnyPhoto(t.fields),
+          // Logo: a field called Logo wins; otherwise the first attachment that
+          // isn't the helmet. Helmet: an attachment field named "Helmet" (a
+          // transparent PNG of the real helmet, side view, facing right).
+          logo: photoUrl(getField(t.fields, ["Logo", "Team Logo", "Photo", "Image"])) || findAnyPhoto(t.fields, ["helmet"]),
+          helmet: photoUrl(getField(t.fields, ["Helmet", "Helmet Photo", "Helmet Image", "Helmet PNG"])) || null,
         });
       }
       teamsOut.sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -389,7 +394,8 @@ export default async function handler(req, res) {
         injuryNotes: asText(getField(p.fields, FIELDS.playerInjury)),
         // Manual override: ESPN leaves returnDate blank for most players, so an
         // "Est Return" date field in Airtable wins when you fill one in.
-        estReturn: asText(getField(p.fields, FIELDS.playerEstReturn)) || null,
+        estReturn: asText(getField(p.fields, FIELDS.playerEstReturn))
+          || asText(Object.entries(p.fields).find(([k]) => /return/i.test(k))?.[1]) || null,
         photo: photoUrl(getField(p.fields, FIELDS.playerPhoto)) || findAnyPhoto(p.fields),
         height: asText(getField(p.fields, FIELDS.playerHeight)),
         weight: asText(getField(p.fields, FIELDS.playerWeight)),

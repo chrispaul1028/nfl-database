@@ -18,7 +18,7 @@ export default async function handler(req, res) {
         out[String(a.id)] = {
           name: a.displayName, team: abbr, status: it.status || null, date: it.date || null,
           type: det.type || null, location: det.location || null, side: det.side || null, detail: det.detail || null,
-          returnDate: det.returnDate || null, comment: it.shortComment || it.longComment || null,
+          returnDate: det.returnDate || null, comment: it.longComment || it.shortComment || null,   // long = the newsy sentence
         };
       }
     }
