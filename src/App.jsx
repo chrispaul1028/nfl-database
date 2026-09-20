@@ -671,7 +671,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v22";
+const NFL_VERSION = "v23";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -3017,12 +3017,12 @@ function MatchCard({ g, onClick }) {
   // sits directly beneath the number.
   const Foot = ({ t, side }) => {
     const n = tos(t, side);
-    return (
-      <div className="w-[72px] flex items-center justify-center gap-1.5">
-        {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
-        {n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
-      </div>
-    );
+    const pips = n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>;
+    const rec = t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>;
+    // away: record at the card's left edge, pips inboard · home: mirrored
+    return side === "away"
+      ? <div className="flex items-center gap-1.5 pl-1 shrink-0">{rec}{pips}</div>
+      : <div className="flex items-center gap-1.5 pr-1 shrink-0">{pips}{rec}</div>;
   };
   // Possession: a still football beside the team that has it.
   const Ball = ({ on }) => (
@@ -3062,14 +3062,12 @@ function MatchCard({ g, onClick }) {
       {/* bottom row mirrors the top row's columns: [logo][score][centre][score][logo],
           so each record lands directly under its score */}
       <div className="mt-0.5 flex items-start justify-between">
-        <div className="w-[60px] shrink-0" />
         <Foot t={g.away} side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
           {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
         </div>
         <Foot t={g.home} side="home" />
-        <div className="w-[60px] shrink-0" />
       </div>
     </button>
   );
