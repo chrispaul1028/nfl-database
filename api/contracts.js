@@ -47,6 +47,11 @@ const FIELDS = {
   teamHeadCoach: ["Head Coach", "HC", "Coach"],
   teamOffCoord: ["Offensive Coordinator", "OC", "Off Coordinator"],
   teamDefCoord: ["Defensive Coordinator", "DC", "Def Coordinator"],
+  // Year each coach joined the team in his current role. A year never goes
+  // stale; "3 years" would need editing every August.
+  teamHCSince: ["HC Since", "Head Coach Since", "Coach Since"],
+  teamOCSince: ["OC Since", "Offensive Coordinator Since"],
+  teamDCSince: ["DC Since", "Defensive Coordinator Since"],
   teamWins: ["W", "Wins"],
   teamPPG: ["PPG", "Points Per Game", "Team PPG", "Offense PPG", "PTS/G"],
   teamOppPPG: ["OPP PPG", "Opp PPG", "PPG Allowed", "Points Allowed", "OPPG", "Defense PPG", "Opp PTS/G"],
@@ -268,6 +273,9 @@ export default async function handler(req, res) {
           conference: asText(getField(t.fields, FIELDS.teamConference)),
           division: asText(getField(t.fields, FIELDS.teamDivision)),
           headCoach: asText(getField(t.fields, FIELDS.teamHeadCoach)),
+          hcSince: coerceNum(getField(t.fields, FIELDS.teamHCSince)),
+          ocSince: coerceNum(getField(t.fields, FIELDS.teamOCSince)),
+          dcSince: coerceNum(getField(t.fields, FIELDS.teamDCSince)),
           offCoord: asText(getField(t.fields, FIELDS.teamOffCoord)),
           defCoord: asText(getField(t.fields, FIELDS.teamDefCoord)),
           wins: coerceNum(getField(t.fields, FIELDS.teamWins)),
