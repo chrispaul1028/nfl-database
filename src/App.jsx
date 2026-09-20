@@ -680,7 +680,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v28";
+const NFL_VERSION = "v29";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -3142,16 +3142,44 @@ const HELMET_KIT = {
 };
 // Side profile of a modern shell: rounded crown, front rim, an open face with the
 // facemask cage bridging it, jaw flap and ear hole. Facing right; flip mirrors it.
+// Helmet photo treatment, remembered on the device: "photo" or "cartoon".
+const helmetStyle = () => { try { return localStorage.getItem("helmetStyle") || "cartoon"; } catch { return "cartoon"; } };
+const setHelmetStyle = (v) => { try { localStorage.setItem("helmetStyle", v); } catch {} };
 function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, photo }) {
   // A real helmet image (Airtable "Helmet" attachment on the team) beats the
   // drawn shell. It still flips for the home side and rides the same clash
   // animation, because the animation is on the wrapper, not the SVG.
   if (photo) {
+    // "Cartoon" restyles the photo on the fly: boost saturation, snap colours
+    // to a handful of flat steps (cel shading), sharpen, and draw a dark ink
+    // line around the silhouette. Done as an SVG filter on an <image>, which
+    // iOS renders reliably (CSS filter: url() on an <img> does not).
+    const toon = helmetStyle() === "cartoon";
+    const fid = `toon-${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
     return (
       <div onClick={onClick} style={{ width: size, height: size * 0.82, ...style }} className="relative">
-        <img src={photo} alt="" draggable="false"
-          className="w-full h-full object-contain select-none"
-          style={{ transform: flip ? "scaleX(-1)" : undefined }} />
+        <svg viewBox="0 0 100 82" width="100%" height="100%" className="block select-none">
+          {toon && (
+            <defs>
+              <filter id={fid} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+                <feColorMatrix in="SourceGraphic" type="saturate" values="1.4" result="sat" />
+                <feComponentTransfer in="sat" result="post">
+                  <feFuncR type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
+                  <feFuncG type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
+                  <feFuncB type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
+                </feComponentTransfer>
+                <feConvolveMatrix in="post" order="3" kernelMatrix="0 -0.6 0 -0.6 3.4 -0.6 0 -0.6 0" preserveAlpha="true" result="sharp" />
+                <feMorphology in="SourceAlpha" operator="dilate" radius="1.4" result="fat" />
+                <feFlood floodColor="#0b0f19" floodOpacity="0.92" result="inkc" />
+                <feComposite in="inkc" in2="fat" operator="in" result="ink" />
+                <feMerge><feMergeNode in="ink" /><feMergeNode in="sharp" /></feMerge>
+              </filter>
+            </defs>
+          )}
+          <g transform={flip ? "translate(100,0) scale(-1,1)" : undefined}>
+            <image href={photo} x="0" y="0" width="100" height="82" preserveAspectRatio="xMidYMid meet" filter={toon ? `url(#${fid})` : undefined} />
+          </g>
+        </svg>
       </div>
     );
   }
@@ -3337,6 +3365,7 @@ function PropsBoard() {
 
 // ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
 function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
+  const [, setToonTick] = useState(0);   // re-render when the helmet style flips
   // Real helmet art from Airtable, when the team record has one
   const helmetOf = (abbr) => { const t = (teams || []).find((x) => injTeamEq(x.abbr || toAbbr(x.name), abbr)); return t && t.helmet ? t.helmet : null; };
   const [d, setD] = useState(null);
@@ -3589,6 +3618,14 @@ function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
           </div>
         )}
         {d && !focus && (g.venue || g.weather) && <div className="text-[10px] text-slate-400 text-center mb-2">{[g.venue, g.weather].filter(Boolean).join(" · ")}{isLive ? " · updates every 30s" : ""} · tap a team for its box score</div>}
+        {d && !focus && (helmetOf(g.away.abbr) || helmetOf(g.home.abbr)) && (
+          <div className="flex justify-center mb-3">
+            <button onClick={() => { setHelmetStyle(helmetStyle() === "cartoon" ? "photo" : "cartoon"); setToonTick((t) => t + 1); }}
+              className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300">
+              helmets: {helmetStyle() === "cartoon" ? "cartoon" : "photo"} · tap to switch
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
