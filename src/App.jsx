@@ -680,7 +680,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v27";
+const NFL_VERSION = "v28";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -3694,7 +3694,15 @@ export default function App() {
     fetch("/api/contracts")
       .then((r) => r.json())
       .then((d) => { if (d.error) setError(d.error); else {
-        for (const t of d.teams || []) { const a = t.abbr || toAbbr(t.name); if (a && t.logo) TEAM_LOGOS[a] = t.logo; if (a && t.name) TEAM_NAMES[a] = t.name; }
+        // Register each team under its Airtable abbreviation AND every alias ESPN
+        // uses for it (WAS/WSH, JAX/JAC, LAR/LA…), so boards keyed by ESPN's code
+        // find the same logo and name.
+        const ALIASES = { WAS: ["WSH"], WSH: ["WAS"], JAX: ["JAC"], JAC: ["JAX"], LAR: ["LA"], LA: ["LAR"], ARI: ["ARZ"], BAL: ["BLT"], CLE: ["CLV"], HOU: ["HST"] };
+        for (const t of d.teams || []) {
+          const a = t.abbr || toAbbr(t.name);
+          if (!a) continue;
+          for (const k of [a, ...(ALIASES[a] || [])]) { if (t.logo) TEAM_LOGOS[k] = t.logo; if (t.name) TEAM_NAMES[k] = t.name; }
+        }
         setPlayers(d.players); setTeams(d.teams || []);
       } })
       .catch((e) => setError(String(e)));
