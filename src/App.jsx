@@ -220,9 +220,10 @@ function ordinal(n) {
   return n + suffix;
 }
 
-function Tile({ value, label, sub, accent, valueClass, compact, tint, trend }) {
+function Tile({ value, label, sub, accent, valueClass, compact, tint, trend, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4")}
+    <Tag onClick={onClick} className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4") + (onClick ? " active:scale-[0.97] transition-transform w-full" : "")}
       style={tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined}>
       <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
         style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}</div>
@@ -232,7 +233,7 @@ function Tile({ value, label, sub, accent, valueClass, compact, tint, trend }) {
           {typeof sub === "object" ? sub.label : sub}
         </div>
       )}
-    </div>
+    </Tag>
   );
 }
 
@@ -679,7 +680,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v26";
+const NFL_VERSION = "v27";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -2038,7 +2039,7 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
   );
 }
 
-function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats, onSwitchTeam }) {
+function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats, onSwitchTeam, onStatJump }) {
   useEffect(() => { window.scrollTo(0, 0); }, [team.id]);
   const alpha = useMemo(() => [...(teams || [])].sort((a, b) => String(a.name).localeCompare(String(b.name))), [teams]);
   const idx = alpha.findIndex((t) => t.id === team.id);
@@ -2065,6 +2066,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   const ink = teamInk(abbr, dark);            // readable on the current theme
   const tint = (a) => ink + a;                // team-tinted fill
   const fill = LOGO_BG[abbr] || teamColor(abbr);  // big filled areas: the real shade
+  // tap a stat tile → Stats → Teams board for that stat, scrolled to this team
+  const jumpTeam = (teamStat) => (onStatJump ? () => onStatJump({ teamStat, team: abbr }) : undefined);
 
   // Offense absorbs the offensive line, Defense absorbs the defensive line;
   // Special Teams stays its own section for when that depth chart is filled in.
@@ -2133,8 +2136,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, abbr)) : null;
               return bx && bx[1] ? bx[1].log : null;
             })();
-            const rk = (rank) => rank == null ? null : {
-              label: ordinal(rank),
+            const rk = (rank, tieKey) => rank == null ? null : {
+              label: ordinal(rank) + (tieKey && sx.ties && sx.ties[tieKey] ? " (tie)" : ""),
               cls: rank <= 10 ? "text-green-600 dark:text-green-400"
                 : rank <= 20 ? "text-yellow-600 dark:text-yellow-400"
                 : "text-red-500 dark:text-red-400",
@@ -2142,20 +2145,20 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             if (seg === "roster" && unit === "offense") {
               return (
                 <>
-                  <Tile compact trend={trendOf(tLog, "offPassYds", false)} value={sx.offPassYpg != null ? sx.offPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.offPassYpgRank)} />
-                  <Tile compact trend={trendOf(tLog, "offPassTd", false)} value={sx.offPassTd != null ? sx.offPassTd : "—"} label="Pass TD" sub={rk(sx.offPassTdRank)} />
-                  <Tile compact trend={trendOf(tLog, "offRushYds", false)} value={sx.offRushYpg != null ? sx.offRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.offRushYpgRank)} />
-                  <Tile compact trend={trendOf(tLog, "offRushTd", false)} value={sx.offRushTd != null ? sx.offRushTd : "—"} label="Rush TD" sub={rk(sx.offRushTdRank)} />
+                  <Tile compact onClick={jumpTeam("offPassYds")} trend={trendOf(tLog, "offPassYds", false)} value={sx.offPassYpg != null ? sx.offPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.offPassYpgRank, "offPassYds")} />
+                  <Tile compact onClick={jumpTeam("offPassTd")} trend={trendOf(tLog, "offPassTd", false)} value={sx.offPassTd != null ? sx.offPassTd : "—"} label="Pass TD" sub={rk(sx.offPassTdRank, "offPassTd")} />
+                  <Tile compact onClick={jumpTeam("offRushYds")} trend={trendOf(tLog, "offRushYds", false)} value={sx.offRushYpg != null ? sx.offRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.offRushYpgRank, "offRushYds")} />
+                  <Tile compact onClick={jumpTeam("offRushTd")} trend={trendOf(tLog, "offRushTd", false)} value={sx.offRushTd != null ? sx.offRushTd : "—"} label="Rush TD" sub={rk(sx.offRushTdRank, "offRushTd")} />
                 </>
               );
             }
             if (seg === "roster" && unit === "defense") {
               return (
                 <>
-                  <Tile compact trend={trendOf(tLog, "defPassYds", true)} value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.defPassYpgRank)} />
-                  <Tile compact trend={trendOf(tLog, "defPassTd", true)} value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" sub={rk(sx.defPassTdRank)} />
-                  <Tile compact trend={trendOf(tLog, "defRushYds", true)} value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.defRushYpgRank)} />
-                  <Tile compact trend={trendOf(tLog, "defRushTd", true)} value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" sub={rk(sx.defRushTdRank)} />
+                  <Tile compact onClick={jumpTeam("defPassYds")} trend={trendOf(tLog, "defPassYds", true)} value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.defPassYpgRank, "defPassYds")} />
+                  <Tile compact onClick={jumpTeam("defPassTd")} trend={trendOf(tLog, "defPassTd", true)} value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" sub={rk(sx.defPassTdRank, "defPassTd")} />
+                  <Tile compact onClick={jumpTeam("defRushYds")} trend={trendOf(tLog, "defRushYds", true)} value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.defRushYpgRank, "defRushYds")} />
+                  <Tile compact onClick={jumpTeam("defRushTd")} trend={trendOf(tLog, "defRushTd", true)} value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" sub={rk(sx.defRushTdRank, "defRushTd")} />
                 </>
               );
             }
@@ -2242,8 +2245,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             const dRank = rankIn(allPts.map((x) => x.d), pts.pf != null && pts.pa != null ? pts.pf - pts.pa : null, false);
             return (
               <>
-                <Tile tint={ink} trend={trendOf(tlog, "pf", false)} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
-                <Tile tint={ink} trend={trendOf(tlog, "pa", true)} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rkT(paRank)} />
+                <Tile tint={ink} onClick={jumpTeam("ppg")} trend={trendOf(tlog, "pf", false)} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
+                <Tile tint={ink} onClick={jumpTeam("papg")} trend={trendOf(tlog, "pa", true)} value={pts.pa != null ? Math.round(pts.pa) : "—"} label="Points Allowed" sub={rkT(paRank)} />
                 <Tile tint={ink} value={diff != null ? (diff > 0 ? "+" + diff : String(diff)) : "—"} label="Point Diff" sub={rkT(dRank)}
                   valueClass={diff == null ? null : diff > 0 ? "text-emerald-600 dark:text-emerald-400" : diff < 0 ? "text-red-600 dark:text-red-400" : null} />
               </>
@@ -2434,7 +2437,7 @@ const LEADER_CATS = [
   { id: "receiving", label: "Receiving", positions: ["WR", "TE", "RB"], stats: [["recYds", "Yards"], ["recTd", "TD"], ["rec", "Rec"], ["tgt", "Targets"]] },
   { id: "defense", label: "Defense", positions: null, stats: [["tkl", "Tackles"], ["sacks", "Sacks"], ["defInt", "INT"], ["tfl", "TFL"], ["pd", "PD"]] },
   { id: "fantasy", label: "Fantasy", positions: ["QB", "RB", "WR", "TE"], stats: [["fpts", "Points"]] },
-  { id: "teams", label: "Teams", positions: null, stats: [["passRate", "Pass Rate"], ["passAtt", "Pass Att"], ["rushAtt", "Rush Att"], ["ppg", "Points/G"], ["papg", "Pts Allowed"], ["ydsFor", "Yards/G"], ["ydsAgainst", "Yds Allowed"], ["sacks", "Sacks"], ["takeaways", "Takeaways"]] },
+  { id: "teams", label: "Teams", positions: null, stats: [["ppg", "Points/G"], ["papg", "Pts Allowed"], ["offPassYds", "Pass Yds/G"], ["offPassTd", "Pass TD"], ["offRushYds", "Rush Yds/G"], ["offRushTd", "Rush TD"], ["defPassYds", "Pass Yds Alwd"], ["defPassTd", "Pass TD Alwd"], ["defRushYds", "Rush Yds Alwd"], ["defRushTd", "Rush TD Alwd"], ["passRate", "Pass Rate"], ["passAtt", "Pass Att"], ["rushAtt", "Rush Att"], ["ydsFor", "Yards/G"], ["ydsAgainst", "Yds Allowed"], ["sacks", "Sacks"], ["takeaways", "Takeaways"]] },
 ];
 // Team-level rows built from the same box-score pipeline the player stats use
 function teamLeaderRows(seasonStats, key) {
@@ -2455,25 +2458,45 @@ function teamLeaderRows(seasonStats, key) {
       ppg: (t.pf || 0) / gp, papg: (t.pa || 0) / gp,
       ydsFor: ((t.off?.passYds || 0) + (t.off?.rushYds || 0)) / gp,
       ydsAgainst: ((t.def?.passYds || 0) + (t.def?.rushYds || 0)) / gp,
+      offPassYds: (t.off?.passYds || 0) / gp, offPassTd: t.off?.passTd || 0,
+      offRushYds: (t.off?.rushYds || 0) / gp, offRushTd: t.off?.rushTd || 0,
+      defPassYds: (t.def?.passYds || 0) / gp, defPassTd: t.def?.passTd || 0,
+      defRushYds: (t.def?.rushYds || 0) / gp, defRushTd: t.def?.rushTd || 0,
       sacks: v.sacks, takeaways: v.defInt,
     } };
   });
-  // fewer is better for points and yards allowed
-  const asc = key === "papg" || key === "ydsAgainst";
-  return rows.filter((r) => r.val[key] > 0).sort((a, b) => (asc ? a.val[key] - b.val[key] : b.val[key] - a.val[key]));
+  // fewer is better for anything allowed
+  const asc = key === "papg" || key === "ydsAgainst" || key.startsWith("def");
+  // zero is a legitimate value on the "allowed" boards (nine teams with 0 rush
+  // TDs allowed are the leaders, not missing data)
+  const keep = (r) => (asc ? r.gp > 0 : r.val[key] > 0);
+  const sorted = rows.filter(keep).sort((a, b) => (asc ? a.val[key] - b.val[key] : b.val[key] - a.val[key]));
+  let lastV = null, lastR = 0;
+  sorted.forEach((r, i) => { const v = r.val[key]; if (v !== lastV) { lastR = i + 1; lastV = v; } r.rank = lastR; });
+  for (const r of sorted) r.tie = sorted.filter((o) => o.val[key] === r.val[key]).length > 1;
+  return sorted;
 }
 function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
   const [catId, setCatId] = useState("passing");
   const [statKey, setStatKey] = useState(null);
   const [posPick, setPosPick] = useState("ALL");
   const [hilite, setHilite] = useState(null);   // normalized name of the row we jumped to
+  const [teamHilite, setTeamHilite] = useState(null); // team abbr we jumped to (Teams board)
   const rowRef = useRef(null);
   // A tap on a player-page stat lands here: switch the board to that stat and
   // position group, then scroll his row into the middle of the screen.
   useEffect(() => {
     if (!jump) return;
+    if (jump.teamStat) {
+      // a team-page tile: open the Teams board on that stat, find the team
+      setCatId("teams"); setStatKey(jump.teamStat); setPosPick("ALL");
+      setHilite(null); setTeamHilite(jump.team);
+      onJumpUsed && onJumpUsed();
+      return;
+    }
     const j = STAT_JUMP[jump.key];
     if (!j) return;
+    setTeamHilite(null);
     setCatId(j[0]); setStatKey(j[1]);
     const c = LEADER_CATS.find((x) => x.id === j[0]);
     setPosPick(c && c.positions && c.positions.includes(jump.pos) ? jump.pos : "ALL");
@@ -2481,10 +2504,10 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
     onJumpUsed && onJumpUsed();
   }, [jump]);
   useEffect(() => {
-    if (!hilite || !rowRef.current) return;
+    if ((!hilite && !teamHilite) || !rowRef.current) return;
     const t = setTimeout(() => rowRef.current && rowRef.current.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
     return () => clearTimeout(t);
-  }, [hilite, catId, statKey, posPick]);
+  }, [hilite, teamHilite, catId, statKey, posPick]);
   const cat = LEADER_CATS.find((c) => c.id === catId);
   const key = statKey && cat.stats.some(([k]) => k === statKey) ? statKey : cat.stats[0][0];
   const teamRows = useMemo(() => (cat.id === "teams" ? teamLeaderRows(seasonStats, key) : []), [seasonStats, catId, key]);
@@ -2524,7 +2547,7 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
         <div className="flex items-baseline gap-2"><h1 className="text-xl font-extrabold">Leaders</h1><span className="text-[11px] font-semibold text-blue-200">{yr}{seasonStats && seasonStats.weeksWithGames ? ` · thru Wk ${seasonStats.weeksWithGames}` : ""}</span></div>
         <div className="flex gap-1.5 mt-3">
           {LEADER_CATS.map((c) => (
-            <button key={c.id} onClick={() => { setCatId(c.id); setStatKey(null); setPosPick("ALL"); setHilite(null); }}
+            <button key={c.id} onClick={() => { setCatId(c.id); setStatKey(null); setPosPick("ALL"); setHilite(null); setTeamHilite(null); }}
               className={"flex-1 py-1.5 rounded-full text-[10px] font-extrabold " + (catId === c.id ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100")}>{c.label}</button>
           ))}
         </div>
@@ -2554,15 +2577,24 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
               </div>
               {teamRows.map((r, i) => {
                 const pct = key === "passRate";
-                const v = pct || ["ppg", "papg", "ydsFor", "ydsAgainst"].includes(key) ? r.val[key].toFixed(1) : Math.round(r.val[key]);
+                const perGame = ["ppg", "papg", "ydsFor", "ydsAgainst", "offPassYds", "offRushYds", "defPassYds", "defRushYds"].includes(key);
+                const v = pct || perGame ? r.val[key].toFixed(1) : Math.round(r.val[key]);
+                const on = teamHilite && injTeamEq(r.abbr, teamHilite);
+                // bars scale against the best value; on "allowed" boards the best is the smallest
+                const best = teamRows[0].val[key], worst = teamRows[teamRows.length - 1].val[key];
+                const asc = key === "papg" || key === "ydsAgainst" || key.startsWith("def");
+                const width = asc ? (worst ? (1 - (r.val[key] - best) / ((worst - best) || 1)) * 100 : 100) : (r.val[key] / (best || 1)) * 100;
                 return (
-                  <div key={r.abbr} className="px-3 py-2 flex items-center gap-2.5">
-                    <div className={"w-6 text-center text-[13px] font-black tabular-nums " + (i < 3 ? "text-blue-600" : "text-slate-400")}>{i + 1}</div>
-                    {TEAM_LOGOS[r.abbr] && <img src={chipLogo(r.abbr)} alt="" className="w-8 h-8 rounded-full object-contain p-0.5 shrink-0" style={logoChip(r.abbr)} />}
+                  <div key={r.abbr} ref={on ? rowRef : undefined} className={"px-3 py-2 flex items-center gap-2.5 " + (on ? "bg-slate-200/80 dark:bg-slate-700/60" : "")}>
+                    <div className={"w-8 text-center shrink-0 " + ((r.rank || i + 1) <= 3 ? "text-blue-600" : "text-slate-400")}>
+                      <div className="text-[13px] font-black tabular-nums leading-none">{r.rank || i + 1}</div>
+                      {r.tie && <div className="text-[7px] font-bold lowercase tracking-wide opacity-70">tie</div>}
+                    </div>
+                    {TEAM_LOGOS[r.abbr] && <img src={TEAM_LOGOS[r.abbr]} alt="" className="w-9 h-9 object-contain shrink-0" />}
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-extrabold text-slate-900 dark:text-white">{TEAM_NAMES[r.abbr] || r.abbr}</div>
                       <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: Math.max(3, (r.val[key] / (teamRows[0].val[key] || 1)) * 100) + "%", backgroundColor: teamColorSafe(r.abbr) }} />
+                        <div className="h-full rounded-full" style={{ width: Math.max(3, width) + "%", backgroundColor: teamColorSafe(r.abbr) }} />
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -3608,6 +3640,7 @@ export default function App() {
         defPassTd: bx ? bx.def.passTd : null, defPassTdRank: bx ? bx.ranks.defPassTd : null,
         defRushYpg: bx ? bx.defPg.rushYds : null, defRushYpgRank: bx ? bx.ranks.defRushYds : null,
         defRushTd: bx ? bx.def.rushTd : null, defRushTdRank: bx ? bx.ranks.defRushTd : null,
+        ties: bx && bx.ranksTie ? bx.ranksTie : {},
         defSeason: seasonStats ? seasonStats.season : null,
         passYpg: s.passYpg, passYpgRank: s.passYpgRank,
         rushYpg: s.rushYpg, rushYpgRank: s.rushYpgRank,
@@ -3732,6 +3765,7 @@ export default function App() {
           onBack={() => setSelTeam(null)}
           onSwitchTeam={(t) => setSelTeam(t)}
           onSelectPlayer={setSel}
+          onStatJump={(j) => { setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
         />
       )}
       <div className="pb-28">
