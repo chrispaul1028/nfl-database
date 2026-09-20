@@ -27,11 +27,11 @@ const TEAM_COLORS = {
   ARI: "#97233F", ATL: "#A71930", BAL: "#241773", BUF: "#00338D",
   CAR: "#0085CA", CHI: "#0B162A", CIN: "#FB4F14", CLE: "#311D00",
   DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#203731",
-  HOU: "#03202F", IND: "#002C5F", JAX: "#006778", JAC: "#006778",
+  HOU: "#0B2C4F", IND: "#002C5F", JAX: "#006778", JAC: "#006778",
   KC: "#E31837", LV: "#000000", LAC: "#0080C6", LAR: "#003594",
   MIA: "#008E97", MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D",
   NYG: "#0B2265", NYJ: "#125740", PHI: "#004C54", PIT: "#FFB612",
-  SF: "#AA0000", SEA: "#002244", TB: "#D50A0A", TEN: "#0C2340",
+  SF: "#AA0000", SEA: "#002244", TB: "#C50909", TEN: "#0C2340",
   WAS: "#5A1414", WSH: "#5A1414",
 };
 
@@ -106,18 +106,8 @@ const logoFor = (abbr, fallback, onDark) => (onDark && abbr ? darkLogo(abbr) : (
 // White disc keeps every mark legible (they're drawn for white); identity comes
 // from a team-color ring with an alternate-color hairline inside it.
 const LOGO_BG = { BUF: "#00338D", DET: "#B0B7BC" };
-const logoChip = (abbr, onColor) => {
-  const bg = LOGO_BG[abbr] || "#ffffff";
-  const onDark = lumOf(bg) < 0.5;
-  return {
-    background: bg,
-    boxShadow: [
-      onDark ? "inset 0 0 0 2px rgba(255,255,255,0.95)" : null,   // white keyline inside the disc
-      `0 0 0 2.5px ${TEAM_ALT[abbr] || teamColorSafe(abbr)}`,      // team ring (Buffalo keeps its red)
-      onColor ? "0 0 0 4px rgba(255,255,255,0.55)" : null,
-    ].filter(Boolean).join(", "),
-  };
-};
+// A plain disc, no ring. (Rings were tried and retired — they fought the mark.)
+const logoChip = (abbr) => ({ background: LOGO_BG[abbr] || "#ffffff" });
 // On a dark chip the standard mark disappears, so use ESPN's dark-background art.
 const chipLogo = (abbr, fallback) => (LOGO_BG[abbr] && lumOf(LOGO_BG[abbr]) < 0.5 ? darkLogo(abbr) : (fallback || TEAM_LOGOS[abbr] || null));
 const teamColor = (abbr) => TEAM_COLORS[String(abbr).toUpperCase()] || "#334155";
@@ -665,7 +655,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v12";
+const NFL_VERSION = "v17";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1325,9 +1315,10 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
       })()),
     [players, q, injOnly]
   );
+  if (injOnly) return <InjuryFeed players={list} onSelect={onSelect} q={q} setQ={setQ} pills={pills} dark={dark} />;
   return (
     <div>
-      <ListHeader title={<>{injOnly ? "Injury Report" : "Players"} <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
+      <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
@@ -1353,6 +1344,82 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
           {list.length === 0 && injOnly && <div className="text-center text-sm text-slate-400 py-12 px-6">No injuries reported right now.</div>}
           {list.length === 0 && !injOnly && <div className="text-center text-sm text-slate-400 py-12">No players match "{q}".</div>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════ INJURY FEED (newest update first) ═══════════════
+// One row per injured player, sorted by the time ESPN last touched the record.
+// Return date: ESPN's returnDate, else Airtable's Est Return, else "—".
+function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
+  const rows = useMemo(() => {
+    const out = [];
+    for (const p of players) {
+      const a = toAbbr(teamOfPlayer(p) || p.teamName || "");
+      const inj = injFor(p.name, a);
+      const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
+      const d = injuryDetail(p, a);
+      const when = e && e.date ? new Date(e.date) : null;
+      const ret = p.estReturn || (e && e.returnDate) || null;
+      const retD = ret ? new Date(ret) : null;
+      out.push({
+        p, a, when: when && !isNaN(when) ? when : null,
+        status: (e && e.status) || (inj && (inj.injury_status || inj.status)) || "",
+        injury: d ? d.label : (p.injuryNotes ? String(p.injuryNotes).toLowerCase() : ""),
+        note: (e && e.comment) || "",
+        ret: retD && !isNaN(retD) ? retD.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase() : null,
+      });
+    }
+    return out.sort((x, y) => (y.when ? y.when.getTime() : 0) - (x.when ? x.when.getTime() : 0));
+  }, [players]);
+  const fmtDay = (d) => d.toLocaleDateString([], { month: "short", day: "numeric" });
+  const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const statusCls = (st) => /out|ir|injured reserve|pup|nfi|sus/i.test(st) ? "bg-rose-600 text-white" : /doubt/i.test(st) ? "bg-orange-500 text-white" : /quest/i.test(st) ? "bg-amber-400 text-slate-900" : "bg-slate-500 text-white";
+  // group by day so the feed reads like a log
+  const groups = [];
+  for (const r of rows) {
+    const key = r.when ? fmtDay(r.when) : "Undated";
+    const g = groups[groups.length - 1];
+    if (g && g.key === key) g.rows.push(r); else groups.push({ key, rows: [r] });
+  }
+  return (
+    <div>
+      <ListHeader title={<>Injury Report <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
+      <div className="px-4 pb-28 mt-4 space-y-4">
+        {rows.length === 0 && <div className="text-center text-sm text-slate-400 py-12 px-6">No injuries reported right now.</div>}
+        {groups.map((g) => (
+          <div key={g.key}>
+            <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400 mb-1.5 px-1">{g.key}</div>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {g.rows.map((r) => (
+                <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left px-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
+                  style={{ borderLeft: `3px solid ${teamInk(r.a, dark)}${dark ? "66" : "33"}` }}>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar p={r.p} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{r.p.name}</span>
+                        <span className="text-[10px] font-extrabold uppercase rounded px-1.5 py-0.5 text-white shrink-0" style={{ backgroundColor: teamInk(r.a, dark) }}>{r.p.pos || "—"}</span>
+                        {r.a && <img src={chipLogo(r.a)} alt="" className="w-4 h-4 rounded-full object-contain p-px shrink-0" style={logoChip(r.a)} />}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                        {r.status && <span className={"text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 shrink-0 " + statusCls(r.status)}>{r.status}</span>}
+                        {r.injury && <span className="text-[11px] font-semibold text-rose-500 truncate">({r.injury})</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-300 tabular-nums">{r.when ? fmtTime(r.when) : "—"}</div>
+                      <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mt-0.5">return</div>
+                      <div className={"text-[11px] font-extrabold tabular-nums " + (r.ret ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")}>{r.ret || "—"}</div>
+                    </div>
+                  </div>
+                  {r.note && <div className="mt-1.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300 pl-[52px]">{r.note}</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -2447,12 +2514,15 @@ const valTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 d
   : val >= ok ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
   : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
 
-function TdBoardTab({ players, teams, onSelect }) {
+function TdBoardTab({ players, teams, onSelect, navTick }) {
   const [board, setBoard] = useState(null);
   const [sb, setSb] = useState(null);
   const [seg, setSeg] = useState("matchups");
   const [digestWeek, setDigestWeek] = useState(null);
   const [selGame, setSelGame] = useState(null);
+  // The bottom nav lives outside this tab, so it can't reach selGame directly.
+  // Every nav tap bumps navTick; the open game closes in response.
+  useEffect(() => { if (navTick) setSelGame(null); }, [navTick]);
   const [digest, setDigest] = useState(null);       // { week, stats, games }
   const [history, setHistory] = useState(null);
   const [bet, setBet] = useState("ml"); // ml | td | props
@@ -2518,7 +2588,7 @@ function TdBoardTab({ players, teams, onSelect }) {
   if (selGame) {
     const order = gamesByDay.flatMap((grp) => grp.games);
     const i = order.findIndex((x) => x.id === selGame.id);
-    return <GameDetail game={selGame} onBack={() => setSelGame(null)}
+    return <GameDetail game={selGame} teams={teams} onBack={() => setSelGame(null)}
       onPrev={i > 0 ? () => setSelGame(order[i - 1]) : null} onNext={i !== -1 && i < order.length - 1 ? () => setSelGame(order[i + 1]) : null}
       index={i + 1} total={order.length} />;
   }
@@ -2838,7 +2908,7 @@ function MatchCard({ g, onClick }) {
             {isLive ? (
               <div className={"rounded-lg px-2.5 py-1 text-center " + (twoMin ? "bg-rose-600 text-white" : "bg-black/45 text-white backdrop-blur-sm")}>
                 <div className="text-[13px] font-black tabular-nums leading-none">{g.clock || ""}</div>
-                <div className="text-[9px] font-extrabold tracking-widest uppercase mt-0.5">{g.period > 4 ? "OT" : g.period ? ordinal(g.period) + " QTR" : ""}</div>
+                <div className="text-[9px] font-extrabold tracking-widest uppercase mt-0.5">{g.period > 4 ? "OT" : g.period ? ordinal(g.period) : ""}</div>
               </div>
             ) : isFinal ? (
               <div className="rounded-lg px-2.5 py-1.5 bg-black/40 text-[11px] font-black tracking-widest uppercase text-white/90">Final</div>
@@ -2877,17 +2947,29 @@ const HELMET_KIT = {
   BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
   CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
   DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#d5b43c", "#8d9298", "#203731"],
-  HOU: ["#03202F", "#03202F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
+  HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
   KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
   LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
   NE: ["#c3c8ce", "#C60C30", "#002244"], NO: ["#101214", "#9F8958", "#9F8958"], NYG: ["#0B2265", "#a7adb5", "#A71930"],
   NYJ: ["#115740", "#115740", "#ffffff"], PHI: ["#1A4E42", "#9aa1a9", "#A5ACAF"], PIT: ["#101214", "#9aa1a9", "#FFB612"],
-  SF: ["#B3995D", "#f2f4f7", "#AA0000"], SEA: ["#002244", "#002244", "#69BE28"], TB: ["#5b6770", "#5b6770", "#D50A0A"],
+  SF: ["#B3995D", "#f2f4f7", "#AA0000"], SEA: ["#002244", "#002244", "#69BE28"], TB: ["#5b6770", "#5b6770", "#C50909"],
   TEN: ["#0C2340", "#f2f4f7", "#4B92DB"], WSH: ["#5A1414", "#FFB612", "#FFB612"], WAS: ["#5A1414", "#FFB612", "#FFB612"],
 };
 // Side profile of a modern shell: rounded crown, front rim, an open face with the
 // facemask cage bridging it, jaw flap and ear hole. Facing right; flip mirrors it.
-function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick }) {
+function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, photo }) {
+  // A real helmet image (Airtable "Helmet" attachment on the team) beats the
+  // drawn shell. It still flips for the home side and rides the same clash
+  // animation, because the animation is on the wrapper, not the SVG.
+  if (photo) {
+    return (
+      <div onClick={onClick} style={{ width: size, height: size * 0.82, ...style }} className="relative">
+        <img src={photo} alt="" draggable="false"
+          className="w-full h-full object-contain select-none"
+          style={{ transform: flip ? "scaleX(-1)" : undefined, filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.35))" }} />
+      </div>
+    );
+  }
   const uid = `${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
   const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
   const shell = kit[0], mask = kit[1], stripe = kit[2] || alt || TEAM_ALT[abbr] || null;
@@ -3069,7 +3151,9 @@ function PropsBoard() {
 }
 
 // ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
-function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
+function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
+  // Real helmet art from Airtable, when the team record has one
+  const helmetOf = (abbr) => { const t = (teams || []).find((x) => injTeamEq(x.abbr || toAbbr(x.name), abbr)); return t && t.helmet ? t.helmet : null; };
   const [d, setD] = useState(null);
   const [focus, setFocus] = useState(null); // team abbr -> box score view
   // The helmet clash plays once, when the game view first opens — not on every
@@ -3105,7 +3189,7 @@ function GameDetail({ game, onBack, onPrev, onNext, index, total }) {
   const Team = ({ t, home }) => (
     <button onClick={() => setFocus(focus === t.abbr ? null : t.abbr)} className={"flex flex-col items-center rounded-2xl px-1 py-1 " + (focus === t.abbr ? "bg-white/15 ring-2 ring-white/70" : "")}>
       <div style={clash ? { animation: `${home ? "hrbHitR" : "hrbHitL"} 1s cubic-bezier(.16,.9,.28,1) 1` } : undefined}>
-        <Helmet abbr={t.abbr} logo={t.logo || TEAM_LOGOS[t.abbr]} color={t.color || teamColor(t.abbr)} alt={t.altColor || TEAM_ALT[t.abbr]} flip={!!home} size={134}
+        <Helmet abbr={t.abbr} photo={helmetOf(t.abbr)} logo={t.logo || TEAM_LOGOS[t.abbr]} color={t.color || teamColor(t.abbr)} alt={t.altColor || TEAM_ALT[t.abbr]} flip={!!home} size={134}
           style={focus === t.abbr ? { animation: "hrbNudge 0.45s ease-out 1" } : undefined} />
       </div>
       <div className="text-sm font-extrabold text-white -mt-1">{t.abbr}</div>
@@ -3379,6 +3463,7 @@ export default function App() {
   }, [teams, stand, seasonStats]);
   const [selTeam, setSelTeam] = useState(null);
   const [statJump, setStatJump] = useState(null);   // stat tapped on a player page
+  const [navTick, setNavTick] = useState(0);        // bumps on every bottom-nav tap
   const [error, setError] = useState(null);
 
   const [, setInjTick] = useState(0);
@@ -3486,7 +3571,7 @@ export default function App() {
         />
       )}
       <div className="pb-28">
-        {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} />}
+        {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} navTick={navTick} />}
         {players && tab === "players" && <PlayersHub players={players} onSelect={setSel} />}
         {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} jump={statJump} onJumpUsed={() => setStatJump(null)} />}
       </div>
@@ -3495,7 +3580,7 @@ export default function App() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); }}
+            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setNavTick((n) => n + 1); }}
             className={"flex-1 py-2.5 text-center " + (tab === t.id ? "text-blue-600" : "text-slate-400")}
           >
             <div className="text-lg leading-none">{t.icon}</div>
