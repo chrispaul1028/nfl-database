@@ -1,8 +1,24 @@
-// /api/scoreboard — this week's NFL games with live scores, kickoff times,
-// records, and betting lines, from ESPN's public scoreboard. Cached 60s so
-// live games tick along without hammering ESPN.
+// /api/scoreboard — today's MLB slate from the MLB Stats API: live scores,
+// inning / outs / count / runners, probable pitchers, records, venue.
+// The MLB twin of the NFL app's /api/scoreboard.
 //
-// Optional: /api/scoreboard?week=3 for a specific week of the current season.
+//   /api/scoreboard                  today (Eastern time)
+//   /api/scoreboard?date=2026-09-18  a specific day
+//   /api/scoreboard?raw=1            MLB's untouched schedule JSON (same shape
+//                                    the app reads today — used for the Step 2
+//                                    swap so screens stay identical)
+//
+// Cached 20s while any game is live, 5 min otherwise.
+
+const API = "https://statsapi.mlb.com/api/v1";
+
+// MLB team id -> the abbreviations the app already uses (ARI not AZ, CWS, ATH…)
+const TEAM_ABBR = {
+  108: "LAA", 109: "ARI", 110: "BAL", 111: "BOS", 112: "CHC", 113: "CIN", 114: "CLE", 115: "COL",
+  116: "DET", 117: "HOU", 118: "KC", 119: "LAD", 120: "WSH", 121: "NYM", 133: "ATH", 134: "PIT",
+  135: "SD", 136: "SEA", 137: "SF", 138: "STL", 139: "TB", 140: "TEX", 141: "TOR", 142: "MIN",
+  143: "PHI", 144: "ATL", 145: "CWS", 146: "MIA", 147: "NYY", 158: "MIL",
+};
 
 async function getJson(url) {
   const r = await fetch(url, { headers: { accept: "application/json" } });
@@ -10,64 +26,76 @@ async function getJson(url) {
   return r.json();
 }
 
-function side(comp, homeAway) {
-  const c = (comp.competitors || []).find((x) => x.homeAway === homeAway) || {};
-  const t = c.team || {};
-  const rec = (c.records || []).find((r) => r.type === "total" || r.name === "overall") || (c.records || [])[0];
+const todayET = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+const STATE = { Preview: "pre", Live: "in", Final: "post" };
+
+function side(g, ha) {
+  const s = (g.teams || {})[ha] || {};
+  const t = s.team || {};
+  const line = ((g.linescore || {}).teams || {})[ha] || {};
+  const pp = s.probablePitcher || null;
   return {
-    id: t.id,
-    abbr: String(t.abbreviation || "").toUpperCase(),
-    name: t.displayName || t.name || "",
-    short: t.shortDisplayName || t.name || "",
-    logo: t.logo || null,
-    color: t.color ? "#" + t.color : null,
-    altColor: t.alternateColor ? "#" + t.alternateColor : null,
-    score: c.score != null && c.score !== "" ? Number(c.score) : null,
-    record: rec ? rec.summary : null,
-    winner: !!c.winner,
+    id: t.id ?? null,
+    abbr: TEAM_ABBR[t.id] || String(t.abbreviation || "").toUpperCase(),
+    name: t.name || "",
+    short: t.teamName || t.clubName || t.name || "",
+    logo: t.id ? `https://www.mlbstatic.com/team-logos/${t.id}.svg` : null,
+    score: s.score ?? line.runs ?? null,
+    hits: line.hits ?? null,
+    errors: line.errors ?? null,
+    record: s.leagueRecord ? `${s.leagueRecord.wins}-${s.leagueRecord.losses}` : null,
+    winner: !!s.isWinner,
+    probable: pp ? { id: pp.id, name: pp.fullName || "" } : null,
   };
 }
 
+const runner = (p) => (p ? { id: p.id, name: p.fullName || "" } : null);
+
 export default async function handler(req, res) {
   try {
-    const week = req.query && req.query.week ? `&week=${encodeURIComponent(req.query.week)}` : "";
-    const d = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2${week}`);
+    const q = req.query || {};
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.date || "")) ? String(q.date) : todayET();
+    const d = await getJson(`${API}/schedule?sportId=1&date=${date}&hydrate=team,linescore,probablePitcher,venue`);
 
-    const games = (d.events || []).map((ev) => {
-      const comp = (ev.competitions || [])[0] || {};
-      const st = comp.status || ev.status || {};
-      const type = st.type || {};
-      const odds = (comp.odds || [])[0] || null;
-      const sit = comp.situation || {};
+    const rawGames = (d.dates || []).flatMap((x) => x.games || []);
+    const anyLive = rawGames.some((g) => (g.status || {}).abstractGameState === "Live");
+    res.setHeader("Cache-Control", anyLive ? "s-maxage=20, stale-while-revalidate=40" : "s-maxage=300, stale-while-revalidate=600");
+
+    if (q.raw) return res.status(200).json(d);
+
+    const games = rawGames.map((g) => {
+      const st = g.status || {};
+      const ls = g.linescore || {};
+      const off = ls.offense || {};
+      const state = STATE[st.abstractGameState] || "pre";
+      const det = st.detailedState || "";
       return {
-        id: ev.id,
-        date: ev.date,                              // ISO kickoff
-        state: type.state || "pre",                 // pre | in | post
-        detail: type.shortDetail || type.detail || "", // "Sun 1:00 PM" / "Final" / "Q3 7:42"
-        completed: !!type.completed,
-        period: st.period ?? null,
-        clock: st.displayClock ?? null,
-        home: side(comp, "home"),
-        away: side(comp, "away"),
-        venue: comp.venue?.fullName || null,
-        broadcast: ((comp.broadcasts || [])[0]?.names || [])[0] || null,
-        odds: odds ? { details: odds.details || null, overUnder: odds.overUnder ?? null, spread: odds.spread ?? null,
-          homeML: odds.homeTeamOdds?.moneyLine ?? null, awayML: odds.awayTeamOdds?.moneyLine ?? null,
-          homeFav: !!odds.homeTeamOdds?.favorite, awayFav: !!odds.awayTeamOdds?.favorite } : null,
-        possession: sit.possession || null,         // team id with the ball (live)
-        downDistance: sit.shortDownDistanceText || null,
-        spot: sit.possessionText || null,               // e.g. "WAS 6"
-        redZone: !!sit.isRedZone,
+        id: g.gamePk,
+        date: g.gameDate,                         // ISO first pitch
+        state,                                    // pre | in | post
+        detail: det,                              // "Scheduled" / "In Progress" / "Final" / "Postponed"
+        completed: state === "post",
+        postponed: /postponed|cancel|suspended/i.test(det),
+        delayed: /delay/i.test(det),
+        gameNumber: g.gameNumber ?? 1,            // 2 = second game of a doubleheader
+        doubleHeader: g.doubleHeader && g.doubleHeader !== "N",
+        inning: ls.currentInning ?? null,
+        inningOrdinal: ls.currentInningOrdinal || null,   // "7th"
+        inningHalf: ls.inningHalf || null,                // "Top" | "Bottom"
+        scheduledInnings: ls.scheduledInnings ?? 9,
+        balls: ls.balls ?? null,
+        strikes: ls.strikes ?? null,
+        outs: ls.outs ?? null,
+        runners: { first: runner(off.first), second: runner(off.second), third: runner(off.third) },
+        batter: runner(off.batter),
+        pitcher: runner((ls.defense || {}).pitcher),
+        home: side(g, "home"),
+        away: side(g, "away"),
+        venue: g.venue ? { id: g.venue.id, name: g.venue.name } : null,
       };
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    }).sort((a, b) => new Date(a.date) - new Date(b.date) || a.gameNumber - b.gameNumber);
 
-    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
-    return res.status(200).json({
-      week: d.week?.number ?? null,
-      season: d.season?.year ?? null,
-      games,
-      updatedAt: new Date().toISOString(),
-    });
+    return res.status(200).json({ date, count: games.length, live: anyLive, games, updatedAt: new Date().toISOString() });
   } catch (e) {
     return res.status(502).json({ error: String(e.message || e) });
   }
