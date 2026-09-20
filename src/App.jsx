@@ -655,7 +655,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v17";
+const NFL_VERSION = "v18";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1420,6 +1420,69 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════ TAB: DRAFT ══════════════════════════════════════
+// Draft classes from the Airtable fields (Draft Year + "Round 1, Pick 12 (DET)").
+function DraftTab({ players, onSelect, pills }) {
+  const [q, setQ] = useState("");
+  const dark = useDark();
+  const parsed = useMemo(() => players
+    .filter((p) => p.draftYear)
+    .map((p) => {
+      const m = String(p.draft || "").match(/round\s*(\d+)[^\d]*pick\s*(\d+)/i);
+      const team = String(p.draft || "").match(/\(([A-Z]{2,4})\)/);
+      return { p, year: Number(p.draftYear), round: m ? Number(m[1]) : 99, pick: m ? Number(m[2]) : 999, by: team ? team[1] : null };
+    }), [players]);
+  const years = useMemo(() => [...new Set(parsed.map((x) => x.year))].sort((a, b) => b - a), [parsed]);
+  const [year, setYear] = useState(null);
+  const yr = year || years[0] || null;
+  const list = useMemo(() => parsed
+    .filter((x) => x.year === yr && matchesQuery(x.p, q))
+    .sort((a, b) => a.round - b.round || a.pick - b.pick || String(a.p.name).localeCompare(String(b.p.name))), [parsed, yr, q]);
+  const rounds = [];
+  for (const x of list) { const g = rounds[rounds.length - 1]; if (g && g.round === x.round) g.rows.push(x); else rounds.push({ round: x.round, rows: [x] }); }
+  return (
+    <div>
+      <ListHeader title={<>Draft <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
+      <div className="px-4 pb-28 mt-4">
+        {years.length === 0 && <div className="text-center text-sm text-slate-400 py-12 px-6">No draft data yet — fill Draft Year and Draft on the Players table in Airtable.</div>}
+        {years.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-3" style={{ scrollbarWidth: "none" }}>
+            {years.map((y) => (
+              <button key={y} onClick={() => setYear(y)}
+                className={"shrink-0 px-3 py-1 rounded-full text-[11px] font-extrabold " + (yr === y ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300")}>{y}</button>
+            ))}
+          </div>
+        )}
+        <div className="space-y-4">
+          {rounds.map((g) => (
+            <div key={g.round}>
+              <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-400 mb-1.5 px-1">{g.round === 99 ? "Round unknown" : "Round " + g.round}</div>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+                {g.rows.map(({ p, pick, by }) => {
+                  const a = toAbbr(teamOfPlayer(p) || p.teamName || "");
+                  return (
+                    <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-2.5 text-left active:bg-slate-50 dark:active:bg-slate-800"
+                      style={a ? { borderLeft: `3px solid ${teamInk(a, dark)}${dark ? "66" : "33"}` } : undefined}>
+                      <span className="w-8 text-center text-[13px] font-black tabular-nums text-slate-400">{pick === 999 ? "—" : pick}</span>
+                      <Avatar p={p} />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
+                        <span className="block text-[11px] text-slate-400 font-medium truncate">{[p.pos, p.college, by && by !== a ? "drafted by " + by : null].filter(Boolean).join(" · ")}</span>
+                      </span>
+                      <TeamPill team={teamOfPlayer(p) || p.teamName || activeOf(p)?.team} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {years.length > 0 && list.length === 0 && <div className="text-center text-sm text-slate-400 py-12">No players match "{q}".</div>}
+        </div>
       </div>
     </div>
   );
@@ -2594,7 +2657,7 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
   }
   return (
     <div>
-      <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
+      <style>{`@keyframes hrbBlink { 0%,100% { opacity: 1 } 50% { opacity: .25 } } @keyframes hrbSoftPulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } } @keyframes hrbSpinBall { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
       <div className="bg-blue-600 pb-3 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex items-baseline gap-2 flex-wrap">
           <h1 className="text-xl font-extrabold text-white">{seg === "matchups" ? "Matchups" : seg === "digest" ? "Digest" : "Bets"} <span className="text-blue-200">(Wk {seg === "digest" ? (digestWeek ?? week) : week})</span> <span className="text-[10px] font-bold text-white/60 align-middle">{NFL_VERSION}</span></h1>
@@ -2621,7 +2684,9 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
             {sb && sb.games.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>}
             {gamesByDay.map((grp) => (
               <div key={grp.key} className="mb-4">
-                <div className={"text-[10px] font-semibold tracking-widest uppercase mb-1.5 " + (grp.live ? "text-rose-500" : "text-slate-400")}>{grp.key}</div>
+                {grp.live
+                  ? <div className="mb-1.5"><RedTag pulse className="h-[18px] text-[9px] px-2.5">LIVE</RedTag></div>
+                  : <div className="text-[10px] font-semibold tracking-widest uppercase mb-1.5 text-slate-400">{grp.key}</div>}
                 <div className="space-y-1.5">
                   {grp.games.map((g) => (
                     <MatchCard key={g.id} g={g} onClick={() => setSelGame(g)} />
@@ -2868,6 +2933,13 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
     </div>
   );
 }
+// Badge in the field-view injury-tag style. pulse=true breathes like those tags.
+function RedTag({ children, pulse, className = "" }) {
+  return (
+    <span className={"inline-flex items-center justify-center h-[15px] px-1.5 rounded-full text-[7px] font-extrabold tracking-wider text-white bg-red-600 border-2 border-white shadow whitespace-nowrap " + className}
+      style={pulse ? { animation: "hrbSoftPulse 1.6s ease-in-out infinite" } : undefined}>{children}</span>
+  );
+}
 // ═══════════════ MATCH CARD (RedZone-style) — used by Matchups and Digest ═══
 function gameTwoMin(g) {
   if (g.state !== "in") return false;
@@ -2884,27 +2956,44 @@ function MatchCard({ g, onClick }) {
   const awayC = deep(g.away.color || teamColorSafe(g.away.abbr));
   const homeC = deep(g.home.color || teamColorSafe(g.home.abbr));
   const cardBg = { backgroundImage: `linear-gradient(100deg, ${awayC} 0%, ${awayC} 38%, ${shade(awayC, -12)} 47%, ${shade(homeC, -12)} 53%, ${homeC} 62%, ${homeC} 100%)` };
+  // Logo sits straight on the team colour — no disc, no ring, nothing above or
+  // below it. Dark-background art where the standard mark would vanish.
   const Side = ({ t }) => (
-    <div className="flex flex-col items-center w-16 shrink-0">
-      <img src={chipLogo(t.abbr, t.logo)} alt="" className={"w-12 h-12 rounded-full object-contain p-1 " + (lost(t) ? "opacity-50" : "")} style={logoChip(t.abbr, true)} />
-      <div className={"mt-1 text-[12px] font-extrabold tracking-wide " + (lost(t) ? "text-white/50" : "text-white")}>{t.abbr}</div>
-      {t.record && <div className="text-[9px] font-semibold text-white/70 tabular-nums leading-none">{t.record}</div>}
+    <div className="flex items-center justify-center w-[68px] h-[64px] shrink-0">
+      <img src={darkLogo(t.abbr) || t.logo || TEAM_LOGOS[t.abbr]} alt="" className={"w-[62px] h-[62px] object-contain drop-shadow-lg " + (lost(t) ? "opacity-50" : "")} />
     </div>
   );
-  const Score = ({ t }) => (
-    <div className={"w-12 text-center text-[30px] leading-none font-black tabular-nums drop-shadow " + (lost(t) ? "text-white/55" : "text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
+  // Score, with record and timeouts stacked beneath it (broadcast-bug layout).
+  const tos = (t, side) => { const n = side === "home" ? g.homeTimeouts : g.awayTimeouts; return isLive && n != null ? n : null; };
+  const Score = ({ t, side }) => {
+    const n = tos(t, side);
+    return (
+      <div className="w-14 flex flex-col items-center">
+        <div className={"text-[30px] leading-none font-black tabular-nums drop-shadow " + (lost(t) ? "text-white/55" : "text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
+        <div className="mt-1 flex items-center gap-1.5">
+          {t.record && <span className="text-[9px] font-bold text-white/80 tabular-nums leading-none">{t.record}</span>}
+          {n != null && (
+            <span className="flex items-center gap-[3px]">
+              {[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+  // Possession: a slowly turning football beside the team that has it.
+  const Ball = ({ on }) => (
+    <span className={"w-4 text-[11px] leading-none text-center " + (on ? "" : "invisible")} style={on ? { display: "inline-block", animation: "hrbSpinBall 3.2s linear infinite" } : undefined}>🏈</span>
   );
-  // possession arrow points at the team with the ball, RedZone-style
-  const Arrow = ({ dir, on }) => <span className={"w-3 text-[11px] font-black " + (on ? "text-rose-500" : "text-transparent")} style={on ? { animation: "hrbBlink 1.4s ease-in-out infinite" } : undefined}>{dir}</span>;
   return (
     <button onClick={onClick} style={cardBg}
-      className={"w-full text-left rounded-xl shadow-sm px-2 py-2.5 active:opacity-90 border overflow-hidden " + (isLive && g.redZone ? "border-rose-400 ring-1 ring-rose-400/70" : "border-black/20 dark:border-white/10")}>
+      className="w-full text-left rounded-xl shadow-sm px-2 py-2.5 active:opacity-90 border overflow-hidden border-black/20 dark:border-white/10">
       <div className="flex items-center justify-between">
         <Side t={g.away} />
-        <Score t={g.away} />
+        <Score t={g.away} side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           <div className="flex items-center gap-1">
-            <Arrow dir="◀" on={hasBall(g.away)} />
+            <Ball on={hasBall(g.away)} />
             {isLive ? (
               <div className={"rounded-lg px-2.5 py-1 text-center " + (twoMin ? "bg-rose-600 text-white" : "bg-black/45 text-white backdrop-blur-sm")}>
                 <div className="text-[13px] font-black tabular-nums leading-none">{g.clock || ""}</div>
@@ -2918,18 +3007,19 @@ function MatchCard({ g, onClick }) {
                 {g.broadcast && <div className="text-[9px] font-semibold text-white/75 mt-0.5">{g.broadcast}</div>}
               </div>
             )}
-            <Arrow dir="▶" on={hasBall(g.home)} />
+            <Ball on={hasBall(g.home)} />
           </div>
           {g.odds && (g.odds.details || g.odds.overUnder != null) && !isFinal && !isLive && (
             <div className="text-[9px] font-semibold text-white/80 mt-1 tabular-nums text-center">{g.odds.details}{g.odds.overUnder != null ? ` · O/U ${g.odds.overUnder}` : ""}</div>
           )}
         </div>
-        <Score t={g.home} />
+        <Score t={g.home} side="home" />
         <Side t={g.home} />
       </div>
       {isLive && (g.downDistance || g.spot) && (
-        <div className={"mt-1 text-center text-[11px] font-extrabold tracking-widest uppercase " + (g.redZone ? "text-rose-200" : "text-white/90")}>
-          {[g.downDistance, g.spot].filter(Boolean).join("  |  ")}{g.redZone ? "  ·  RED ZONE" : ""}
+        <div className="mt-1 flex flex-col items-center">
+          {g.redZone && <RedTag pulse className="mb-0.5">RED ZONE</RedTag>}
+          <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>
         </div>
       )}
     </button>
