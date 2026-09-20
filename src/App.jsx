@@ -679,7 +679,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v25";
+const NFL_VERSION = "v26";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -3080,7 +3080,7 @@ function MatchCard({ g, onClick }) {
         <PipCol side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
-          {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
+          {isLive && g.downDistance && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{g.downDistance}</div>}
         </div>
         <PipCol side="home" />
         <Foot t={g.home} side="home" />
@@ -3119,7 +3119,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
       <div onClick={onClick} style={{ width: size, height: size * 0.82, ...style }} className="relative">
         <img src={photo} alt="" draggable="false"
           className="w-full h-full object-contain select-none"
-          style={{ transform: flip ? "scaleX(-1)" : undefined, filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.35))" }} />
+          style={{ transform: flip ? "scaleX(-1)" : undefined }} />
       </div>
     );
   }
@@ -3435,8 +3435,18 @@ function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
               <span className="text-lg opacity-60">–</span>
               <span className={g.home.score != null && isFinal && !g.home.winner ? "opacity-60" : ""}>{hasBall(g.home) && <span className="text-sm align-middle mr-1">🏈</span>}{g.home.score ?? "–"}</span>
             </div>
-            <div className={"mt-1 text-[11px] font-extrabold uppercase tracking-wider " + (twoMin ? "text-rose-300" : "text-white")}>{isLive ? "● " : ""}{g.detail}</div>
-            {isLive && g.situation && g.situation.downDistance && <div className="text-[11px] font-semibold text-white/90 mt-0.5">{g.situation.downDistance}{g.situation.yardLine ? " · " + g.situation.yardLine : ""}{g.situation.redZone ? " · RED ZONE" : ""}</div>}
+            {isLive ? (
+              <div className="mt-1.5 flex flex-col items-center">
+                <div className={"inline-block rounded-lg px-2.5 py-1 text-center " + (twoMin ? "bg-rose-600 text-white" : "bg-black/45 text-white backdrop-blur-sm")}>
+                  <div className="text-[13px] font-black tabular-nums leading-none">{g.clock || ""}</div>
+                  <div className="text-[9px] font-extrabold tracking-widest uppercase mt-0.5">{g.period > 4 ? "OT" : g.period ? ordinal(g.period) : ""}</div>
+                </div>
+                {g.situation && g.situation.redZone && g.situation.possession && <RedTag plain className="mt-1">RED ZONE</RedTag>}
+                {g.situation && g.situation.downDistance && <div className="text-[11px] font-extrabold tracking-widest uppercase text-white/90 mt-1">{g.situation.downDistance}{g.situation.yardLine ? " | " + g.situation.yardLine : ""}</div>}
+              </div>
+            ) : (
+              <div className="mt-1 text-[11px] font-extrabold uppercase tracking-wider text-white">{g.detail}</div>
+            )}
           </div>
           <Team t={g.home} home />
         </div>
