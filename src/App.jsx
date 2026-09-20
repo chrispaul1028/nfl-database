@@ -378,6 +378,18 @@ const STAT_TILES = {
 };
 // ── Season stats box + game-by-game graph (from /api/season-stats) ──
 const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
+// Airtable "Return Date" is free text. Parse it when it's a date (adding the
+// current year if it has none), otherwise show it as typed ("week 8", "tbd").
+function fmtReturn(raw) {
+  if (raw == null || raw === "") return null;
+  let t = String(raw).trim();
+  if (!t) return null;
+  const hasYear = /\b(19|20)\d{2}\b/.test(t);
+  let d = new Date(hasYear ? t : `${t} ${new Date().getFullYear()}`);
+  if (isNaN(d) && /^\d{1,2}\/\d{1,2}$/.test(t)) d = new Date(`${t}/${new Date().getFullYear()}`);
+  if (isNaN(d)) return t.toLowerCase();
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase();
+}
 // Direction of travel for a team stat: compare the most recent game with the
 // average of every game before it. null until there are two games to compare.
 // lowerBetter flips the colour (giving up fewer points is an improvement).
@@ -659,7 +671,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v21";
+const NFL_VERSION = "v22";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1272,8 +1284,7 @@ function injuryDetail(p, abbr, deep) {
   label = label.replace(/\s+/g, " ").trim().toLowerCase();
   // Airtable's "Est Return" wins when ESPN hasn't published a date of its own.
   const raw = p.estReturn || (e && e.returnDate) || (deep && deep.returnDate) || null;
-  const ret = raw ? new Date(raw) : null;
-  const retTxt = ret && !isNaN(ret) ? ret.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase() : null;
+  const retTxt = fmtReturn(raw);
   if (!label && !retTxt) return null;
   const inner = [label || "injury", retTxt ? `est. return ${retTxt}` : null].filter(Boolean).join(" · ");
   return { label, retTxt, text: `(${inner})` };
@@ -1374,13 +1385,12 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
       const rawWhen = (e && e.date) || (inj && inj.injury_start_date) || null;
       const when = rawWhen ? new Date(rawWhen) : null;
       const ret = p.estReturn || (e && e.returnDate) || null;
-      const retD = ret ? new Date(ret) : null;
       out.push({
         p, a, when: when && !isNaN(when) ? when : null,
         status: (e && e.status) || (inj && (inj.injury_status || inj.status)) || "",
         injury: d ? d.label : (p.injuryNotes ? String(p.injuryNotes).toLowerCase() : ""),
         note: (e && e.comment) || "",
-        ret: retD && !isNaN(retD) ? retD.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase() : null,
+        ret: fmtReturn(ret),
       });
     }
     return out.sort((x, y) => (y.when ? y.when.getTime() : 0) - (x.when ? x.when.getTime() : 0));
@@ -3008,7 +3018,7 @@ function MatchCard({ g, onClick }) {
   const Foot = ({ t, side }) => {
     const n = tos(t, side);
     return (
-      <div className="w-14 flex flex-col items-center gap-[3px]">
+      <div className="w-[72px] flex items-center justify-center gap-1.5">
         {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
         {n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
       </div>
@@ -3052,14 +3062,14 @@ function MatchCard({ g, onClick }) {
       {/* bottom row mirrors the top row's columns: [logo][score][centre][score][logo],
           so each record lands directly under its score */}
       <div className="mt-0.5 flex items-start justify-between">
-        <div className="w-[68px] shrink-0" />
+        <div className="w-[60px] shrink-0" />
         <Foot t={g.away} side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
           {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
         </div>
         <Foot t={g.home} side="home" />
-        <div className="w-[68px] shrink-0" />
+        <div className="w-[60px] shrink-0" />
       </div>
     </button>
   );
