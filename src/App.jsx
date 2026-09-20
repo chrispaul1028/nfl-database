@@ -380,6 +380,14 @@ const STAT_TILES = {
 const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
 // Airtable "Return Date" is free text. Parse it when it's a date (adding the
 // current year if it has none), otherwise show it as typed ("week 8", "tbd").
+// Lowercase injury copy, but medical/roster acronyms stay upper: "torn ACL",
+// "MCL sprain", "PUP list".
+const INJ_ACRONYMS = ["ACL", "MCL", "PCL", "LCL", "UCL", "AC", "SC", "IR", "PUP", "NFI", "COVID", "TBD", "IT", "MRI", "CT"];
+function injCase(str) {
+  let t = String(str || "").replace(/\s+/g, " ").trim().toLowerCase();
+  for (const a of INJ_ACRONYMS) t = t.replace(new RegExp(`\\b${a.toLowerCase()}\\b`, "g"), a);
+  return t;
+}
 function fmtReturn(raw) {
   if (raw == null || raw === "") return null;
   let t = String(raw).trim();
@@ -387,8 +395,8 @@ function fmtReturn(raw) {
   const hasYear = /\b(19|20)\d{2}\b/.test(t);
   let d = new Date(hasYear ? t : `${t} ${new Date().getFullYear()}`);
   if (isNaN(d) && /^\d{1,2}\/\d{1,2}$/.test(t)) d = new Date(`${t}/${new Date().getFullYear()}`);
-  if (isNaN(d)) return t.toLowerCase();
-  return d.toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase();
+  if (isNaN(d)) return t.replace(/\b\w/g, (c) => c.toUpperCase());     // "Week 8", "TBD"
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); // "Oct 20"
 }
 // Direction of travel for a team stat: compare the most recent game with the
 // average of every game before it. null until there are two games to compare.
@@ -671,7 +679,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v24";
+const NFL_VERSION = "v25";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -770,7 +778,6 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
     if (/injured reserve/i.test(st)) { label = "IR"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
     else if (/pup|physically unable/i.test(st)) { label = "PUP"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
     else if (/non football/i.test(st)) { label = "NFI"; cls = "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"; }
-    else if (/inactive/i.test(st)) { label = "INACTIVE"; cls = "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"; }
   }
   if (!label) return null;
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
@@ -1223,7 +1230,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             // "3rd season" = current season minus the year he joined, plus one
             const yrs = since ? Math.max(1, Number(CURRENT_SEASON) - Number(since) + 1) : null;
             return (
-              <div key={k} className="min-w-0">
+              <div key={k} className="min-w-0 text-center">
                 <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
                 <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
                 {yrs && <div className="text-[9px] font-semibold text-slate-400 truncate">{ordinal(yrs)} season</div>}
@@ -1281,13 +1288,14 @@ function injuryDetail(p, abbr, deep) {
   } else if (inj && (inj.injury_body_part || inj.injury_notes)) {
     label = [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" ");
   }
-  label = label.replace(/\s+/g, " ").trim().toLowerCase();
-  // Airtable's "Est Return" wins when ESPN hasn't published a date of its own.
+  label = injCase(label);
+  // Airtable's "Return Date" wins when ESPN hasn't published a date of its own.
   const raw = p.estReturn || (e && e.returnDate) || (deep && deep.returnDate) || null;
   const retTxt = fmtReturn(raw);
   if (!label && !retTxt) return null;
   const inner = [label || "injury", retTxt ? `est. return ${retTxt}` : null].filter(Boolean).join(" · ");
-  return { label, retTxt, text: `(${inner})` };
+  // label: "(ankle sprain)" · retLine: "Estimated return date: Oct 20" · text: both inline
+  return { label, retTxt, note: label ? `(${label})` : null, retLine: retTxt ? `Estimated return date: ${retTxt}` : null, text: `(${inner})` };
 }
 
 function TeamPill({ team }) {
@@ -1332,7 +1340,8 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
       .filter((p) => matchesQuery(p, q))
       .filter((p) => !injOnly || (() => {
         const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
-        return inj && (inj.injury_status || !/^active$/i.test(String(inj.status || "")));
+        // injured = a designation, or a reserve-list roster status (not plain "Inactive")
+        return inj && (inj.injury_status || /injured reserve|pup|physically unable|non football/i.test(String(inj.status || "")));
       })()),
     [players, q, injOnly]
   );
@@ -1356,7 +1365,11 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
                   {[p.height, p.weight, p.age ? p.age + " yrs" : ""].filter(Boolean).join(" · ") || "—"}
                 </span>
                 {(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); if (!injHasFlag(p, a)) return null; const d = injuryDetail(p, a); return (
-                  <span className="flex items-center gap-1.5 mt-1 min-w-0"><InjBadge p={p} team={a} />{d && <span className="text-[11px] font-semibold text-rose-500 truncate">{d.text}</span>}</span>
+                  <span className="block mt-1 min-w-0">
+                    <InjBadge p={p} team={a} />
+                    {d && d.note && <span className="block text-[11px] font-semibold text-rose-500 truncate mt-0.5">{d.note}</span>}
+                    {d && d.retLine && <span className="block text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{d.retLine}</span>}
+                  </span>
                 ); })()}
               </span>
               <TeamPill team={teamOfPlayer(p) || p.teamName || activeOf(p)?.team} />
@@ -1387,8 +1400,10 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
       const ret = p.estReturn || (e && e.returnDate) || null;
       out.push({
         p, a, when: when && !isNaN(when) ? when : null,
-        status: (e && e.status) || (inj && (inj.injury_status || inj.status)) || "",
-        injury: d ? d.label : (p.injuryNotes ? String(p.injuryNotes).toLowerCase() : ""),
+        // one tag: ESPN's designation when it's a real one, else Sleeper's
+        status: (e && e.status && !/^(active|inactive)$/i.test(e.status)) ? e.status
+          : (inj && inj.injury_status) || (inj && /injured reserve/i.test(String(inj.status || "")) ? "IR" : "") || "",
+        injury: d ? d.label : (p.injuryNotes ? injCase(p.injuryNotes) : ""),
         note: (e && e.comment) || "",
         ret: fmtReturn(ret),
       });
@@ -1431,19 +1446,14 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
                           {cleanNo(r.p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(r.p.no)}</span>}{r.p.name}
                         </span>
                         {r.a && <img src={TEAM_LOGOS[r.a]} alt="" className="w-7 h-7 object-contain shrink-0" />}
+                        <span className="ml-auto text-[10px] font-bold text-slate-400 tabular-nums shrink-0 pl-2">{r.when ? fmtTime(r.when) : ""}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
-                        {r.status && <span className={"text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 shrink-0 " + statusCls(r.status)}>{r.status}</span>}
-                        {r.injury && <span className="text-[11px] font-semibold text-rose-500 truncate">({r.injury})</span>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-300 tabular-nums">{r.when ? fmtTime(r.when) : "—"}</div>
-                      <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mt-0.5">return</div>
-                      <div className={"text-[11px] font-extrabold tabular-nums " + (r.ret ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")}>{r.ret || "—"}</div>
+                      {r.status && <div className="mt-1"><span className={"inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 " + statusCls(r.status)}>{r.status}</span></div>}
+                      {r.injury && <div className="mt-0.5 text-[11px] font-semibold text-rose-500 truncate">({r.injury})</div>}
+                      {r.ret && <div className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">Estimated return date: {r.ret}</div>}
+                      {r.note && <div className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{r.note}</div>}
                     </div>
                   </div>
-                  {r.note && <div className="mt-1.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300 pl-[52px]">{r.note}</div>}
                 </button>
               ))}
             </div>
@@ -3020,12 +3030,14 @@ function MatchCard({ g, onClick }) {
     if (n == null) return null;
     return <span className="flex items-center gap-[3px] shrink-0">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>;
   };
-  // Record only, pinned to the card edge (away left, home right)
+  // Record only, pinned to the card edge, inside the logo column's width
   const Foot = ({ t, side }) => (
-    <div className={"w-[52px] shrink-0 " + (side === "away" ? "pl-1 text-left" : "pr-1 text-right")}>
+    <div className={"w-[68px] shrink-0 " + (side === "away" ? "pl-1 text-left" : "pr-1 text-right")}>
       {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
     </div>
   );
+  // Timeouts centred in the score column (same 56px the score uses up top)
+  const PipCol = ({ side }) => <div className="w-14 shrink-0 flex justify-center"><Pips side={side} /></div>;
   // Possession: a still football beside the team that has it.
   const Ball = ({ on }) => (
     <span className={"w-4 text-[12px] leading-none text-center inline-block " + (on ? "" : "invisible")}>🏈</span>
@@ -3065,16 +3077,12 @@ function MatchCard({ g, onClick }) {
           so each record lands directly under its score */}
       <div className="mt-0.5 flex items-start justify-between">
         <Foot t={g.away} side="away" />
+        <PipCol side="away" />
         <div className="flex-1 flex flex-col items-center px-0.5">
           {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
-          {isLive && (
-            <div className="flex items-center gap-2.5">
-              <Pips side="away" />
-              {(g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
-              <Pips side="home" />
-            </div>
-          )}
+          {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
         </div>
+        <PipCol side="home" />
         <Foot t={g.home} side="home" />
       </div>
     </button>
