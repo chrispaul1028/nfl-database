@@ -7,20 +7,42 @@ export default async function handler(req, res) {
   if (req.query?.espn) return playerInjuryHandler(req, res);
 
   try {
-    const r = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries", { headers: { accept: "application/json" } });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    const out = {};
-    for (const team of d.injuries || []) {
-      const abbr = String(team.team?.abbreviation || "").toUpperCase();
-      for (const it of team.injuries || []) {
-        const a = it.athlete || {}; const det = it.details || {};
-        out[String(a.id)] = {
-          name: a.displayName, team: abbr, status: it.status || null, date: it.date || null,
-          type: det.type || null, location: det.location || null, side: det.side || null, detail: det.detail || null,
-          returnDate: det.returnDate || null, comment: it.longComment || it.shortComment || null,   // long = the newsy sentence
+    // Two hosts serve this report; try both, keep whichever returns more.
+    const SOURCES = [
+      "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries",
+      "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries",
+    ];
+    let out = {}, used = null, topKeys = null, tried = [];
+    for (const url of SOURCES) {
+      try {
+        const r = await fetch(url, { headers: { accept: "application/json", "user-agent": "Mozilla/5.0" } });
+        tried.push(url + " → " + r.status);
+        if (!r.ok) continue;
+        const d = await r.json();
+        // ESPN has shuffled this payload's nesting before. Rather than trust one
+        // shape, walk the whole document and collect anything that looks like
+        // an injury entry: an object with an athlete and a status or details.
+        const found = {};
+        const walk = (node, teamAbbr) => {
+          if (!node || typeof node !== "object") return;
+          if (Array.isArray(node)) { for (const x of node) walk(x, teamAbbr); return; }
+          const abbr = node.team && node.team.abbreviation ? String(node.team.abbreviation).toUpperCase() : teamAbbr;
+          if (node.athlete && (node.status || node.details || node.type)) {
+            const a = node.athlete || {}; const det = node.details || {};
+            if (a.id) found[String(a.id)] = {
+              name: a.displayName || a.fullName || null, team: (a.team && a.team.abbreviation ? String(a.team.abbreviation).toUpperCase() : abbr) || null,
+              status: node.status || null, date: node.date || null,
+              type: det.type || (typeof node.type === "object" ? node.type?.description : node.type) || null,
+              location: det.location || null, side: det.side || null, detail: det.detail || null,
+              returnDate: det.returnDate || null, comment: node.longComment || node.shortComment || null,
+            };
+          }
+          for (const v of Object.values(node)) if (v && typeof v === "object") walk(v, abbr);
         };
-      }
+        walk(d, null);
+        if (Object.keys(found).length > Object.keys(out).length) { out = found; used = url; topKeys = Object.keys(d); }
+        if (Object.keys(out).length >= 40) break;
+      } catch (e) { tried.push(url + " → " + String(e.message || e)); }
     }
     // /api/injuries?debug=1 shows how many records actually carry a return date,
     // and ?find=<name> dumps one player's raw ESPN record.
@@ -28,6 +50,7 @@ export default async function handler(req, res) {
       const all = Object.entries(out);
       const find = String(req.query.find || "").toLowerCase();
       return res.status(200).json({
+        source: used, tried, topKeys,
         total: all.length,
         withReturnDate: all.filter(([, v]) => v.returnDate).length,
         sampleWithDate: all.filter(([, v]) => v.returnDate).slice(0, 10).map(([id, v]) => ({ id, name: v.name, status: v.status, returnDate: v.returnDate })),
