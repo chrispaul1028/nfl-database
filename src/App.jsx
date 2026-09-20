@@ -7,7 +7,11 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 const HEADER_COLOR = "team";
 
 // Season used for team payroll totals (must match your Season select format)
-const CURRENT_SEASON = "2025";
+// The league year: a season is named for the year it kicks off, and the new
+// league year opens in March — so Jan/Feb still belong to last season. This
+// used to be a hard-coded "2025", which quietly under-counted every player's
+// experience and every coach's tenure once 2026 started.
+const CURRENT_SEASON = (() => { const d = new Date(); return String(d.getMonth() >= 2 ? d.getFullYear() : d.getFullYear() - 1); })();
 
 // Salary bar colors by year type - change any hex you like.
 const BAR_COLORS = {
@@ -655,7 +659,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v20";
+const NFL_VERSION = "v21";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1152,7 +1156,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       {bench.length > 0 && (
         <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-2 pt-2 pb-1">
           <div className="px-1 mb-1.5">
-            <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline</div>
+            <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Sideline <span className="text-slate-500 dark:text-slate-300 tabular-nums">({bench.length})</span></div>
             <div className="flex flex-wrap justify-around gap-x-3 gap-y-0.5 mt-1">
               {(() => {
                 const counts = {};
@@ -1203,12 +1207,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       )}
       {(team && (team.headCoach || team.offCoord || team.defCoord)) && (
         <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2.5 grid grid-cols-3 gap-2">
-          {[["Head Coach", team.headCoach], ["Off. Coordinator", team.offCoord], ["Def. Coordinator", team.defCoord]].map(([k, v]) => (
-            <div key={k} className="min-w-0">
-              <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
-              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
-            </div>
-          ))}
+          {[["Head Coach", team.headCoach, team.hcSince], ["Off. Coordinator", team.offCoord, team.ocSince], ["Def. Coordinator", team.defCoord, team.dcSince]].map(([k, v, since]) => {
+            // "3rd season" = current season minus the year he joined, plus one
+            const yrs = since ? Math.max(1, Number(CURRENT_SEASON) - Number(since) + 1) : null;
+            return (
+              <div key={k} className="min-w-0">
+                <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
+                <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
+                {yrs && <div className="text-[9px] font-semibold text-slate-400 truncate">{ordinal(yrs)} season · since {since}</div>}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -2994,20 +3003,20 @@ function MatchCard({ g, onClick }) {
       <div className={"text-[32px] leading-none font-black tabular-nums drop-shadow " + (lost(t) ? "text-white/55" : "text-white")}>{g.state === "pre" ? "" : (t.score ?? 0)}</div>
     </div>
   );
-  // Record + timeouts, for the bottom row corners
-  const Foot = ({ t, side, align }) => {
+  // Record over timeouts, stacked and centred in the score's own column so it
+  // sits directly beneath the number.
+  const Foot = ({ t, side }) => {
     const n = tos(t, side);
     return (
-      <div className={"flex items-center gap-1.5 w-[84px] " + (align === "right" ? "justify-end" : "justify-start")}>
-        {align === "right" && n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
+      <div className="w-14 flex flex-col items-center gap-[3px]">
         {t.record && <span className="text-[10px] font-bold text-white/85 tabular-nums leading-none">{t.record}</span>}
-        {align === "left" && n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
+        {n != null && <span className="flex items-center gap-[3px]">{[0, 1, 2].map((i) => <span key={i} className={"block w-[9px] h-[4px] rounded-[1px] " + (i < n ? "bg-white" : "bg-white/25")} />)}</span>}
       </div>
     );
   };
-  // Possession: the loading-screen football, same wobble, beside the team with the ball.
+  // Possession: a still football beside the team that has it.
   const Ball = ({ on }) => (
-    <span className={"w-4 text-[12px] leading-none text-center " + (on ? "" : "invisible")} style={on ? { display: "inline-block", animation: "hrbSpin 0.9s ease-in-out infinite" } : undefined}>🏈</span>
+    <span className={"w-4 text-[12px] leading-none text-center inline-block " + (on ? "" : "invisible")}>🏈</span>
   );
   return (
     <button onClick={onClick} style={cardBg}
@@ -3040,14 +3049,17 @@ function MatchCard({ g, onClick }) {
         <Score t={g.home} />
         <Side t={g.home} />
       </div>
-      {/* bottom row: away record/timeouts · situation · home record/timeouts */}
-      <div className="mt-1 flex items-end justify-between">
-        <Foot t={g.away} side="away" align="left" />
-        <div className="flex-1 flex flex-col items-center">
-          {isLive && g.redZone && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
+      {/* bottom row mirrors the top row's columns: [logo][score][centre][score][logo],
+          so each record lands directly under its score */}
+      <div className="mt-0.5 flex items-start justify-between">
+        <div className="w-[68px] shrink-0" />
+        <Foot t={g.away} side="away" />
+        <div className="flex-1 flex flex-col items-center px-0.5">
+          {isLive && g.redZone && g.possession && <RedTag plain className="mb-0.5">RED ZONE</RedTag>}
           {isLive && (g.downDistance || g.spot) && <div className="text-center text-[11px] font-extrabold tracking-widest uppercase text-white/90">{[g.downDistance, g.spot].filter(Boolean).join("  |  ")}</div>}
         </div>
-        <Foot t={g.home} side="home" align="right" />
+        <Foot t={g.home} side="home" />
+        <div className="w-[68px] shrink-0" />
       </div>
     </button>
   );
