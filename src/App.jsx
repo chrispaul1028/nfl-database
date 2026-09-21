@@ -681,7 +681,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v31";
+const NFL_VERSION = "v32";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -764,7 +764,8 @@ function InjuryLine({ p, deep }) {
   if (!d) return null;
   const inj = injFor(p.name, abbr);
   const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
-  const comment = (deep && deep.comment) || (e && e.comment) || null;
+  const rawC = (deep && deep.comment) || (e && e.comment) || null;
+  const comment = rawC && !/^\s*(inactive|active|out|questionable|doubtful|probable)\.?\s*$/i.test(rawC) ? rawC : null;
   return (
     <div className="mt-1.5">
       {d.note && <div className="text-[11px] font-bold text-white bg-rose-600 rounded-full px-2.5 py-0.5 inline-block max-w-full truncate">{d.note}</div>}
@@ -1411,7 +1412,7 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
               <Avatar p={p} />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                  <span className="font-extrabold mr-1.5" style={{ color: (() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? teamInk(a, dark) : "#64748b"; })() }}>{p.pos || "—"}</span>{p.name}
+                  <span className="font-extrabold mr-1.5 text-slate-400">{p.pos || "—"}</span>{p.name}
                 </span>
                 <span className="block text-[11px] text-slate-400 font-medium truncate">
                   {[p.height, p.weight, p.age ? p.age + " yrs" : ""].filter(Boolean).join(" · ") || "—"}
@@ -1456,7 +1457,7 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
         status: (e && e.status && !/^(active|inactive)$/i.test(e.status)) ? e.status
           : (inj && inj.injury_status) || (inj && /injured reserve/i.test(String(inj.status || "")) ? "IR" : "") || "",
         injury: d ? d.label : (p.injuryNotes ? injCase(p.injuryNotes) : ""),
-        note: (e && e.comment) || "",
+        note: (e && e.comment && !/^\s*(inactive|active|out|questionable|doubtful|probable)\.?\s*$/i.test(e.comment)) ? e.comment : "",
         ret: fmtReturn(ret),
       });
     }
@@ -1489,13 +1490,14 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
               {g.rows.map((r) => (
                 <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left pr-3 pl-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
                   style={{ borderLeft: `3px solid ${teamInk(r.a, dark)}${dark ? "66" : "33"}` }}>
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{cleanNo(r.p.no) ? "#" + cleanNo(r.p.no) : "—"}</span>
-                    <Avatar p={r.p} />
+                  <div className="flex items-start gap-2.5">
+                    {/* number chip drops one row to sit beside the status tag */}
+                    <span className="w-9 mt-[26px] text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{cleanNo(r.p.no) ? "#" + cleanNo(r.p.no) : "—"}</span>
+                    <div className="shrink-0"><Avatar p={r.p} /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                          <span className="font-extrabold mr-1.5" style={{ color: r.a ? teamInk(r.a, dark) : "#64748b" }}>{r.p.pos || "—"}</span>{r.p.name}
+                          <span className="font-extrabold mr-1.5 text-slate-400">{r.p.pos || "—"}</span>{r.p.name}
                         </span>
                         {r.a && <img src={TEAM_LOGOS[r.a]} alt="" className="w-7 h-7 object-contain shrink-0" />}
                         <span className="ml-auto text-[10px] font-bold text-slate-400 tabular-nums shrink-0 pl-2">{r.when ? fmtTime(r.when) : ""}</span>
