@@ -681,7 +681,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v32";
+const NFL_VERSION = "v33";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1491,8 +1491,8 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
                 <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left pr-3 pl-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
                   style={{ borderLeft: `3px solid ${teamInk(r.a, dark)}${dark ? "66" : "33"}` }}>
                   <div className="flex items-start gap-2.5">
-                    {/* number chip drops one row to sit beside the status tag */}
-                    <span className="w-9 mt-[26px] text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{cleanNo(r.p.no) ? "#" + cleanNo(r.p.no) : "—"}</span>
+                    {/* number chip and photo share the top row, both beside the name */}
+                    <span className="w-9 mt-2 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{cleanNo(r.p.no) ? "#" + cleanNo(r.p.no) : "—"}</span>
                     <div className="shrink-0"><Avatar p={r.p} /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
@@ -1500,9 +1500,13 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
                           <span className="font-extrabold mr-1.5 text-slate-400">{r.p.pos || "—"}</span>{r.p.name}
                         </span>
                         {r.a && <img src={TEAM_LOGOS[r.a]} alt="" className="w-7 h-7 object-contain shrink-0" />}
-                        <span className="ml-auto text-[10px] font-bold text-slate-400 tabular-nums shrink-0 pl-2">{r.when ? fmtTime(r.when) : ""}</span>
                       </div>
-                      {r.status && <div className="mt-1"><span className={"inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 " + statusCls(r.status)}>{r.status}</span></div>}
+                      {(r.status || r.when) && (
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          {r.status ? <span className={"inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 " + statusCls(r.status)}>{r.status}</span> : <span />}
+                          <span className="text-[10px] font-bold text-slate-400 tabular-nums shrink-0">{r.when ? fmtTime(r.when) : ""}</span>
+                        </div>
+                      )}
                       {r.injury && <div className="mt-0.5 text-[11px] font-semibold text-rose-500 truncate">({r.injury})</div>}
                       {r.ret && <div className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">Estimated Return Date: {r.ret}</div>}
                       {r.note && <div className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{r.note}</div>}
@@ -2547,7 +2551,9 @@ function teamLeaderRows(seasonStats, key) {
   for (const r of sorted) r.tie = sorted.filter((o) => o.val[key] === r.val[key]).length > 1;
   return sorted;
 }
-function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
+function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed, backTo, onBack }) {
+  // A right-swipe (or the back pill) returns to the team/player page a stat tile came from
+  const swipe = useSwipe({ onRight: onBack || undefined });
   const [catId, setCatId] = useState("passing");
   const [statKey, setStatKey] = useState(null);
   const [posPick, setPosPick] = useState("ALL");
@@ -2613,8 +2619,9 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed }) {
   const statLabel = cat.stats.find(([k]) => k === key)?.[1] || key;
   const fmt = (v) => (key === "fpts" || key === "ypcar" ? Number(v).toFixed(1) : v);
   return (
-    <div>
+    <div {...swipe}>
       <div className="bg-blue-600 pb-3 px-4 text-white sticky top-0 z-10 shadow-md" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+        {backTo && onBack && <button onClick={onBack} className="text-sm font-semibold opacity-90 mb-1 block">‹ {backTo}</button>}
         <div className="flex items-baseline gap-2"><h1 className="text-xl font-extrabold">Leaders</h1><span className="text-[11px] font-semibold text-blue-200">{yr}{seasonStats && seasonStats.weeksWithGames ? ` · thru Wk ${seasonStats.weeksWithGames}` : ""}</span></div>
         <div className="flex gap-1.5 mt-3">
           {LEADER_CATS.map((c) => (
@@ -3737,6 +3744,7 @@ export default function App() {
   const [selTeam, setSelTeam] = useState(null);
   const [statJump, setStatJump] = useState(null);   // stat tapped on a player page
   const [navTick, setNavTick] = useState(0);        // bumps on every bottom-nav tap
+  const [jumpBack, setJumpBack] = useState(null);   // where a stat-tile jump came from
   const [error, setError] = useState(null);
 
   const [, setInjTick] = useState(0);
@@ -3825,7 +3833,7 @@ export default function App() {
         backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
         mode="full"
         seasonStats={seasonStats}
-        onStatJump={(j) => { setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
+        onStatJump={(j) => { setJumpBack({ tab, sel, selTeam, label: sel.name }); setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
       />
     );
   }
@@ -3850,20 +3858,22 @@ export default function App() {
           onBack={() => setSelTeam(null)}
           onSwitchTeam={(t) => setSelTeam(t)}
           onSelectPlayer={setSel}
-          onStatJump={(j) => { setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
+          onStatJump={(j) => { setJumpBack({ tab, sel: null, selTeam, label: selTeam.name }); setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
         />
       )}
       <div className="pb-28">
         {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} navTick={navTick} />}
         {players && tab === "players" && <PlayersHub players={players} onSelect={setSel} />}
-        {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} jump={statJump} onJumpUsed={() => setStatJump(null)} />}
+        {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} jump={statJump} onJumpUsed={() => setStatJump(null)}
+          backTo={jumpBack ? jumpBack.label : null}
+          onBack={jumpBack ? () => { setTab(jumpBack.tab); setSelTeam(jumpBack.selTeam); setSel(jumpBack.sel); setJumpBack(null); } : undefined} />}
       </div>
 
       <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex pb-[env(safe-area-inset-bottom)] z-20">
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setNavTick((n) => n + 1); }}
+            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setJumpBack(null); setNavTick((n) => n + 1); }}
             className={"flex-1 py-2.5 text-center " + (tab === t.id ? "text-blue-600" : "text-slate-400")}
           >
             <div className="text-lg leading-none">{t.icon}</div>
