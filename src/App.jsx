@@ -681,7 +681,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v30";
+const NFL_VERSION = "v31";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -813,6 +813,45 @@ const isStarter = (p) => {
   return d <= (STARTER_DEPTH[String(p.pos || "").toUpperCase()] || 1);
 };
 
+// ── Depth chart: Sleeper drives it, Airtable overrides it ──────────────────
+// Sleeper tags every player with depth_chart_position ("LWR", "RG", "LOLB",
+// "NB"…) and depth_chart_order, and keeps it current as teams reshuffle. We
+// turn that into the same labels the app already understands ("WR3", "RG1",
+// "LDE1"). A value in Airtable's Sort Priority still wins for that player —
+// that's the override for when the feed is wrong.
+const POS_SEQ_UI = ["QB", "RB", "FB", "WR", "TE", "LT", "LG", "C", "RG", "RT", "OT", "OG", "G", "OL",
+  "DE", "EDGE", "DT", "NT", "DL", "LB", "ILB", "MLB", "OLB", "CB", "NB", "S", "FS", "SS", "DB", "K", "P", "LS", "KR", "PR"];
+function rankOfLabel(label) {
+  if (!label) return null;
+  const m = String(label).toUpperCase().match(/^([A-Z]+)\s*(\d*)$/);
+  if (!m) return null;
+  let base = m[1], side = 0;
+  if (!POS_SEQ_UI.includes(base) && /^[LR]/.test(base) && POS_SEQ_UI.includes(base.slice(1))) { side = base[0] === "L" ? 0 : 0.5; base = base.slice(1); }
+  const i = POS_SEQ_UI.indexOf(base);
+  if (i === -1) return null;
+  return i * 100 + (m[2] ? Number(m[2]) : 0) + side;
+}
+function autoDepthLabels(roster, abbr) {
+  const out = {};
+  const FAMILY = { LWR: "WR", RWR: "WR", SWR: "WR", WR: "WR", RB: "RB", HB: "RB", TE: "TE", QB: "QB", FB: "FB" };
+  const SLOT_PRI = { LWR: 0, RWR: 1, SWR: 2, WR: 3 };
+  const groups = {};
+  for (const p of roster) {
+    const sp = injFor(p.name, abbr);
+    if (!sp || !sp.depth_chart_position) continue;
+    const slot = String(sp.depth_chart_position).toUpperCase();
+    const order = Number(sp.depth_chart_order) || 99;
+    const fam = FAMILY[slot];
+    if (fam) (groups[fam] ??= []).push({ p, slot, order });
+    else out[p.id] = slot + order;                      // "LT1", "LDE1", "NB1", "K1"
+  }
+  // Positions Chris numbers as one sequence: WR1..WRn across LWR/RWR/SWR slots
+  for (const [fam, list] of Object.entries(groups)) {
+    list.sort((a, b) => a.order - b.order || (SLOT_PRI[a.slot] ?? 9) - (SLOT_PRI[b.slot] ?? 9) || String(a.p.name).localeCompare(String(b.p.name)));
+    list.forEach((e, i) => { out[e.p.id] = fam + (i + 1); });
+  }
+  return out;
+}
 // unit state lives in TeamDetail now so the stat tiles up top can react to
 // the Offense/Defense toggle. lineRank = this team's OL/DL league ranks.
 function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, team }) {
@@ -1308,7 +1347,7 @@ function injuryDetail(p, abbr, deep) {
   if (!label && !retTxt) return null;
   const inner = [label || "injury", retTxt ? `est. return ${retTxt}` : null].filter(Boolean).join(" · ");
   // label: "(ankle sprain)" · retLine: "Estimated return date: Oct 20" · text: both inline
-  return { label, retTxt, note: label ? `(${label})` : null, retLine: retTxt ? `Estimated return date: ${retTxt}` : null, text: `(${inner})` };
+  return { label, retTxt, note: label ? `(${label})` : null, retLine: retTxt ? `Estimated Return Date: ${retTxt}` : null, text: `(${inner})` };
 }
 
 function TeamPill({ team }) {
@@ -1367,12 +1406,12 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
           {list.map((p) => (
             <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
               style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { borderLeft: `3px solid ${teamInk(a, dark)}${dark ? "66" : "33"}` } : undefined; })()}>
-              <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white"
-                style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { backgroundColor: teamInk(a, dark) } : { backgroundColor: "#64748b" }; })()}>{p.pos || "—"}</span>
+              <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums"
+                style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { backgroundColor: teamInk(a, dark) } : { backgroundColor: "#64748b" }; })()}>{cleanNo(p.no) ? "#" + cleanNo(p.no) : "—"}</span>
               <Avatar p={p} />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                  {cleanNo(p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(p.no)}</span>}{p.name}
+                  <span className="font-extrabold mr-1.5" style={{ color: (() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? teamInk(a, dark) : "#64748b"; })() }}>{p.pos || "—"}</span>{p.name}
                 </span>
                 <span className="block text-[11px] text-slate-400 font-medium truncate">
                   {[p.height, p.weight, p.age ? p.age + " yrs" : ""].filter(Boolean).join(" · ") || "—"}
@@ -1425,7 +1464,7 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
   }, [players]);
   const fmtDay = (d) => d.toLocaleDateString([], { month: "short", day: "numeric" });
   const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const statusCls = (st) => /out|ir|injured reserve|pup|nfi|sus/i.test(st) ? "bg-rose-600 text-white" : /doubt/i.test(st) ? "bg-orange-500 text-white" : /quest/i.test(st) ? "bg-amber-400 text-slate-900" : "bg-slate-500 text-white";
+  const statusCls = (st) => /out|ir|injured reserve|pup|nfi|sus|doubt/i.test(st) ? "bg-rose-600 text-white" : /quest/i.test(st) ? "bg-amber-400 text-slate-900" : "bg-slate-500 text-white";
   // group by day so the feed reads like a log
   const groups = [];
   for (const r of rows) {
@@ -1451,19 +1490,19 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
                 <button key={r.p.id} onClick={() => onSelect(r.p)} className="w-full text-left pr-3 pl-3 py-2.5 active:bg-slate-50 dark:active:bg-slate-800"
                   style={{ borderLeft: `3px solid ${teamInk(r.a, dark)}${dark ? "66" : "33"}` }}>
                   <div className="flex items-center gap-2.5">
-                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{r.p.pos || "—"}</span>
+                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums" style={{ backgroundColor: r.a ? teamInk(r.a, dark) : "#64748b" }}>{cleanNo(r.p.no) ? "#" + cleanNo(r.p.no) : "—"}</span>
                     <Avatar p={r.p} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                          {cleanNo(r.p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(r.p.no)}</span>}{r.p.name}
+                          <span className="font-extrabold mr-1.5" style={{ color: r.a ? teamInk(r.a, dark) : "#64748b" }}>{r.p.pos || "—"}</span>{r.p.name}
                         </span>
                         {r.a && <img src={TEAM_LOGOS[r.a]} alt="" className="w-7 h-7 object-contain shrink-0" />}
                         <span className="ml-auto text-[10px] font-bold text-slate-400 tabular-nums shrink-0 pl-2">{r.when ? fmtTime(r.when) : ""}</span>
                       </div>
                       {r.status && <div className="mt-1"><span className={"inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 " + statusCls(r.status)}>{r.status}</span></div>}
                       {r.injury && <div className="mt-0.5 text-[11px] font-semibold text-rose-500 truncate">({r.injury})</div>}
-                      {r.ret && <div className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">Estimated return date: {r.ret}</div>}
+                      {r.ret && <div className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">Estimated Return Date: {r.ret}</div>}
                       {r.note && <div className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{r.note}</div>}
                     </div>
                   </div>
@@ -2068,11 +2107,22 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   const [roleFilter, setRoleFilter] = useState(null);
   const [chartMode, setChartMode] = useState("leaders");
   const [capSeason, setCapSeason] = useState(null);
-  const roster = players.filter((p) => {
+  const rosterRaw = players.filter((p) => {
     if (p.teamId && p.teamId === team.id) return true; // exact Airtable link - no naming needed
     const t = teamOfPlayer(p);
     return t && (t === abbr || String(p.teamName).toLowerCase() === String(team.name).toLowerCase());
   });
+  // Depth chart: Airtable Sort Priority when set, otherwise Sleeper's live chart
+  // (computed every render: the Sleeper feed arrives after first paint and
+  // this is a 53-man list, so it's cheap and always current)
+  const roster = (() => {
+    const auto = autoDepthLabels(rosterRaw, abbr);
+    return rosterRaw.map((p) => {
+      if (p.sortLabel) return { ...p, depthSrc: "airtable" };
+      const lbl = auto[p.id] || null;
+      return { ...p, sortLabel: lbl, sort: p.sort ?? rankOfLabel(lbl), depthSrc: lbl ? "sleeper" : null };
+    });
+  })();
   const payroll = roster.reduce((a, p) => a + currentSalary(p), 0);
   const dark = useDark();
   const ink = teamInk(abbr, dark);            // readable on the current theme
