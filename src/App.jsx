@@ -681,7 +681,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v33";
+const NFL_VERSION = "v34";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -1405,11 +1405,12 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
-            <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
+            <button key={p.id} onClick={() => onSelect(p)} className="w-full flex items-start gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
               style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { borderLeft: `3px solid ${teamInk(a, dark)}${dark ? "66" : "33"}` } : undefined; })()}>
-              <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums"
+              {/* chip and photo hold the top row beside the name, same as the injury report */}
+              <span className="w-9 mt-2 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white tabular-nums"
                 style={(() => { const a = toAbbr(teamOfPlayer(p) || p.teamName || ""); return a ? { backgroundColor: teamInk(a, dark) } : { backgroundColor: "#64748b" }; })()}>{cleanNo(p.no) ? "#" + cleanNo(p.no) : "—"}</span>
-              <Avatar p={p} />
+              <div className="shrink-0"><Avatar p={p} /></div>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                   <span className="font-extrabold mr-1.5 text-slate-400">{p.pos || "—"}</span>{p.name}
