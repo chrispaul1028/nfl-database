@@ -161,10 +161,11 @@ function experienceOf(p) {
 
 // Search matches player name, current team (full name or abbreviation),
 // or the active contract's team. "knicks", "NY", "jalen" all work.
-function matchesQuery(p, q) {
+function matchesQuery(p, q, namesOnly) {
   if (!q) return true;
   const s = q.toLowerCase().trim();
   if (p.name.toLowerCase().includes(s)) return true;
+  if (namesOnly) return false;
   const team = String(p.teamName || "").toLowerCase();
   if (team.includes(s)) return true;
   const abbr = toAbbr(p.teamName) || (activeOf(p) && activeOf(p).team) || "";
@@ -592,7 +593,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
                     <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{lbl}</div>
                     <div className="text-[26px] leading-tight font-black tabular-nums text-slate-900 dark:text-white">{T ? (T[k] ?? "—") : "—"}</div>
                     <div className={"text-[10px] font-extrabold " + tier(r, peers.length)}>{r ? ordinal(r) + (rk.tie ? " (tie)" : "") : "—"}</div>
-                    {(grp === "WR" || grp === "TE") && <div className="text-[8px] font-semibold tracking-wide uppercase text-slate-400 mt-0.5">{grp === "WR" ? "Wide Receiver Rank" : "TE Rank"}</div>}
+                    {(grp === "WR" || grp === "TE") && <div className="text-[8px] font-semibold tracking-wide uppercase text-slate-400 mt-0.5">{grp === "WR" ? "WR Rank" : "TE Rank"}</div>}
                   </button>
                 );
               })}
@@ -680,7 +681,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 }
 
 // ═══════════════ LIST HEADER (shared) ════════════════════════════
-const NFL_VERSION = "v29";
+const NFL_VERSION = "v30";
 // Until the current season has results, fall back to last season's numbers
 const seasonStarted = (teams) => (teams || []).some((t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0);
 function teamRec(t, started) {
@@ -761,7 +762,16 @@ function InjuryLine({ p, deep }) {
   if (!injHasFlag(p, abbr)) return p.injuryNotes ? <div className="inline-block mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2 py-0.5 truncate max-w-full lowercase">({p.injuryNotes})</div> : null;
   const d = injuryDetail(p, abbr, deep);
   if (!d) return null;
-  return <div className="mt-1.5 text-[11px] font-bold text-white bg-rose-600 rounded-full px-2.5 py-0.5 inline-block max-w-full truncate">{d.text}</div>;
+  const inj = injFor(p.name, abbr);
+  const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
+  const comment = (deep && deep.comment) || (e && e.comment) || null;
+  return (
+    <div className="mt-1.5">
+      {d.note && <div className="text-[11px] font-bold text-white bg-rose-600 rounded-full px-2.5 py-0.5 inline-block max-w-full truncate">{d.note}</div>}
+      {d.retLine && <div className="text-[11px] font-semibold text-white/90 mt-1">{d.retLine}</div>}
+      {comment && <div className="text-[11px] text-white/80 mt-1 leading-snug">{comment}</div>}
+    </div>
+  );
 }
 
 function InjBadge({ p, team, lg = false, noNote = false }) {
@@ -1282,11 +1292,13 @@ function injuryDetail(p, abbr, deep) {
   const e = inj && inj.espn_id ? INJ_ESPN[String(inj.espn_id)] : null;
   let label = "";
   if (e) {
-    const parts = [e.side, e.location, e.detail].filter(Boolean).map((x) => String(x).trim());
-    label = parts.join(" ");
-    if (!label && e.type) label = e.type;
-    if (label.toLowerCase().startsWith("other")) label = e.type || label;
-  } else if (inj && (inj.injury_body_part || inj.injury_notes)) {
+    // ESPN fills blanks with "Not Specified" / "Other" / "Unknown"; those aren't notes
+    const clean = (x) => { const t = String(x || "").trim(); return /^(not specified|unspecified|other|unknown|n\/a|none)$/i.test(t) ? "" : t; };
+    const parts = [e.side, e.location, e.detail].map(clean).filter(Boolean);
+    label = [...new Set(parts.map((x) => x.toLowerCase()))].join(" ");   // drop exact repeats
+    if (!label && clean(e.type)) label = clean(e.type);
+  }
+  if (!label && inj && (inj.injury_body_part || inj.injury_notes)) {
     label = [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" ");
   }
   label = injCase(label);
@@ -1338,7 +1350,7 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
   const injOnly = !!forceInj;
   const list = useMemo(
     () => players
-      .filter((p) => matchesQuery(p, q))
+      .filter((p) => matchesQuery(p, q, true))
       .filter((p) => !injOnly || (() => {
         const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
         // injured = a designation, or a reserve-list roster status (not plain "Inactive")
@@ -1349,7 +1361,7 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
   if (injOnly) return <InjuryFeed players={list} onSelect={onSelect} q={q} setQ={setQ} pills={pills} dark={dark} />;
   return (
     <div>
-      <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
+      <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} placeholder="Search players…" />
       <div className="px-4 pb-28 mt-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
           {list.map((p) => (
@@ -2337,7 +2349,14 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                         })()}
                       </span>
                       {/* row 3: the detailed note, directly under the tag, nothing blocking it */}
-                      {(() => { const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null; return d ? <span className="block text-[11px] font-semibold text-rose-500 mt-1">{d.text}</span> : (p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 mt-1 lowercase">({p.injuryNotes})</span> : null); })()}
+                      {(() => {
+                        const d = injHasFlag(p, abbr) ? injuryDetail(p, abbr) : null;
+                        if (!d) return p.injuryNotes ? <span className="block text-[11px] font-semibold text-red-500 mt-1">({injCase(p.injuryNotes)})</span> : null;
+                        return (<>
+                          {d.note && <span className="block text-[11px] font-semibold text-rose-500 mt-1">{d.note}</span>}
+                          {d.retLine && <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{d.retLine}</span>}
+                        </>);
+                      })()}
                     </span>
                   </button>
                 ))}
@@ -3142,9 +3161,6 @@ const HELMET_KIT = {
 };
 // Side profile of a modern shell: rounded crown, front rim, an open face with the
 // facemask cage bridging it, jaw flap and ear hole. Facing right; flip mirrors it.
-// Helmet photo treatment, remembered on the device: "photo" or "cartoon".
-const helmetStyle = () => { try { return localStorage.getItem("helmetStyle") || "cartoon"; } catch { return "cartoon"; } };
-const setHelmetStyle = (v) => { try { localStorage.setItem("helmetStyle", v); } catch {} };
 function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, photo }) {
   // A real helmet image (Airtable "Helmet" attachment on the team) beats the
   // drawn shell. It still flips for the home side and rides the same clash
@@ -3154,32 +3170,12 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
     // to a handful of flat steps (cel shading), sharpen, and draw a dark ink
     // line around the silhouette. Done as an SVG filter on an <image>, which
     // iOS renders reliably (CSS filter: url() on an <img> does not).
-    const toon = helmetStyle() === "cartoon";
-    const fid = `toon-${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
+    // The Airtable "Helmet" attachment (a transparent PNG, side view facing
+    // right — e.g. a vectorizer.ai trace of the official photo) is shown as-is.
     return (
       <div onClick={onClick} style={{ width: size, height: size * 0.82, ...style }} className="relative">
-        <svg viewBox="0 0 100 82" width="100%" height="100%" className="block select-none">
-          {toon && (
-            <defs>
-              <filter id={fid} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
-                <feColorMatrix in="SourceGraphic" type="saturate" values="1.4" result="sat" />
-                <feComponentTransfer in="sat" result="post">
-                  <feFuncR type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
-                  <feFuncG type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
-                  <feFuncB type="discrete" tableValues="0 0.14 0.28 0.42 0.56 0.7 0.85 1" />
-                </feComponentTransfer>
-                <feConvolveMatrix in="post" order="3" kernelMatrix="0 -0.6 0 -0.6 3.4 -0.6 0 -0.6 0" preserveAlpha="true" result="sharp" />
-                <feMorphology in="SourceAlpha" operator="dilate" radius="1.4" result="fat" />
-                <feFlood floodColor="#0b0f19" floodOpacity="0.92" result="inkc" />
-                <feComposite in="inkc" in2="fat" operator="in" result="ink" />
-                <feMerge><feMergeNode in="ink" /><feMergeNode in="sharp" /></feMerge>
-              </filter>
-            </defs>
-          )}
-          <g transform={flip ? "translate(100,0) scale(-1,1)" : undefined}>
-            <image href={photo} x="0" y="0" width="100" height="82" preserveAspectRatio="xMidYMid meet" filter={toon ? `url(#${fid})` : undefined} />
-          </g>
-        </svg>
+        <img src={photo} alt="" draggable="false" className="w-full h-full object-contain select-none"
+          style={{ transform: flip ? "scaleX(-1)" : undefined }} />
       </div>
     );
   }
@@ -3365,7 +3361,6 @@ function PropsBoard() {
 
 // ═══════════════ GAME DETAIL (tap a matchup) ═════════════════════
 function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
-  const [, setToonTick] = useState(0);   // re-render when the helmet style flips
   // Real helmet art from Airtable, when the team record has one
   const helmetOf = (abbr) => { const t = (teams || []).find((x) => injTeamEq(x.abbr || toAbbr(x.name), abbr)); return t && t.helmet ? t.helmet : null; };
   const [d, setD] = useState(null);
@@ -3618,14 +3613,7 @@ function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
           </div>
         )}
         {d && !focus && (g.venue || g.weather) && <div className="text-[10px] text-slate-400 text-center mb-2">{[g.venue, g.weather].filter(Boolean).join(" · ")}{isLive ? " · updates every 30s" : ""} · tap a team for its box score</div>}
-        {d && !focus && (helmetOf(g.away.abbr) || helmetOf(g.home.abbr)) && (
-          <div className="flex justify-center mb-3">
-            <button onClick={() => { setHelmetStyle(helmetStyle() === "cartoon" ? "photo" : "cartoon"); setToonTick((t) => t + 1); }}
-              className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300">
-              helmets: {helmetStyle() === "cartoon" ? "cartoon" : "photo"} · tap to switch
-            </button>
-          </div>
-        )}
+
       </div>
     </div>
   );
