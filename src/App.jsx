@@ -546,7 +546,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
   const no = cleanNo(p.no);
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
-      <div className="relative px-5 pb-8 text-white" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+      <div className="relative px-5 pb-5 text-white" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
           <div className="rounded-full p-[3px] bg-white/90 shadow-lg shrink-0"><Avatar p={p} size="lg" /></div>
@@ -567,7 +567,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
         </div>
       </div>
 
-      <div className="px-4 -mt-3">
+      <div className="px-4 pt-3">
         {(() => {
           // Three season tiles by position, each ranked against every player at
           // that position league-wide (Nacua's rec yards vs all WRs).
