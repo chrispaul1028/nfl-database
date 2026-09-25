@@ -110,6 +110,9 @@ const logoFor = (abbr, fallback, onDark) => (onDark && abbr ? darkLogo(abbr) : (
 // White disc keeps every mark legible (they're drawn for white); identity comes
 // from a team-color ring with an alternate-color hairline inside it.
 const LOGO_BG = { BUF: "#00338D", DET: "#B0B7BC" };
+// Roster/team-page accent when the primary colour is the wrong one for chips and
+// tabs (Steelers: black backdrop, gold accents)
+const TEAM_ACCENT = { PIT: "#FFB612" };
 // A plain disc, no ring. (Rings were tried and retired — they fought the mark.)
 const logoChip = (abbr) => ({ background: LOGO_BG[abbr] || "#ffffff" });
 // On a dark chip the standard mark disappears, so use ESPN's dark-background art.
@@ -385,9 +388,16 @@ const pctOf = (v) => (v != null ? Math.round(v * 100) + "%" : null);
 // Lowercase injury copy, but medical/roster acronyms stay upper: "torn ACL",
 // "MCL sprain", "PUP list".
 const INJ_ACRONYMS = ["ACL", "MCL", "PCL", "LCL", "UCL", "AC", "SC", "IR", "PUP", "NFI", "COVID", "TBD", "IT", "MRI", "CT"];
+// A note that's only a body part ("toe", "left knee") reads as "toe injury".
+const INJ_BODY = new Set(["toe", "toes", "foot", "feet", "ankle", "knee", "leg", "hamstring", "groin", "hip", "quad", "quadriceps", "thigh", "calf",
+  "achilles", "shin", "back", "neck", "shoulder", "elbow", "wrist", "hand", "finger", "fingers", "thumb", "arm", "forearm", "chest", "rib", "ribs",
+  "abdomen", "abdominal", "oblique", "head", "face", "eye", "jaw", "pectoral", "pec", "biceps", "triceps", "heel", "pelvis", "spine", "collarbone",
+  "glute", "core", "lower back", "upper back"]);
 function injCase(str) {
   let t = String(str || "").replace(/\s+/g, " ").trim().toLowerCase();
   for (const a of INJ_ACRONYMS) t = t.replace(new RegExp(`\\b${a.toLowerCase()}\\b`, "g"), a);
+  const bare = t.replace(/^(left|right|l|r)\s+/, "");
+  if (bare && INJ_BODY.has(bare)) t += " injury";
   return t;
 }
 function fmtReturn(raw) {
@@ -1903,7 +1913,7 @@ function TeamsTab({ teams, players, onSelect }) {
         <div className="space-y-2 mt-4">
           {list.map((t) => {
             const abbr = t.abbr || toAbbr(t.name);
-            const bg = teamInk(abbr, dark);
+            const bg = teamColor(abbr);
             // light shells (Chargers powder, Packers gold) need dark type
             const ink = lumOf(bg) > 0.62 ? "#0f172a" : "#ffffff";
             const sub = lumOf(bg) > 0.62 ? "rgba(15,23,42,0.6)" : "rgba(255,255,255,0.72)";
@@ -2167,7 +2177,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   })();
   const payroll = roster.reduce((a, p) => a + currentSalary(p), 0);
   const dark = useDark();
-  const ink = teamInk(abbr, dark);            // readable on the current theme
+  const ink = TEAM_ACCENT[abbr] || teamInk(abbr, dark);   // readable on the current theme
+  const onInk = lumOf(ink) > 0.55 ? "#111827" : "#ffffff"; // label text on an ink fill
   const tint = (a) => ink + a;                // team-tinted fill
   const fill = LOGO_BG[abbr] || teamColor(abbr);  // big filled areas: the real shade
   // tap a stat tile → Stats → Teams board for that stat, scrolled to this team
@@ -2362,9 +2373,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
           {[["roster", "Roster"], ["contracts", "Contracts"], ["charts", "Stats"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
-                ? "text-white"
+                ? ""
                 : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
-              style={seg === k ? { backgroundColor: ink } : undefined}>
+              style={seg === k ? { backgroundColor: ink, color: onInk } : undefined}>
               {lbl}
             </button>
           ))}
@@ -2375,9 +2386,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             {[["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
               <button key={k} onClick={() => setRosterView(rosterView === k ? "list" : k)}
                 className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold transition-colors " + (rosterView === k
-                  ? "text-white"
+                  ? ""
                   : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}
-                style={rosterView === k ? { backgroundColor: ink } : undefined}>
+                style={rosterView === k ? { backgroundColor: ink, color: onInk } : undefined}>
                 {lbl}
               </button>
             ))}
@@ -2411,8 +2422,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 .map((p) => (
                   <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 pr-4 pl-3 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800"
                     style={{ borderLeft: `3px solid ${tint(dark ? "66" : "33")}` }}>
-                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1 text-white"
-                      style={{ backgroundColor: ink }}>{p.sortLabel || p.pos || "—"}</span>
+                    <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
+                      style={{ backgroundColor: ink, color: onInk }}>{p.sortLabel || p.pos || "—"}</span>
                     <Avatar p={p} />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -2432,7 +2443,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                                 // number a line lower than the tiles beside it
                                 <span key={k} className="w-[52px] h-[38px] flex flex-col items-stretch justify-start rounded-md border overflow-hidden"
                                   style={{ backgroundColor: tint(dark ? "24" : "14"), borderColor: tint(dark ? "59" : "33") }}>
-                                  <span className="block text-[7px] font-extrabold tracking-wide uppercase leading-none whitespace-nowrap text-white text-center py-[3px]" style={{ backgroundColor: ink }}>{lbl}</span>
+                                  <span className="block text-[7px] font-extrabold tracking-wide uppercase leading-none whitespace-nowrap text-center py-[3px]" style={{ backgroundColor: ink, color: onInk }}>{lbl}</span>
                                   <span className="flex-1 flex items-center justify-center text-[13px] font-extrabold tabular-nums text-slate-800 dark:text-slate-100 leading-none">{G && G[k] != null ? G[k] : "—"}</span>
                                 </span>
                               ))}
@@ -3406,8 +3417,8 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
         </g>
         {/* white brow strip across the front edge, just above the facemask */}
-        <path d="M128 36 C142 38 154 44 160 54" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="6.5" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
-        <path d="M128 36 C142 38 154 44 160 54" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
+        <path d="M126 49 L172 49" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="7" clipPath={`url(#clip-${uid})`} />
+        <path d="M126 49 L172 49" fill="none" stroke="#ffffff" strokeWidth="5" clipPath={`url(#clip-${uid})`} />
         {/* nose bumper: the rubber pad at the brow */}
         <path d="M150 50 C158 47 165 50 168 58 C162 60 156 58 151 55 Z" fill="#111318" />
         <path d="M153 51 C158 50 162 52 165 56" fill="none" stroke="#fff" strokeOpacity="0.25" strokeWidth="1.2" />
@@ -3653,7 +3664,7 @@ function GameDetail({ game, teams, onBack, onPrev, onNext, index, total }) {
           100%    { opacity: 0 }
         }
       `}</style>
-      <div className="px-4 pb-5 text-white" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
+      <div className="px-4 pb-5 text-white overflow-hidden" style={{ background: `linear-gradient(90deg, ${awayColor} 0%, ${awayColor} 42%, ${homeColor} 58%, ${homeColor} 100%)`, paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <button onClick={onBack} className="text-sm font-semibold opacity-90 mb-1">‹ Matchups</button>
 
         <div className="relative flex items-center justify-between" style={clash ? { animation: "hrbShake 1.1s linear 1" } : undefined}>
