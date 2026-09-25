@@ -30,11 +30,11 @@ const ACCENT_BORDER = "border-emerald-200";
 const TEAM_COLORS = {
   ARI: "#97233F", ATL: "#A71930", BAL: "#241773", BUF: "#00338D",
   CAR: "#0085CA", CHI: "#0B162A", CIN: "#FB4F14", CLE: "#311D00",
-  DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#1B5E34",
-  HOU: "#0B2C4F", IND: "#002C5F", JAX: "#006778", JAC: "#006778",
+  DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#134827",
+  HOU: "#07203A", IND: "#002C5F", JAX: "#006778", JAC: "#006778",
   KC: "#E31837", LV: "#000000", LAC: "#0080C6", LAR: "#003594",
-  MIA: "#008E97", MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D",
-  NYG: "#0B2265", NYJ: "#125740", PHI: "#004C54", PIT: "#FFB612",
+  MIA: "#008E97", MIN: "#4F2683", NE: "#001833", NO: "#D3BC8D",
+  NYG: "#0B2265", NYJ: "#125740", PHI: "#004C54", PIT: "#101010",
   SF: "#AA0000", SEA: "#002244", TB: "#C50909", TEN: "#0C2340",
   WAS: "#5A1414", WSH: "#5A1414",
 };
@@ -1328,6 +1328,32 @@ const TEAM_NAMES = {};   // abbr -> full name
 const TEAM_ALT = {};     // abbr -> alternate color (from ESPN scoreboard)
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
 const INJ_META = { count: 0, error: null, at: null };   // what the last /api/injuries call returned
+// Unread injury updates: ESPN records touched since the Injury Report was last
+// opened. "Last opened" lives in this phone's browser storage. First visit
+// starts the clock at now, so it doesn't open with hundreds of "new" items.
+const INJ_SEEN_KEY = "nfl-inj-seen";
+const injSeenAt = () => {
+  try {
+    const v = Number(localStorage.getItem(INJ_SEEN_KEY));
+    if (v) return v;
+    const now = Date.now(); localStorage.setItem(INJ_SEEN_KEY, String(now)); return now;
+  } catch { return Date.now(); }
+};
+const markInjSeen = () => { try { localStorage.setItem(INJ_SEEN_KEY, String(Date.now())); } catch {} };
+function injUnreadCount() {
+  const since = injSeenAt();
+  let n = 0;
+  for (const e of Object.values(INJ_ESPN)) {
+    if (!e || !e.date || /^active$/i.test(String(e.status || ""))) continue;
+    const t = new Date(e.date).getTime();
+    if (t > since) n++;
+  }
+  return n;
+}
+function UnreadDot({ n, className = "" }) {
+  if (!n) return null;
+  return <span className={"inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black tabular-nums leading-none " + className}>{n > 99 ? "99+" : n}</span>;
+}
 const POS_FULL = { QB: "Quarterback", RB: "Running Back", HB: "Running Back", FB: "Fullback", WR: "Wide Receiver", TE: "Tight End", LT: "Left Tackle", RT: "Right Tackle", OT: "Offensive Tackle", T: "Offensive Tackle", LG: "Left Guard", RG: "Right Guard", G: "Guard", OG: "Guard", C: "Center", OL: "Offensive Line", DE: "Defensive End", LDE: "Defensive End", RDE: "Defensive End", DT: "Defensive Tackle", LDT: "Defensive Tackle", RDT: "Defensive Tackle", NT: "Nose Tackle", EDGE: "Edge Rusher", DL: "Defensive Line", LB: "Linebacker", ILB: "Inside Linebacker", OLB: "Outside Linebacker", MLB: "Middle Linebacker", LOLB: "Outside Linebacker", ROLB: "Outside Linebacker", CB: "Cornerback", LCB: "Cornerback", RCB: "Cornerback", NB: "Nickel Back", DB: "Defensive Back", S: "Safety", FS: "Free Safety", SS: "Strong Safety", K: "Kicker", P: "Punter", LS: "Long Snapper" };
 // "Right ankle sprain (Est. return Oct 20)" — ESPN's injury detail for a player, via Sleeper's espn_id
 function injuryDetail(p, abbr, deep) {
@@ -1372,22 +1398,28 @@ function TeamPill({ team }) {
 // Hub for the Players bottom tab: one place for players, injuries, contracts, draft
 function PlayersHub({ players, onSelect }) {
   const [view, setView] = useState("players");
+  const [seenBefore, setSeenBefore] = useState(null);   // the mark from BEFORE this visit, for NEW tags
+  const unread = view === "injury" ? 0 : injUnreadCount();
+  const open = (k) => {
+    if (k === "injury" && view !== "injury") { setSeenBefore(injSeenAt()); markInjSeen(); }
+    setView(k);
+  };
   const pills = (
     <div className="flex gap-2 mt-3 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
       {[["players", "Players"], ["injury", "🏥 Injury Report"], ["contracts", "Contracts"], ["draft", "Draft"]].map(([k, lbl]) => (
-        <button key={k} onClick={() => setView(k)}
-          className={"shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-extrabold " + (view === k ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100 active:bg-blue-500")}>
-          {lbl}
+        <button key={k} onClick={() => open(k)}
+          className={"shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-extrabold " + (view === k ? "bg-white text-blue-700" : "bg-blue-500/60 text-blue-100 active:bg-blue-500")}>
+          {lbl}{k === "injury" && <UnreadDot n={unread} />}
         </button>
       ))}
     </div>
   );
   if (view === "contracts") return <ContractsTab players={players} onSelect={onSelect} pills={pills} />;
   if (view === "draft") return <DraftTab players={players} onSelect={onSelect} pills={pills} />;
-  return <PlayersTab players={players} onSelect={onSelect} pills={pills} forceInj={view === "injury"} key={view} />;
+  return <PlayersTab players={players} onSelect={onSelect} pills={pills} forceInj={view === "injury"} since={seenBefore} key={view} />;
 }
 
-function PlayersTab({ players, onSelect, pills, forceInj }) {
+function PlayersTab({ players, onSelect, pills, forceInj, since }) {
   const [q, setQ] = useState("");
   const dark = useDark();
   const injOnly = !!forceInj;
@@ -1401,7 +1433,7 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
       })()),
     [players, q, injOnly]
   );
-  if (injOnly) return <InjuryFeed players={list} onSelect={onSelect} q={q} setQ={setQ} pills={pills} dark={dark} />;
+  if (injOnly) return <InjuryFeed players={list} onSelect={onSelect} q={q} setQ={setQ} pills={pills} dark={dark} since={since} />;
   return (
     <div>
       <ListHeader title={<>Players <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} placeholder="Search players…" />
@@ -1443,7 +1475,7 @@ function PlayersTab({ players, onSelect, pills, forceInj }) {
 // ═══════════════ INJURY FEED (newest update first) ═══════════════
 // One row per injured player, sorted by the time ESPN last touched the record.
 // Return date: ESPN's returnDate, else Airtable's Est Return, else "—".
-function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
+function InjuryFeed({ players, onSelect, q, setQ, pills, dark, since }) {
   const rows = useMemo(() => {
     const out = [];
     for (const p of players) {
@@ -1508,7 +1540,7 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark }) {
                       {(r.status || r.when) && (
                         <div className="mt-1 flex items-center justify-between gap-2">
                           {r.status ? <span className={"inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 " + statusCls(r.status)}>{r.status}</span> : <span />}
-                          <span className="text-[10px] font-bold text-slate-400 tabular-nums shrink-0">{r.when ? fmtTime(r.when) : ""}</span>
+                          <span className="inline-flex items-center gap-1.5 shrink-0">{since && r.when && r.when.getTime() > since && <span className="text-[9px] font-black tracking-wider text-white bg-rose-600 rounded px-1.5 py-0.5">NEW</span>}<span className="text-[10px] font-bold text-slate-400 tabular-nums">{r.when ? fmtTime(r.when) : ""}</span></span>
                         </div>
                       )}
                       {r.injury && <div className="mt-0.5 text-[11px] font-semibold text-rose-500 truncate">({r.injury})</div>}
@@ -3342,12 +3374,17 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           {/* white name band wrapping the back-bottom of the shell: you only
               ever see part of the name from the side, like the real thing */}
           {HELMET_NICK[abbr] && <>
-            <path d="M14 60 C18 100 36 118 76 124" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" />
-            <path d="M14 60 C18 100 36 118 76 124" fill="none" stroke="#ffffff" strokeWidth="10.5" />
+            <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" strokeLinecap="round" />
+            <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="#ffffff" strokeWidth="10.5" strokeLinecap="round" />
+            <mask id={`nickm-${uid}`} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="170">
+              <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="#fff" strokeWidth="10.5" strokeLinecap="round" />
+            </mask>
+            <g mask={`url(#nickm-${uid})`}>
             <text transform={flip ? "translate(200,0) scale(-1,1)" : undefined} fontSize="8" fontWeight="900" letterSpacing="0.8" fill="#0b0b0d"
               style={{ fontFamily: "Arial Black, Arial, Helvetica, sans-serif" }} dy="2.9">
-              <textPath href={`#nick-${uid}`} startOffset={flip ? "27%" : "73%"} textAnchor={flip ? "start" : "end"}>{HELMET_NICK[abbr]}</textPath>
+              <textPath href={`#nick-${uid}`} startOffset={flip ? "22%" : "78%"} textAnchor={flip ? "start" : "end"}>{HELMET_NICK[abbr]}</textPath>
             </text>
+            </g>
           </>}
           {/* rear vents */}
 {lsc <= 1.1 && <>
@@ -3368,6 +3405,9 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="#07090d" />
           <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
         </g>
+        {/* white brow strip across the front edge, just above the facemask */}
+        <path d="M128 36 C142 38 154 44 160 54" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="6.5" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
+        <path d="M128 36 C142 38 154 44 160 54" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
         {/* nose bumper: the rubber pad at the brow */}
         <path d="M150 50 C158 47 165 50 168 58 C162 60 156 58 151 55 Z" fill="#111318" />
         <path d="M153 51 C158 50 162 52 165 56" fill="none" stroke="#fff" strokeOpacity="0.25" strokeWidth="1.2" />
@@ -3958,7 +3998,7 @@ export default function App() {
             onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setJumpBack(null); setNavTick((n) => n + 1); }}
             className={"flex-1 py-2.5 text-center " + (tab === t.id ? "text-blue-600" : "text-slate-400")}
           >
-            <div className="text-lg leading-none">{t.icon}</div>
+            <div className="relative inline-block text-lg leading-none">{t.icon}{t.id === "players" && <UnreadDot n={injUnreadCount()} className="absolute -top-1.5 -right-3.5" />}</div>
             <div className="text-[10px] font-bold mt-1">{t.id === "targets" && nflWeek ? "Week " + nflWeek : t.label}</div>
           </button>
         ))}
