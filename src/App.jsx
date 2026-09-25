@@ -3213,7 +3213,7 @@ const HELMET_KIT = {
   ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", null], BAL: ["#12100f", "#12100f", "#241773"],
   BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
   CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
-  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#203731", "#203731"],
+  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#1F4D2E", "#ffffff"],
   HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
   KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
   LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
@@ -3233,7 +3233,7 @@ const NO_MIRROR = new Set(["GB", "NYG", "SF", "NYJ", "CHI", "LAR", "WSH", "WAS"]
 // Decal size per team, 1 = default
 const LOGO_SCALE = { ATL: 1.35 };
 // Multi-band crown stripes: [outer band colour]; the kit's stripe colour is the centre
-const STRIPE_FLANK = { GB: "#203731" };
+const STRIPE_FLANK = { GB: "#1F4D2E" };
 // Side profile of a modern shell (Speedflex-ish): tall rounded crown, a fuller
 // rear bulge, flatter brow, open face bridged by the cage, jaw pad, ear hole,
 // nose bumper, rear vents. Facing right; flip mirrors it.
@@ -3253,7 +3253,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
   const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
   const shell = kit[0], mask = kit[1], stripe = kit.length >= 3 ? kit[2] : (alt || TEAM_ALT[abbr] || null);
   const flank = STRIPE_FLANK[abbr] || null;                  // outer bands either side of the centre stripe
-  const lsc = LOGO_SCALE[abbr] || 1, lw = 76 * lsc, lh = 48 * lsc, lx = 84 - lw / 2, ly = 70 - lh / 2;
+  const lsc = LOGO_SCALE[abbr] || 1, lw = 72 * lsc, lh = 44 * lsc, lx = 80 - lw / 2, ly = 58 - lh / 2;
   const unmirror = flip && NO_MIRROR.has(abbr);              // decal reads the same on both sides of the shell
   const darkShell = lumOf(shell) < 0.42;
   const side = DECAL_SIDE[abbr];
@@ -3288,7 +3288,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <stop offset="0%" stopColor="#3b3129" /><stop offset="55%" stopColor="#1c1612" /><stop offset="100%" stopColor="#07060a" />
         </radialGradient>
         <linearGradient id={`bar-${uid}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity={lumOf(mask) < 0.3 ? 0.3 : 0.85} />
           <stop offset="30%" stopColor={mask} /><stop offset="75%" stopColor={mask} />
           <stop offset="100%" stopColor="#000000" stopOpacity="0.5" />
         </linearGradient>
@@ -3309,10 +3309,10 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         {/* centre stripe along the crown, with thin liners either side */}
         {stripe && (
           <g clipPath={`url(#clip-${uid})`}>
-            {flank && <path d={STRIPE} fill="none" stroke={flank} strokeWidth="26" strokeLinecap="round" />}
-            <path d={STRIPE} fill="none" stroke={stripe} strokeWidth={flank ? 9 : 14} strokeLinecap="round" />
-            <path d={STRIPE} fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.6" transform={`translate(0,${flank ? -14 : -8})`} />
-            <path d={STRIPE} fill="none" stroke="#000000" strokeOpacity="0.28" strokeWidth="1.6" transform={`translate(0,${flank ? 14 : 8})`} />
+            {flank && <path d={STRIPE} fill="none" stroke={flank} strokeWidth="17" strokeLinecap="round" />}
+            <path d={STRIPE} fill="none" stroke={stripe} strokeWidth={flank ? 6 : 11} strokeLinecap="round" />
+            <path d={STRIPE} fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.6" transform={`translate(0,${flank ? -9.5 : -6.5})`} />
+            <path d={STRIPE} fill="none" stroke="#000000" strokeOpacity="0.28" strokeWidth="1.6" transform={`translate(0,${flank ? 9.5 : 6.5})`} />
           </g>
         )}
         {/* decal on the flat of the side panel, above the ear hole. Not
@@ -3331,8 +3331,10 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <rect x="0" y="0" width="200" height="170" fill={`url(#rim-${uid})`} />
           <path d="M22 118 C56 130 96 132 118 126" fill="none" stroke="#000" strokeOpacity="0.22" strokeWidth="12" filter={`url(#soft-${uid})`} />
           {/* rear vents */}
+{lsc <= 1.1 && <>
           <rect x="36" y="46" width="4" height="16" rx="2" fill="#000" opacity="0.55" transform="rotate(-24 38 54)" />
           <rect x="45" y="36" width="4" height="16" rx="2" fill="#000" opacity="0.55" transform="rotate(-24 47 44)" />
+          </>}
         </g>
         {/* shell edge + rear rim lip */}
         <path d={SHELL} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinejoin="round" />
@@ -3342,9 +3344,9 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         <path d={JAW} fill="rgba(0,0,0,0.32)" />
         <path d={JAW} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinejoin="round" />
         {/* ear hole, recessed */}
-        <circle cx="92" cy="96" r="13" fill="rgba(0,0,0,0.5)" />
-        <circle cx="92" cy="96" r="9.5" fill="#07090d" />
-        <circle cx="92" cy="96" r="9.5" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
+        <ellipse cx="98" cy="106" rx="9.5" ry="13" fill="rgba(0,0,0,0.5)" />
+        <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="#07090d" />
+        <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
         {/* nose bumper: the rubber pad at the brow */}
         <path d="M150 50 C158 47 165 50 168 58 C162 60 156 58 151 55 Z" fill="#111318" />
         <path d="M153 51 C158 50 162 52 165 56" fill="none" stroke="#fff" strokeOpacity="0.25" strokeWidth="1.2" />
@@ -3364,7 +3366,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           return (<>
             <g fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="8" strokeLinecap="round">{bars.map((d, i) => <path key={i} d={d} />)}</g>
             <g fill="none" stroke={`url(#bar-${uid})`} strokeWidth="5.5" strokeLinecap="round">{bars.map((d, i) => <path key={i} d={d} />)}</g>
-            <g fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="1.4" strokeLinecap="round">
+            <g fill="none" stroke="#fff" strokeOpacity={lumOf(mask) < 0.3 ? 0.2 : 0.45} strokeWidth="1.4" strokeLinecap="round">
               <path d="M161 54 C184 62 195 84 191 106" /><path d="M129 94 C151 88 172 90 189 98" />
             </g>
           </>);
