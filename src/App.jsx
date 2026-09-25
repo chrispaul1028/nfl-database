@@ -30,7 +30,7 @@ const ACCENT_BORDER = "border-emerald-200";
 const TEAM_COLORS = {
   ARI: "#97233F", ATL: "#A71930", BAL: "#241773", BUF: "#00338D",
   CAR: "#0085CA", CHI: "#0B162A", CIN: "#FB4F14", CLE: "#311D00",
-  DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#203731",
+  DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#1B5E34",
   HOU: "#0B2C4F", IND: "#002C5F", JAX: "#006778", JAC: "#006778",
   KC: "#E31837", LV: "#000000", LAC: "#0080C6", LAR: "#003594",
   MIA: "#008E97", MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D",
@@ -3213,7 +3213,7 @@ const HELMET_KIT = {
   ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", null], BAL: ["#12100f", "#12100f", "#241773"],
   BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
   CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
-  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#1F4D2E", "#ffffff"],
+  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#1B5E34", "#ffffff"],
   HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
   KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
   LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
@@ -3231,9 +3231,14 @@ const DECAL_SIDE = { PIT: "right", CLE: "none" };
 // (falcon, bronco, eagle) are mirrored so they face forward. Listed = no mirror.
 const NO_MIRROR = new Set(["GB", "NYG", "SF", "NYJ", "CHI", "LAR", "WSH", "WAS"]);
 // Decal size per team, 1 = default
-const LOGO_SCALE = { ATL: 1.35 };
+const LOGO_SCALE = { ATL: 1.12 };
 // Multi-band crown stripes: [outer band colour]; the kit's stripe colour is the centre
-const STRIPE_FLANK = { GB: "#1F4D2E" };
+const STRIPE_FLANK = { GB: "#1B5E34" };
+// Nickname for the white name band along the back-bottom of the shell
+const HELMET_NICK = { ARI: "CARDINALS", ATL: "FALCONS", BAL: "RAVENS", BUF: "BILLS", CAR: "PANTHERS", CHI: "BEARS", CIN: "BENGALS", CLE: "BROWNS",
+  DAL: "COWBOYS", DEN: "BRONCOS", DET: "LIONS", GB: "PACKERS", HOU: "TEXANS", IND: "COLTS", JAX: "JAGUARS", KC: "CHIEFS", LV: "RAIDERS", LAC: "CHARGERS",
+  LAR: "RAMS", MIA: "DOLPHINS", MIN: "VIKINGS", NE: "PATRIOTS", NO: "SAINTS", NYG: "GIANTS", NYJ: "JETS", PHI: "EAGLES", PIT: "STEELERS", SF: "49ERS",
+  SEA: "SEAHAWKS", TB: "BUCCANEERS", TEN: "TITANS", WSH: "COMMANDERS", WAS: "COMMANDERS" };
 // Side profile of a modern shell (Speedflex-ish): tall rounded crown, a fuller
 // rear bulge, flatter brow, open face bridged by the cage, jaw pad, ear hole,
 // nose bumper, rear vents. Facing right; flip mirrors it.
@@ -3253,7 +3258,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
   const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
   const shell = kit[0], mask = kit[1], stripe = kit.length >= 3 ? kit[2] : (alt || TEAM_ALT[abbr] || null);
   const flank = STRIPE_FLANK[abbr] || null;                  // outer bands either side of the centre stripe
-  const lsc = LOGO_SCALE[abbr] || 1, lw = 72 * lsc, lh = 44 * lsc, lx = 80 - lw / 2, ly = 58 - lh / 2;
+  const lsc = LOGO_SCALE[abbr] || 1, lw = 90 * lsc, lh = 56 * lsc, lx = 80 - lw / 2, ly = 58 - lh / 2;
   const unmirror = flip && NO_MIRROR.has(abbr);              // decal reads the same on both sides of the shell
   const darkShell = lumOf(shell) < 0.42;
   const side = DECAL_SIDE[abbr];
@@ -3299,6 +3304,10 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <feDropShadow dx="0" dy="7" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
         </filter>
         <filter id={`soft-${uid}`}><feGaussianBlur stdDeviation="2.5" /></filter>
+        {/* the name band's text runs along this curve in SCREEN space, so the
+            letters are never mirrored: facing right it runs from past the back
+            edge down to the bottom rim; flipped it runs the other way. */}
+        <path id={`nick-${uid}`} d={flip ? "M124 124 C164 118 182 100 186 60" : "M14 60 C18 100 36 118 76 124"} />
       </defs>
       <g filter={`url(#drop-${uid})`} transform={flip ? "translate(200,0) scale(-1,1)" : undefined}>
         {/* the open face, drawn first; the shell covers all but the front crescent */}
@@ -3330,6 +3339,16 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <ellipse cx="130" cy="28" rx="16" ry="5" fill="#fff" opacity="0.45" filter={`url(#soft-${uid})`} />
           <rect x="0" y="0" width="200" height="170" fill={`url(#rim-${uid})`} />
           <path d="M22 118 C56 130 96 132 118 126" fill="none" stroke="#000" strokeOpacity="0.22" strokeWidth="12" filter={`url(#soft-${uid})`} />
+          {/* white name band wrapping the back-bottom of the shell: you only
+              ever see part of the name from the side, like the real thing */}
+          {HELMET_NICK[abbr] && <>
+            <path d="M14 60 C18 100 36 118 76 124" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" />
+            <path d="M14 60 C18 100 36 118 76 124" fill="none" stroke="#ffffff" strokeWidth="10.5" />
+            <text transform={flip ? "translate(200,0) scale(-1,1)" : undefined} fontSize="8" fontWeight="900" letterSpacing="0.8" fill="#0b0b0d"
+              style={{ fontFamily: "Arial Black, Arial, Helvetica, sans-serif" }} dy="2.9">
+              <textPath href={`#nick-${uid}`} startOffset={flip ? "27%" : "73%"} textAnchor={flip ? "start" : "end"}>{HELMET_NICK[abbr]}</textPath>
+            </text>
+          </>}
           {/* rear vents */}
 {lsc <= 1.1 && <>
           <rect x="36" y="46" width="4" height="16" rx="2" fill="#000" opacity="0.55" transform="rotate(-24 38 54)" />
@@ -3344,9 +3363,11 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         <path d={JAW} fill="rgba(0,0,0,0.32)" />
         <path d={JAW} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinejoin="round" />
         {/* ear hole, recessed */}
-        <ellipse cx="98" cy="106" rx="9.5" ry="13" fill="rgba(0,0,0,0.5)" />
-        <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="#07090d" />
-        <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
+        <g transform="rotate(14 98 106)">
+          <ellipse cx="98" cy="106" rx="9.5" ry="13" fill="rgba(0,0,0,0.5)" />
+          <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="#07090d" />
+          <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
+        </g>
         {/* nose bumper: the rubber pad at the brow */}
         <path d="M150 50 C158 47 165 50 168 58 C162 60 156 58 151 55 Z" fill="#111318" />
         <path d="M153 51 C158 50 162 52 165 56" fill="none" stroke="#fff" strokeOpacity="0.25" strokeWidth="1.2" />
