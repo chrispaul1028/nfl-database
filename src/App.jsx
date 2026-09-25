@@ -3210,10 +3210,10 @@ function MatchCard({ g, onClick }) {
 // colour, and the crown stripe is usually a third colour again (Buffalo: white
 // shell, white mask, red stripe).
 const HELMET_KIT = {
-  ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", "#A71930"], BAL: ["#12100f", "#12100f", "#241773"],
+  ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", null], BAL: ["#12100f", "#12100f", "#241773"],
   BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
   CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
-  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#d5b43c", "#8d9298", "#203731"],
+  DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#203731", "#203731"],
   HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
   KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
   LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
@@ -3226,6 +3226,14 @@ const HELMET_KIT = {
 // side; flipped (home) you see its RIGHT side. Pittsburgh only decals the right
 // side, Cleveland has no logo at all.
 const DECAL_SIDE = { PIT: "right", CLE: "none" };
+// Lettered marks (G, ny, SF, JETS, C, LA, W) are NOT mirrored on the far side
+// of a real helmet — the letter reads the same both sides. Pictorial marks
+// (falcon, bronco, eagle) are mirrored so they face forward. Listed = no mirror.
+const NO_MIRROR = new Set(["GB", "NYG", "SF", "NYJ", "CHI", "LAR", "WSH", "WAS"]);
+// Decal size per team, 1 = default
+const LOGO_SCALE = { ATL: 1.35 };
+// Multi-band crown stripes: [outer band colour]; the kit's stripe colour is the centre
+const STRIPE_FLANK = { GB: "#203731" };
 // Side profile of a modern shell (Speedflex-ish): tall rounded crown, a fuller
 // rear bulge, flatter brow, open face bridged by the cage, jaw pad, ear hole,
 // nose bumper, rear vents. Facing right; flip mirrors it.
@@ -3243,7 +3251,10 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
   }
   const uid = `${String(abbr).replace(/\W/g, "")}-${flip ? "r" : "l"}`;
   const kit = HELMET_KIT[abbr] || [color || teamColor(abbr) || "#334155", alt || TEAM_ALT[abbr] || "#e5e7eb"];
-  const shell = kit[0], mask = kit[1], stripe = kit[2] || alt || TEAM_ALT[abbr] || null;
+  const shell = kit[0], mask = kit[1], stripe = kit.length >= 3 ? kit[2] : (alt || TEAM_ALT[abbr] || null);
+  const flank = STRIPE_FLANK[abbr] || null;                  // outer bands either side of the centre stripe
+  const lsc = LOGO_SCALE[abbr] || 1, lw = 76 * lsc, lh = 48 * lsc, lx = 84 - lw / 2, ly = 70 - lh / 2;
+  const unmirror = flip && NO_MIRROR.has(abbr);              // decal reads the same on both sides of the shell
   const darkShell = lumOf(shell) < 0.42;
   const side = DECAL_SIDE[abbr];
   const showLogo = !!logo && side !== "none" && !(side === "right" && !flip) && !(side === "left" && flip);
@@ -3298,16 +3309,18 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         {/* centre stripe along the crown, with thin liners either side */}
         {stripe && (
           <g clipPath={`url(#clip-${uid})`}>
-            <path d={STRIPE} fill="none" stroke={stripe} strokeWidth="14" strokeLinecap="round" />
-            <path d={STRIPE} fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.6" transform="translate(0,-8)" />
-            <path d={STRIPE} fill="none" stroke="#000000" strokeOpacity="0.28" strokeWidth="1.6" transform="translate(0,8)" />
+            {flank && <path d={STRIPE} fill="none" stroke={flank} strokeWidth="26" strokeLinecap="round" />}
+            <path d={STRIPE} fill="none" stroke={stripe} strokeWidth={flank ? 9 : 14} strokeLinecap="round" />
+            <path d={STRIPE} fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.6" transform={`translate(0,${flank ? -14 : -8})`} />
+            <path d={STRIPE} fill="none" stroke="#000000" strokeOpacity="0.28" strokeWidth="1.6" transform={`translate(0,${flank ? 14 : 8})`} />
           </g>
         )}
         {/* decal on the flat of the side panel, above the ear hole. Not
             counter-flipped: a real decal is mirrored on the opposite side. */}
         {showLogo && (
           <g clipPath={`url(#clip-${uid})`}>
-            <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x="46" y="46" width="76" height="48" preserveAspectRatio="xMidYMid meet"
+            <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x={lx} y={ly} width={lw} height={lh} preserveAspectRatio="xMidYMid meet"
+              transform={unmirror ? `translate(${2 * (lx + lw / 2)},0) scale(-1,1)` : undefined}
               filter={`url(#halo-${uid})`} onError={(e) => { if (e.currentTarget.getAttribute("href") !== logo) e.currentTarget.setAttribute("href", logo); }} />
           </g>
         )}
