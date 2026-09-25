@@ -11,10 +11,27 @@ const CANON = { LA: "LAR", WSH: "WAS", JAC: "JAX", HST: "HOU", BLT: "BAL", CLV: 
 const canon = (t) => { const u = String(t || "").toUpperCase(); return CANON[u] || u; };
 const num = (v) => { if (v == null) return 0; const s = String(v).split("/")[0]; const n = Number(s); return Number.isFinite(n) ? n : 0; };
 
-async function getJson(url) {
-  const r = await fetch(url, { headers: { accept: "application/json" } });
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
-  return r.json();
+// ESPN occasionally rejects a request when hit hard. Retry with a short
+// back-off before giving up, so one blip can't drop a whole game.
+async function getJson(url, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, { headers: { accept: "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
+      return await r.json();
+    } catch (e) {
+      last = e;
+      if (i < tries - 1) await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
+    }
+  }
+  throw last;
+}
+// Run fn over items a few at a time instead of all at once
+async function pool(items, size, fn) {
+  let i = 0;
+  const run = async () => { while (i < items.length) { const it = items[i++]; await fn(it); } };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, run));
 }
 
 // Find a stat by key (preferred) or label within one ESPN box-score category
@@ -49,20 +66,23 @@ export default async function handler(req, res) {
     const players = {}, teams = {};
     let sampleCats = null;
 
-    await Promise.all(events.map(async (ev) => {
-      let sum;
-      try { sum = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${ev.id}`); }
-      catch { return; }
+    const failed = [];   // games whose box score never loaded
+    await pool(events, 4, async (ev) => {
       const comp = ev.competitions?.[0] || {};
       const comps = comp.competitors || [];
       const abbrOf = {}; const oppOf = {}; const scoreOf = {};
       for (const c of comps) { abbrOf[c.team?.id] = canon(c.team?.abbreviation); scoreOf[c.team?.id] = num(c.score); }
       const ids = Object.keys(abbrOf);
       if (ids.length === 2) { oppOf[ids[0]] = abbrOf[ids[1]]; oppOf[ids[1]] = abbrOf[ids[0]]; }
+      // Score and games played come from the scoreboard, so they count even
+      // if the box score below fails to load.
       for (const id of ids) {
         const t = (teams[abbrOf[id]] ??= blankTeam());
         t.games++; t.pf += scoreOf[id]; t.pa += scoreOf[ids.find((x) => x !== id)] || 0;
       }
+      let sum;
+      try { sum = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${ev.id}`); }
+      catch { failed.push(ids.map((id) => abbrOf[id]).join("@")); return; }
 
       for (const side of sum.boxscore?.players || []) {
         const tid = side.team?.id, team = abbrOf[tid] || canon(side.team?.abbreviation), opp = oppOf[tid];
@@ -96,17 +116,20 @@ export default async function handler(req, res) {
           }
         }
       }
-    }));
+    });
 
     // Flatten games to arrays
     for (const p of Object.values(players)) p.games = Object.values(p.games);
 
     const finalCount = events.length - liveCount;
-    res.setHeader("Cache-Control", finalCount === (sb.events || []).length && finalCount > 0
+    // A month-long cache only when every game is final AND every box score
+    // loaded; a missing game retries within minutes instead of sticking.
+    res.setHeader("Cache-Control", failed.length ? "s-maxage=60, stale-while-revalidate=120"
+      : finalCount === (sb.events || []).length && finalCount > 0
       ? "s-maxage=2592000, stale-while-revalidate=86400" // fully final week: cache a month
       : liveCount > 0 ? "s-maxage=180, stale-while-revalidate=300"   // games live: 3 min
       : "s-maxage=900, stale-while-revalidate=1800");
-    return res.status(200).json({ season, week, gamesFinal: finalCount, gamesLive: liveCount, gamesScheduled: (sb.events || []).length, players, teams, ...(debug ? { sampleCats } : {}) });
+    return res.status(200).json({ season, week, gamesFinal: finalCount, gamesLive: liveCount, gamesScheduled: (sb.events || []).length, failedGames: failed, players, teams, ...(debug ? { sampleCats } : {}) });
   } catch (e) {
     return res.status(502).json({ season, week, error: String(e.message || e), players: {}, teams: {} });
   }
