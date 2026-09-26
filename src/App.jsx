@@ -159,7 +159,7 @@ function experienceOf(p) {
   const nowYear = parseInt(String(CURRENT_SEASON).slice(0, 4), 10);
   const seasons = nowYear - p.draftYear + 1;
   if (isNaN(seasons) || seasons < 1) return "";
-  return seasons === 1 ? "Rookie" : seasons + " seasons";
+  return seasons === 1 ? "Rookie" : ordinal(seasons) + " season";
 }
 
 // Search matches player name, current team (full name or abbreviation),
@@ -2146,6 +2146,8 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
   );
 }
 
+// Last-used tabs per team page (survives the page unmounting for a player card)
+const TEAM_VIEW_MEMO = {};
 function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats, onSwitchTeam, onStatJump }) {
   useEffect(() => { window.scrollTo(0, 0); }, [team.id]);
   const alpha = useMemo(() => [...(teams || [])].sort((a, b) => String(a.name).localeCompare(String(b.name))), [teams]);
@@ -2155,9 +2157,13 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
     onRight: () => idx > 0 && onSwitchTeam && onSwitchTeam(alpha[idx - 1]),
   });
   const abbr = team.abbr || toAbbr(team.name);
-  const [seg, setSeg] = useState("roster");
+  // The team page unmounts when a player card opens. Remember which tabs were
+  // showing so coming back lands on the same view (field, contracts, ...).
+  const remembered = TEAM_VIEW_MEMO[team.id] || {};
+  const [seg, setSeg] = useState(remembered.seg || "roster");
   // Inside Roster: "list" (full roster), "offense" or "defense" (formation)
-  const [rosterView, setRosterView] = useState("list");
+  const [rosterView, setRosterView] = useState(remembered.rosterView || "list");
+  useEffect(() => { TEAM_VIEW_MEMO[team.id] = { seg, rosterView }; }, [team.id, seg, rosterView]);
   const unit = rosterView === "list" ? null : rosterView;
   const lineRanks = useMemo(() => computeLineRanks(players, teams), [players, teams]);
   const [roleFilter, setRoleFilter] = useState(null);
@@ -3839,8 +3845,11 @@ export default function App() {
   // Automated records/stats: merge ESPN data into the Airtable teams by abbr.
   // Airtable values still win when present; ESPN fills the blanks (and stx).
   const mergedTeams = useMemo(() => {
-    if (!stand || !stand.teams) return teams;
-    const find = (abbr) => stand.teams.find((s) => injTeamEq(s.abbr, abbr));
+    if ((!stand || !stand.teams) && !seasonStats) return teams;
+    // Standings and box scores are separate feeds. If standings hasn't loaded
+    // (or ESPN hiccupped), the box-score tiles still fill in; only the record
+    // and ESPN ranks wait for standings.
+    const find = (abbr) => (stand && stand.teams ? stand.teams.find((s) => injTeamEq(s.abbr, abbr)) : null);
     return teams.map((t) => {
       const s = find(t.abbr || toAbbr(t.name)) || {};
       // Alias-safe lookup: ESPN files Washington as WSH, Airtable as WAS (same
@@ -3873,6 +3882,7 @@ export default function App() {
         toDiff: s.toDiff, toDiffRank: s.toDiffRank,
         paRank: s.paRank,
       };
+      if (!stand || !stand.teams) return { ...t, stx };
       return stand.isCurrent
         ? { ...t, wins: t.wins ?? s.wins, losses: t.losses ?? s.losses, ties: t.ties ?? s.ties, pf: t.pf ?? s.pf, pa: t.pa ?? s.pa, stx }
         : { ...t, winsPrev: t.winsPrev ?? s.wins, lossesPrev: t.lossesPrev ?? s.losses, tiesPrev: t.tiesPrev ?? s.ties, pfPrev: t.pfPrev ?? s.pf, paPrev: t.paPrev ?? s.pa, stx };
@@ -3956,10 +3966,13 @@ export default function App() {
   }, []);
   useEffect(() => {
     // Non-fatal: if ESPN is down the app just shows Airtable's numbers.
-    fetch("/api/standings")
+    // Standings: retry a few times — one bad ESPN response used to blank
+    // every team's record for the whole session.
+    const loadStand = (attempt = 0) => fetch("/api/standings")
       .then((r) => r.json())
-      .then((d) => { if (d && d.teams) setStand(d); })
-      .catch(() => {});
+      .then((d) => { if (d && d.teams && d.teams.length) setStand(d); else throw new Error("empty"); })
+      .catch(() => { if (attempt < 3) setTimeout(() => loadStand(attempt + 1), 3000 * (attempt + 1)); });
+    loadStand();
   }, []);
 
   if (sel) {
