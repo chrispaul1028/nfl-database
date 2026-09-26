@@ -224,13 +224,13 @@ function ordinal(n) {
   return n + suffix;
 }
 
-function Tile({ value, label, sub, accent, valueClass, compact, tint, trend, onClick }) {
+function Tile({ value, label, label2, sub, accent, valueClass, compact, tint, trend, onClick }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag onClick={onClick} className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4") + (onClick ? " active:scale-[0.97] transition-transform w-full" : "")}
       style={tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined}>
       <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
-        style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}</div>
+        style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}{label2 && <span className="block">{label2}</span>}</div>
       <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}<Trend t={trend} /></div>
       {sub && (
         <div className={"text-[10px] font-bold mt-0.5 " + (typeof sub === "object" && sub.cls ? sub.cls : "text-blue-600 dark:text-blue-400")}>
@@ -893,6 +893,10 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     if (st === "QUESTIONABLE") return "q";
     return "ok";
   };
+  // Who sits: OUT/IR/PUP/suspended, and DOUBTFUL — a doubtful player is
+  // inactive far more often than not, so he goes to the sideline and the next
+  // man up takes his spot. QUESTIONABLE stays on the field (usually plays).
+  const sitP = (p) => outP(p) || healthOf(p) === "d";
   // Ring: white = healthy (reads on grass), gray = no data, orange = Q, red = D/Out
   const ringCls = (p) => {
     if (!p) return "border-white/40";
@@ -943,14 +947,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     assigned = new Array(SLOTS.length).fill(null);
     // Next man up: an OUT/IR/PUP/suspended starter is skipped in pass 1 and
     // his slot fills from the depth chart in pass 2 (WR4 steps into WR3's
-    // spot). He goes to the sideline wearing his OUT badge. Q/D starters stay
+    // spot). He goes to the sideline wearing his OUT badge. Q starters stay
     // on the field — those are game-time calls, not lineup changes.
     const outStarter = new Array(SLOTS.length).fill(null);
     SLOTS.forEach((s, i) => {
       for (const want of s.exact || []) {
         const hit = roster.find((p) => !used.has(p.id) && lblOf(p) === want);
         if (hit) {
-          if (outP(hit)) { outStarter[i] = hit; continue; }
+          if (sitP(hit)) { outStarter[i] = hit; continue; }
           assigned[i] = hit; used.add(hit.id); break;
         }
       }
@@ -958,7 +962,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     SLOTS.forEach((s, i) => {
       if (assigned[i]) return;
       const aliasIdx = (p) => s.aliases.findIndex((a) => new RegExp("^" + a + "\\d*$").test(lblOf(p)));
-      const healthy = (p) => !outP(p);
+      const healthy = (p) => !sitP(p);
       const byLabel = roster
         .filter((p) => !used.has(p.id) && aliasIdx(p) !== -1 && healthy(p))
         .sort((a, b) => aliasIdx(a) - aliasIdx(b) || depthNo(a) - depthNo(b));
@@ -1024,12 +1028,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     const starterIds = new Set(starters.map((p) => p.id));
     starters.forEach((p) => {
       let who = p, nextUp = false;
-      if (outP(p)) {
+      if (sitP(p)) {
         // Next man up: same position family first (WLB1 out -> WLB2), then
         // any healthy non-starter in the same row, shallowest depth first.
         const fam = norm(baseOf(p)), row = ROW_OF(baseOf(p));
         const repl = roster
-          .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !outP(q))
+          .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !sitP(q))
           .sort((a, b) => (norm(baseOf(a)) === fam ? 0 : 1) - (norm(baseOf(b)) === fam ? 0 : 1) || depthNo(a) - depthNo(b))[0];
         if (repl) { who = repl; nextUp = true; }
       }
@@ -2200,7 +2204,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         <button onClick={onBack} className="text-sm font-semibold opacity-80 mb-4">‹ Teams</button>
         <div className="flex items-center gap-4">
           {team.logo ? (
-            <img src={chipLogo(abbr, team.logo)} alt="" className="w-16 h-16 rounded-full object-contain p-1.5 shrink-0" style={logoChip(abbr, true)} />
+            <img src={lumOf(fill) < 0.5 ? (darkLogo(abbr) || team.logo || TEAM_LOGOS[abbr]) : (team.logo || TEAM_LOGOS[abbr])} alt="" className="w-[4.5rem] h-[4.5rem] object-contain shrink-0" style={{ filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.45))" }} onError={(e) => { const f = team.logo || TEAM_LOGOS[abbr]; if (f && e.currentTarget.src !== f) e.currentTarget.src = f; }} />
           ) : (
             <span className="text-3xl">🏈</span>
           )}
@@ -2270,10 +2274,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             if (seg === "roster" && unit === "defense") {
               return (
                 <>
-                  <Tile compact onClick={jumpTeam("defPassYds")} trend={trendOf(tLog, "defPassYds", true)} value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" sub={rk(sx.defPassYpgRank, "defPassYds")} />
-                  <Tile compact onClick={jumpTeam("defPassTd")} trend={trendOf(tLog, "defPassTd", true)} value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" sub={rk(sx.defPassTdRank, "defPassTd")} />
-                  <Tile compact onClick={jumpTeam("defRushYds")} trend={trendOf(tLog, "defRushYds", true)} value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" sub={rk(sx.defRushYpgRank, "defRushYds")} />
-                  <Tile compact onClick={jumpTeam("defRushTd")} trend={trendOf(tLog, "defRushTd", true)} value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" sub={rk(sx.defRushTdRank, "defRushTd")} />
+                  <Tile compact onClick={jumpTeam("defPassYds")} trend={trendOf(tLog, "defPassYds", true)} value={sx.defPassYpg != null ? sx.defPassYpg.toFixed(1) : "—"} label="Pass Yds" label2="Allowed" sub={rk(sx.defPassYpgRank, "defPassYds")} />
+                  <Tile compact onClick={jumpTeam("defPassTd")} trend={trendOf(tLog, "defPassTd", true)} value={sx.defPassTd != null ? sx.defPassTd : "—"} label="Pass TD" label2="Allowed" sub={rk(sx.defPassTdRank, "defPassTd")} />
+                  <Tile compact onClick={jumpTeam("defRushYds")} trend={trendOf(tLog, "defRushYds", true)} value={sx.defRushYpg != null ? sx.defRushYpg.toFixed(1) : "—"} label="Rush Yds" label2="Allowed" sub={rk(sx.defRushYpgRank, "defRushYds")} />
+                  <Tile compact onClick={jumpTeam("defRushTd")} trend={trendOf(tLog, "defRushTd", true)} value={sx.defRushTd != null ? sx.defRushTd : "—"} label="Rush TD" label2="Allowed" sub={rk(sx.defRushTdRank, "defRushTd")} />
                 </>
               );
             }
