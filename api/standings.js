@@ -28,10 +28,21 @@ function seasonYear() {
   return now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1; // month 8 = September
 }
 
-async function getJson(url) {
-  const r = await fetch(url, { headers: { accept: "application/json" } });
-  if (!r.ok) throw new Error(`HTTP ${r.status} from ${url}`);
-  return r.json();
+// ESPN occasionally rejects a request. Retry with a short back-off so one
+// blip doesn't blank every team's record and tiles in the app.
+async function getJson(url, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, { headers: { accept: "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status} from ${url}`);
+      return await r.json();
+    } catch (e) {
+      last = e;
+      if (i < tries - 1) await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
+    }
+  }
+  throw last;
 }
 
 // Flatten every category/stat into name -> value (perGameValue preferred for *PerGame names)
