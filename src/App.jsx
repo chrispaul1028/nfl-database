@@ -482,7 +482,7 @@ function SeasonStatsBox({ p, seasonStats, onStatJump }) {
   const gid = String(p.id || p.name || "g").replace(/\W/g, "");
   return (
     <>
-      <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{seasonStats.season} Season · {T.gp} GP</div>
+      <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">{seasonStats.season} Season · {T.gp} GP</div>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="grid grid-cols-4 gap-1.5 p-2">
           {cols.map((c, i) => (
@@ -606,7 +606,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
                   <StatTile key={k} big ink={playerHeaderColor(p, dark) || "#2563eb"} dark={dark} label={lbl}
                     value={T ? (T[k] ?? "—") : "—"}
                     sub={r ? ordinal(r) + (rk.tie ? " (tie)" : "") : "—"} subClass={tier(r, peers.length)}
-                    foot={grp + " Rank"}
+                    foot={grp === "QB" || grp === "RB" ? undefined : grp + " Rank"}
                     onClick={jump && onStatJump ? () => onStatJump({ key: k, name: p.name, team: toAbbr(teamOfPlayer(p) || p.teamName || ""), pos: grp }) : undefined} />
                 );
               })}
@@ -616,7 +616,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 
         {mode === "full" && (p.height || p.weight || p.age || p.draft || p.birthplace || p.draftYear) && (
           <>
-            <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">Bio</div>
+            <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">Bio</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
               <BioRow k="Height / Weight" v={[p.height, p.weight].filter(Boolean).join(", ")} />
               <BioRow k="Date of Birth" v={birthDateOf(p)} />
@@ -632,7 +632,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 
         {mode === "full" && p.stats && p.stats.length > 0 && (
           <>
-            <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">Stats</div>
+            <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">Stats</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
               {p.stats.map((st, i) => {
                 const fmtPct = (v) => (v == null ? null : Number(v).toFixed(1) + "%");
@@ -668,7 +668,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 
         {past.length > 0 && (
           <>
-            <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">Contract history</div>
+            <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">Contract history</div>
             <div className="flex flex-col gap-3">
               {past.map((c, i) => <ContractCard key={i} c={c} />)}
             </div>
@@ -678,7 +678,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
 
         {mode === "full" && p.awards && p.awards.length > 0 && (
           <>
-            <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">Awards</div>
+            <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">Awards</div>
             <div className="flex flex-wrap gap-1.5">
               {p.awards.map((a, i) => (
                 <span key={i} className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
@@ -2069,7 +2069,7 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
   );
   const Section = ({ title, children }) => (
     <div className="mt-4">
-      <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mb-1.5 px-1">{title}</div>
+      <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mb-1.5 px-1">{title}</div>
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm px-4 py-2 divide-y divide-slate-100 dark:divide-slate-800">{children}</div>
     </div>
   );
@@ -2407,7 +2407,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         {seg === "roster" && unit && <FormationView roster={roster} abbr={abbr} unit={unit} onSelectPlayer={onSelectPlayer} lineRank={lineRanks[abbr]} team={team} />}
         {seg === "roster" && !unit && orderedRoles.map((role) => (
           <div key={role}>
-            <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase mt-6 mb-2 px-1">{role}</div>
+            <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">{role}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
               {(() => {
                 const sorted = groups[role].slice().sort((a, b) => {
