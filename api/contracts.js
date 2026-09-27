@@ -52,6 +52,11 @@ const FIELDS = {
   teamHCSince: ["HC Since", "Head Coach Since", "Coach Since"],
   teamOCSince: ["OC Since", "Offensive Coordinator Since"],
   teamDCSince: ["DC Since", "Defensive Coordinator Since"],
+  // Year the coach first joined the organisation (any title). Only filled when
+  // he was promoted from within; blank means same as the "Since" year.
+  teamHCWith: ["HC with team", "HC With Team", "Head Coach with team", "HC Team Since"],
+  teamOCWith: ["OC with team", "OC With Team", "Offensive Coordinator with team", "OC Team Since"],
+  teamDCWith: ["DC with team", "DC With Team", "Defensive Coordinator with team", "DC Team Since"],
   teamWins: ["W", "Wins"],
   teamPPG: ["PPG", "Points Per Game", "Team PPG", "Offense PPG", "PTS/G"],
   teamOppPPG: ["OPP PPG", "Opp PPG", "PPG Allowed", "Points Allowed", "OPPG", "Defense PPG", "Opp PTS/G"],
@@ -276,6 +281,9 @@ export default async function handler(req, res) {
           hcSince: coerceNum(getField(t.fields, FIELDS.teamHCSince)),
           ocSince: coerceNum(getField(t.fields, FIELDS.teamOCSince)),
           dcSince: coerceNum(getField(t.fields, FIELDS.teamDCSince)),
+          hcWith: coerceNum(getField(t.fields, FIELDS.teamHCWith)),
+          ocWith: coerceNum(getField(t.fields, FIELDS.teamOCWith)),
+          dcWith: coerceNum(getField(t.fields, FIELDS.teamDCWith)),
           offCoord: asText(getField(t.fields, FIELDS.teamOffCoord)),
           defCoord: asText(getField(t.fields, FIELDS.teamDefCoord)),
           wins: coerceNum(getField(t.fields, FIELDS.teamWins)),
