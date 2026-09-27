@@ -3273,8 +3273,8 @@ function MatchCard({ g, onClick }) {
 // shell, white mask, red stripe).
 const HELMET_KIT = {
   ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", null], BAL: ["#12100f", "#12100f", "#241773"],
-  BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
-  CIN: ["#FB4F14", "#111214", null], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
+  BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#a9afb7", "#101214", null], CHI: ["#0B162A", "#8d9298", "#C83803"],
+  CIN: ["#FB4F14", "#111214", null], CLE: ["#FF3C00", "#d7dade", "#ffffff"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
   DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#1B5E34", "#ffffff"],
   HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
   KC: ["#E31837", "#f2f4f7", null], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
@@ -3308,9 +3308,11 @@ const ENDZONE_INK = { BUF: "#ffffff" };
 // (falcon, bronco, eagle) are mirrored so they face forward. Listed = no mirror.
 const NO_MIRROR = new Set(["GB", "NYG", "SF", "NYJ", "CHI", "LAR", "WSH", "WAS"]);
 // Decal size per team, 1 = default
-const LOGO_SCALE = { ATL: 1.12 };
+const LOGO_SCALE = { ATL: 1.12, SEA: 1.3, LAC: 1.3 };
+// Decal tilt in degrees (negative = nose up / rotated left on the away helmet; mirrors on the home side)
+const LOGO_ROT = { LAC: -14 };
 // Multi-band crown stripes: [outer band colour]; the kit's stripe colour is the centre
-const STRIPE_FLANK = { GB: "#1B5E34" };
+const STRIPE_FLANK = { GB: "#1B5E34", CLE: "#311D00" };
 // Nickname for the white name band along the back-bottom of the shell
 const HELMET_NICK = { ARI: "CARDINALS", ATL: "FALCONS", BAL: "RAVENS", BUF: "BILLS", CAR: "PANTHERS", CHI: "BEARS", CIN: "BENGALS", CLE: "BROWNS",
   DAL: "COWBOYS", DEN: "BRONCOS", DET: "LIONS", GB: "PACKERS", HOU: "TEXANS", IND: "COLTS", JAX: "JAGUARS", KC: "CHIEFS", LV: "RAIDERS", LAC: "CHARGERS",
@@ -3411,7 +3413,7 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         {showLogo && (
           <g clipPath={`url(#clip-${uid})`}>
             <image href={darkShell ? (darkLogo(abbr) || logo) : logo} x={lx} y={ly} width={lw} height={lh} preserveAspectRatio="xMidYMid meet"
-              transform={unmirror ? `translate(${2 * (lx + lw / 2)},0) scale(-1,1)` : undefined}
+              transform={[unmirror ? `translate(${2 * (lx + lw / 2)},0) scale(-1,1)` : "", LOGO_ROT[abbr] ? `rotate(${LOGO_ROT[abbr]} ${lx + lw / 2} ${ly + lh / 2})` : ""].join(" ").trim() || undefined}
               filter={`url(#halo-${uid})`} onError={(e) => { if (e.currentTarget.getAttribute("href") !== logo) e.currentTarget.setAttribute("href", logo); }} />
           </g>
         )}
@@ -3424,14 +3426,14 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           {/* white name band wrapping the back-bottom of the shell: you only
               ever see part of the name from the side, like the real thing */}
           {HELMET_NICK[abbr] && <>
-            <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" strokeLinecap="round" />
-            <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="#ffffff" strokeWidth="10.5" strokeLinecap="round" />
+            <path d="M24 102 C29 112 40 118 53 122" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="10" strokeLinecap="round" />
+            <path d="M24 102 C29 112 40 118 53 122" fill="none" stroke="#ffffff" strokeWidth="7.5" strokeLinecap="round" />
             <mask id={`nickm-${uid}`} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="170">
-              <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="#fff" strokeWidth="10.5" strokeLinecap="round" />
+              <path d="M24 102 C29 112 40 118 53 122" fill="none" stroke="#fff" strokeWidth="7.5" strokeLinecap="round" />
             </mask>
             <g mask={`url(#nickm-${uid})`}>
-            <text transform={flip ? "translate(200,0) scale(-1,1)" : undefined} fontSize="8" fontWeight="900" letterSpacing="0.8" fill="#0b0b0d"
-              style={{ fontFamily: "Arial Black, Arial, Helvetica, sans-serif" }} dy="2.9">
+            <text transform={flip ? "translate(200,0) scale(-1,1)" : undefined} fontSize="6.2" fontWeight="900" letterSpacing="0.6" fill="#0b0b0d"
+              style={{ fontFamily: "Arial Black, Arial, Helvetica, sans-serif" }} dy="2.2">
               <textPath href={`#nick-${uid}`} startOffset={flip ? "22%" : "78%"} textAnchor={flip ? "start" : "end"}>{HELMET_NICK[abbr]}</textPath>
             </text>
             </g>
@@ -3456,8 +3458,8 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           <ellipse cx="98" cy="106" rx="6.5" ry="10" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.4" />
         </g>
         {/* white brow strip across the front edge, just above the facemask */}
-        <path d="M126 49 L172 49" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="7" clipPath={`url(#clip-${uid})`} />
-        <path d="M126 49 L172 49" fill="none" stroke="#ffffff" strokeWidth="5" clipPath={`url(#clip-${uid})`} />
+        <path d="M138 49 L166 49" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="6" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
+        <path d="M138 49 L166 49" fill="none" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" clipPath={`url(#clip-${uid})`} />
         {/* nose bumper: the rubber pad at the brow */}
         <path d="M150 50 C158 47 165 50 168 58 C162 60 156 58 151 55 Z" fill="#111318" />
         <path d="M153 51 C158 50 162 52 165 56" fill="none" stroke="#fff" strokeOpacity="0.25" strokeWidth="1.2" />
@@ -3483,7 +3485,8 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           </>);
         })()}
         {/* chin strap + cup */}
-        <path d="M110 132 C120 144 134 150 150 150" fill="none" stroke="#e2e8f0" strokeOpacity="0.9" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M96 112 C102 134 124 150 150 150" fill="none" stroke="#e2e8f0" strokeOpacity="0.9" strokeWidth="4.5" strokeLinecap="round" />
+        <circle cx="96" cy="112" r="3" fill="#94a3b8" />
         <ellipse cx="152" cy="150" rx="7" ry="4" fill="#cbd5e1" />
       </g>
     </svg>
