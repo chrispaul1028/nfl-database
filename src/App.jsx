@@ -193,11 +193,7 @@ function Avatar({ p, size }) {
   return (
     <div className={px + " relative rounded-full bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300 font-bold flex items-center justify-center shrink-0 overflow-hidden"}>
       {label}
-      {url && (
-        <img src={url} alt={p.name} loading="lazy"
-          className="absolute inset-0 w-full h-full object-cover object-top bg-white"
-          onError={(e) => e.currentTarget.remove()} />
-      )}
+      {url && <Headshot p={p} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top bg-white" />}
     </div>
   );
 }
@@ -760,11 +756,25 @@ function injFor(name, teamAbbr) {
 // (keyed by the player_id we already matched for injuries). Covers every
 // rostered player with zero manual uploads.
 function photoOf(p, teamAbbr) {
-  if (p.photo) return p.photo;
+  return photoUrls(p, teamAbbr)[0] || null;
+}
+// Every headshot source we have for a player, best first. Sleeper's CDN has
+// no picture for many QB3s, practice-squad call-ups and fresh signings; ESPN
+// usually does, so it's the second try before falling back to initials.
+function photoUrls(p, teamAbbr) {
+  const out = [];
+  if (p.photo) out.push(p.photo);
   const inj = injFor(p.name, teamAbbr || toAbbr(teamOfPlayer(p) || p.teamName || ""));
-  return inj && inj.player_id
-    ? `https://sleepercdn.com/content/nfl/players/${inj.player_id}.jpg`
-    : null;
+  if (inj && inj.player_id) out.push(`https://sleepercdn.com/content/nfl/players/${inj.player_id}.jpg`);
+  if (inj && inj.espn_id) out.push(`https://a.espncdn.com/i/headshots/nfl/players/full/${inj.espn_id}.png`);
+  return out;
+}
+// Steps through photoUrls on load errors; renders `fallback` once every source fails.
+function Headshot({ p, abbr, className, fallback, alt = "", lazy = true }) {
+  const urls = photoUrls(p, abbr);
+  const [i, setI] = useState(0);
+  if (i >= urls.length) return fallback || null;
+  return <img src={urls[i]} alt={alt} loading={lazy ? "lazy" : undefined} className={className} onError={() => setI(i + 1)} />;
 }
 
 // Badge only when NOT plain healthy-active (keeps rows quiet)
@@ -1196,8 +1206,8 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               style={{ left: s.x + "%", top: s.y + "%", transform: "translate(-50%, -50%)", animation: `hrbPop .35s ease-out ${i * 30}ms both` }}>
               <span className="relative">
                 {p && photoOf(p, abbr) ? (
-                  <img src={photoOf(p, abbr)} alt="" loading="lazy"
-                    className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)} />
+                  <Headshot p={p} abbr={abbr} className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)}
+                    fallback={<span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] bg-white/90 text-slate-700 " + ringCls(p)}>{s.lbl}</span>} />
                 ) : (
                   <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
                     {s.lbl}
@@ -1258,8 +1268,8 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center min-w-0">
                 <span className="relative">
                   {photoOf(p, abbr) ? (
-                    <img src={photoOf(p, abbr)} alt="" loading="lazy"
-                      className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")} />
+                    <Headshot p={p} abbr={abbr} className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}
+                      fallback={<span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>{String(p.pos || "").toUpperCase() || "—"}</span>} />
                   ) : (
                     <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
                       {String(p.pos || "").toUpperCase() || "—"}
@@ -1294,14 +1304,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       )}
       {(team && (team.headCoach || team.offCoord || team.defCoord)) && (
         <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2.5 grid grid-cols-3 gap-2">
-          {[["Head Coach", team.headCoach, team.hcSince], ["Off. Coordinator", team.offCoord, team.ocSince], ["Def. Coordinator", team.defCoord, team.dcSince]].map(([k, v, since]) => {
-            // "3rd season" = current season minus the year he joined, plus one
+          {[["Head Coach", team.headCoach, team.hcSince, team.hcWith], ["Off. Coordinator", team.offCoord, team.ocSince, team.ocWith], ["Def. Coordinator", team.defCoord, team.dcSince, team.dcWith]].map(([k, v, since, withTeam]) => {
+            // "3rd season" = current season minus the year he took THIS role, plus one.
+            // If he'd already been on staff under another title, add the org tenure.
             const yrs = since ? Math.max(1, Number(CURRENT_SEASON) - Number(since) + 1) : null;
+            const tenure = withTeam && (!since || Number(withTeam) < Number(since)) ? Number(withTeam) : null;
             return (
               <div key={k} className="min-w-0 text-center">
                 <div className="text-[8px] font-semibold tracking-widest uppercase text-slate-400">{k}</div>
                 <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{v || "—"}</div>
                 {yrs && <div className="text-[9px] font-semibold text-slate-400 truncate">{ordinal(yrs)} season</div>}
+                {tenure && <div className="text-[8px] font-semibold text-slate-400/90 truncate">w/ team since {tenure}</div>}
               </div>
             );
           })}
