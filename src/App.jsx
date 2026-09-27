@@ -2348,8 +2348,12 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, ab)) : null;
               const pf = bx && bx[1] && bx[1].pf != null ? bx[1].pf : base.pf;
               const pa = bx && bx[1] && bx[1].pa != null ? bx[1].pa : base.pa;
-              return { pf, pa, d: pf != null && pa != null ? pf - pa : null };
+              // Rank per game, not on totals: mid-week some teams have a game in
+              // hand and their smaller totals would leapfrog a better defense.
+              const g = bx && bx[1] && bx[1].games ? bx[1].games : (((t.wins || 0) + (t.losses || 0) + (t.ties || 0)) || 1);
+              return { abbr: ab, pf: pf != null ? pf / g : null, pa: pa != null ? pa / g : null, d: pf != null && pa != null ? (pf - pa) / g : null };
             });
+            const mine = allPts.find((x) => injTeamEq(x.abbr, abbr)) || {};
             const rankIn = (vals, mine, asc) => {
               if (mine == null) return null;
               const v = vals.filter((x) => x != null).sort((a, b) => (asc ? a - b : b - a));
@@ -2365,9 +2369,9 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               const bx = seasonStats && seasonStats.teams ? Object.entries(seasonStats.teams).find(([k]) => injTeamEq(k, abbr)) : null;
               return bx && bx[1] ? bx[1].log : null;
             })();
-            const pfRank = rankIn(allPts.map((x) => x.pf), pts.pf, false);
-            const paRank = rankIn(allPts.map((x) => x.pa), pts.pa, true);
-            const dRank = rankIn(allPts.map((x) => x.d), pts.pf != null && pts.pa != null ? pts.pf - pts.pa : null, false);
+            const pfRank = rankIn(allPts.map((x) => x.pf), mine.pf, false);
+            const paRank = rankIn(allPts.map((x) => x.pa), mine.pa, true);
+            const dRank = rankIn(allPts.map((x) => x.d), mine.d, false);
             return (
               <>
                 <Tile tint={ink} onClick={jumpTeam("ppg")} trend={trendOf(tlog, "pf", false)} value={pts.pf != null ? Math.round(pts.pf) : "—"} label="Points Scored" sub={rkT(pfRank)} />
@@ -2569,7 +2573,7 @@ const LEADER_CATS = [
   { id: "receiving", label: "Receiving", positions: ["WR", "TE", "RB"], stats: [["recYds", "Yards"], ["recTd", "TD"], ["rec", "Rec"], ["tgt", "Targets"]] },
   { id: "defense", label: "Defense", positions: null, stats: [["tkl", "Tackles"], ["sacks", "Sacks"], ["defInt", "INT"], ["tfl", "TFL"], ["pd", "PD"]] },
   { id: "fantasy", label: "Fantasy", positions: ["QB", "RB", "WR", "TE"], stats: [["fpts", "Points"]] },
-  { id: "teams", label: "Teams", positions: null, stats: [["ppg", "Points/G"], ["papg", "Pts Allowed"], ["offPassYds", "Pass Yds/G"], ["offPassTd", "Pass TD"], ["offRushYds", "Rush Yds/G"], ["offRushTd", "Rush TD"], ["defPassYds", "Pass Yds Alwd"], ["defPassTd", "Pass TD Alwd"], ["defRushYds", "Rush Yds Alwd"], ["defRushTd", "Rush TD Alwd"], ["passRate", "Pass Rate"], ["passAtt", "Pass Att"], ["rushAtt", "Rush Att"], ["ydsFor", "Yards/G"], ["ydsAgainst", "Yds Allowed"], ["sacks", "Sacks"], ["takeaways", "Takeaways"]] },
+  { id: "teams", label: "Teams", positions: null, stats: [["ppg", "Points"], ["papg", "Pts Allowed"], ["offPassYds", "Pass Yds/G"], ["offPassTd", "Pass TD"], ["offRushYds", "Rush Yds/G"], ["offRushTd", "Rush TD"], ["defPassYds", "Pass Yds Alwd"], ["defPassTd", "Pass TD Alwd"], ["defRushYds", "Rush Yds Alwd"], ["defRushTd", "Rush TD Alwd"], ["passRate", "Pass Rate"], ["passAtt", "Pass Att"], ["rushAtt", "Rush Att"], ["ydsFor", "Yards/G"], ["ydsAgainst", "Yds Allowed"], ["sacks", "Sacks"], ["takeaways", "Takeaways"]] },
 ];
 // Team-level rows built from the same box-score pipeline the player stats use
 function teamLeaderRows(seasonStats, key) {
@@ -2587,7 +2591,7 @@ function teamLeaderRows(seasonStats, key) {
     return { abbr, gp, val: {
       passRate: plays ? (v.passAtt / plays) * 100 : 0,
       passAtt: v.passAtt, rushAtt: v.rushAtt,
-      ppg: (t.pf || 0) / gp, papg: (t.pa || 0) / gp,
+      ppg: (t.pf || 0) / gp, papg: (t.pa || 0) / gp, pfTot: t.pf || 0, paTot: t.pa || 0,
       ydsFor: ((t.off?.passYds || 0) + (t.off?.rushYds || 0)) / gp,
       ydsAgainst: ((t.def?.passYds || 0) + (t.def?.rushYds || 0)) / gp,
       offPassYds: (t.off?.passYds || 0) / gp, offPassTd: t.off?.passTd || 0,
@@ -2708,7 +2712,7 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed, backTo, on
             <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
               <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60">
                 <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">Team</span>
-                <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{statLabel}{key === "papg" || key === "ydsAgainst" ? " · fewest first" : ""}</span>
+                <span className="text-[9px] font-semibold tracking-widest uppercase text-slate-400">{statLabel}{key === "ppg" ? " · ranked per game" : key === "papg" ? " · fewest per game" : key === "ydsAgainst" ? " · fewest first" : ""}</span>
               </div>
               {teamRows.map((r, i) => {
                 const pct = key === "passRate";
@@ -2733,8 +2737,13 @@ function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed, backTo, on
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-lg font-black tabular-nums text-slate-900 dark:text-white leading-none">{v}{pct ? "%" : ""}</div>
-                      <div className="text-[9px] font-semibold tabular-nums text-slate-400 mt-0.5">{r.gp} GP</div>
+                      {key === "ppg" || key === "papg" ? <>
+                        <div className="text-lg font-black tabular-nums text-slate-900 dark:text-white leading-none">{key === "ppg" ? r.val.pfTot : r.val.paTot}</div>
+                        <div className="text-[9px] font-semibold tabular-nums text-slate-400 mt-0.5">{v} /G</div>
+                      </> : <>
+                        <div className="text-lg font-black tabular-nums text-slate-900 dark:text-white leading-none">{v}{pct ? "%" : ""}</div>
+                        <div className="text-[9px] font-semibold tabular-nums text-slate-400 mt-0.5">{r.gp} GP</div>
+                      </>}
                     </div>
                   </div>
                 );
