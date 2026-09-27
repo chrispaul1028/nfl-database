@@ -1142,7 +1142,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/25" />
           {/* painted end-zone lettering: team nickname, outlined like turf paint */}
           <span className="font-black text-[22px] tracking-[0.3em] pl-[0.3em] uppercase select-none"
-            style={{ color: teamColor(abbr), WebkitTextStroke: "1px rgba(255,255,255,0.35)", textShadow: "0 2px 0 rgba(0,0,0,0.35), 0 0 14px rgba(0,0,0,0.25)" }}>
+            style={{ color: ENDZONE_INK[abbr] || teamColor(abbr), WebkitTextStroke: "1px rgba(255,255,255,0.35)", textShadow: "0 2px 0 rgba(0,0,0,0.35), 0 0 14px rgba(0,0,0,0.25)" }}>
             {(team && team.name ? String(team.name).trim().split(" ").pop() : abbr)}
           </span>
         </div>
@@ -1174,9 +1174,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           </span>
         )}
         <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } } ${PULSE_CSS}`}</style>
-        {/* yard lines (no side numbers — quieter field) */}
+        {/* yard lines */}
         {[16, 24, 32, 40, 48, 56, 64, 72, 80, 88].map((y) => (
           <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
+        ))}
+        {/* faint painted yard numbers on both sidelines, turned to face the
+            sideline the way real field numbers are */}
+        {[[16, "1 0"], [24, "2 0"], [32, "3 0"], [40, "4 0"], [48, "5 0"], [56, "4 0"], [64, "3 0"], [72, "2 0"], [80, "1 0"]].map(([y, n]) => (
+          <React.Fragment key={"n" + y}>
+            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "5%", top: y + "%", transform: "translate(-50%,-50%) rotate(90deg)" }}>{n}</span>
+            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "95%", top: y + "%", transform: "translate(-50%,-50%) rotate(-90deg)" }}>{n}</span>
+          </React.Fragment>
         ))}
         {/* hash marks */}
         {Array.from({ length: 21 }, (_, i) => 12 + i * 4).map((y) => (
@@ -3265,10 +3273,10 @@ function MatchCard({ g, onClick }) {
 const HELMET_KIT = {
   ARI: ["#ffffff", "#97233F", "#97233F"], ATL: ["#0b0b0d", "#0b0b0d", null], BAL: ["#12100f", "#12100f", "#241773"],
   BUF: ["#ffffff", "#f2f4f7", "#C60C30"], CAR: ["#101214", "#101214", "#0085CA"], CHI: ["#0B162A", "#8d9298", "#C83803"],
-  CIN: ["#FB4F14", "#111214", "#111214"], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
+  CIN: ["#FB4F14", "#111214", null], CLE: ["#FF3C00", "#d7dade", "#311D00"], DAL: ["#b9bfc6", "#9aa1a9", "#003594"],
   DEN: ["#0C2340", "#FA4616", "#FA4616"], DET: ["#b8c2cb", "#0076B6", "#0076B6"], GB: ["#FFB612", "#1B5E34", "#ffffff"],
   HOU: ["#0B2C4F", "#0B2C4F", "#A71930"], IND: ["#ffffff", "#a7adb5", "#002C5F"], JAX: ["#101214", "#9F792C", "#9F792C"],
-  KC: ["#E31837", "#f2f4f7", "#FFB81C"], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
+  KC: ["#E31837", "#f2f4f7", null], LV: ["#c3c8ce", "#0b0b0d", "#0b0b0d"], LAC: ["#ffffff", "#0080C6", "#FFC20E"],
   LAR: ["#003594", "#f2f4f7", "#FFA300"], MIA: ["#ffffff", "#008E97", "#008E97"], MIN: ["#4F2683", "#dfe3e8", "#FFC62F"],
   NE: ["#c3c8ce", "#C60C30", "#002244"], NO: ["#101214", "#9F8958", "#9F8958"], NYG: ["#0B2265", "#a7adb5", "#A71930"],
   NYJ: ["#115740", "#115740", "#ffffff"], PHI: ["#1A4E42", "#9aa1a9", "#A5ACAF"], PIT: ["#101214", "#9aa1a9", "#FFB612"],
@@ -3278,7 +3286,22 @@ const HELMET_KIT = {
 // Real-world decal rules. Facing right you are looking at the helmet's LEFT
 // side; flipped (home) you see its RIGHT side. Pittsburgh only decals the right
 // side, Cleveland has no logo at all.
-const DECAL_SIDE = { PIT: "right", CLE: "none" };
+const DECAL_SIDE = { PIT: "right", CLE: "none", CIN: "none" };
+// Bengals: no logo, the shell itself is the tiger. Tapered black stripes drop
+// from the crown; each is a closed shape so it thins to a point like paint.
+const TIGER_STRIPES = [
+  "M34 34 C40 52 36 70 46 92 C42 92 38 90 36 86 C28 70 30 52 28 38 Z",
+  "M52 20 C58 42 52 62 62 84 C58 86 54 84 52 78 C44 60 50 40 46 24 Z",
+  "M74 12 C80 36 74 58 86 80 C82 82 78 80 76 74 C66 56 72 34 70 16 Z",
+  "M98 10 C104 34 98 54 110 76 C106 78 102 76 100 70 C90 52 96 32 94 14 Z",
+  "M120 14 C128 34 122 52 134 70 C130 72 126 70 124 64 C114 48 120 32 116 18 Z",
+  "M140 24 C146 38 142 48 152 60 C148 62 144 60 142 56 C136 46 138 36 136 28 Z",
+  "M44 108 C54 116 68 120 82 122 C68 126 54 124 42 114 Z",
+  "M72 96 C80 104 90 108 104 110 C92 114 80 110 70 102 Z",
+  "M24 70 C28 82 34 96 44 106 C36 102 28 90 22 76 Z",
+];
+// End-zone lettering colour when the team colour is wrong on the alt background
+const ENDZONE_INK = { BUF: "#ffffff" };
 // Lettered marks (G, ny, SF, JETS, C, LA, W) are NOT mirrored on the far side
 // of a real helmet — the letter reads the same both sides. Pictorial marks
 // (falcon, bronco, eagle) are mirrored so they face forward. Listed = no mirror.
@@ -3368,6 +3391,11 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
         {/* shell + paint */}
         <path d={SHELL} fill={shell} />
         <path d={SHELL} fill={`url(#paint-${uid})`} />
+        {abbr === "CIN" && (
+          <g clipPath={`url(#clip-${uid})`} fill="#111214">
+            {TIGER_STRIPES.map((d, i) => <path key={i} d={d} />)}
+          </g>
+        )}
         {/* centre stripe along the crown, with thin liners either side */}
         {stripe && (
           <g clipPath={`url(#clip-${uid})`}>
@@ -3395,10 +3423,10 @@ function Helmet({ abbr, logo, color, alt, flip, size = 128, style, onClick, phot
           {/* white name band wrapping the back-bottom of the shell: you only
               ever see part of the name from the side, like the real thing */}
           {HELMET_NICK[abbr] && <>
-            <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" strokeLinecap="round" />
-            <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="#ffffff" strokeWidth="10.5" strokeLinecap="round" />
+            <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="13" strokeLinecap="round" />
+            <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="#ffffff" strokeWidth="10.5" strokeLinecap="round" />
             <mask id={`nickm-${uid}`} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="170">
-              <path d="M18 84 C22 104 38 118 64 124" fill="none" stroke="#fff" strokeWidth="10.5" strokeLinecap="round" />
+              <path d="M21 96 C27 110 40 119 58 123" fill="none" stroke="#fff" strokeWidth="10.5" strokeLinecap="round" />
             </mask>
             <g mask={`url(#nickm-${uid})`}>
             <text transform={flip ? "translate(200,0) scale(-1,1)" : undefined} fontSize="8" fontWeight="900" letterSpacing="0.8" fill="#0b0b0d"
