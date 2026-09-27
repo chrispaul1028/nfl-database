@@ -1165,7 +1165,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
         })()}
         {/* faint team logo watermark at midfield */}
         {TEAM_LOGOS[abbr] && (
-          <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" />
+          <img src={TEAM_LOGOS[abbr]} alt="" className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-2/5 opacity-[0.09] pointer-events-none select-none" style={{ top: "48%" }} />
         )}
         {/* personnel tag: what's on the field right now */}
         {formationLabel && (
@@ -1174,20 +1174,25 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           </span>
         )}
         <style>{`@keyframes hrbPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.6); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } } ${PULSE_CSS}`}</style>
+        {/* far end zone: same paint, toned down so the near one stays the focus */}
+        <div className="absolute inset-x-0 bottom-0 overflow-hidden" style={{ top: "88%", background: TEAM_ALT[abbr] || teamColor(abbr), opacity: 0.55 }}>
+          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px)" }} />
+        </div>
+        <div className="absolute inset-x-0 h-[2.5px] bg-white/90" style={{ top: "88%" }} />
         {/* yard lines */}
-        {[16, 24, 32, 40, 48, 56, 64, 72, 80, 88].map((y) => (
+        {[16, 24, 32, 40, 48, 56, 64, 72, 80].map((y) => (
           <div key={y} className="absolute inset-x-0 h-px bg-white/45" style={{ top: y + "%" }} />
         ))}
         {/* faint painted yard numbers on both sidelines, turned to face the
             sideline the way real field numbers are */}
         {[[16, "1 0"], [24, "2 0"], [32, "3 0"], [40, "4 0"], [48, "5 0"], [56, "4 0"], [64, "3 0"], [72, "2 0"], [80, "1 0"]].map(([y, n]) => (
           <React.Fragment key={"n" + y}>
-            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "5%", top: y + "%", transform: "translate(-50%,-50%) rotate(90deg)" }}>{n}</span>
-            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "95%", top: y + "%", transform: "translate(-50%,-50%) rotate(-90deg)" }}>{n}</span>
+            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "5%", top: y + "%", transform: "translate(-50%,-50%) rotate(-90deg)" }}>{n}</span>
+            <span className="absolute font-black text-white/20 text-[15px] leading-none select-none pointer-events-none" style={{ left: "95%", top: y + "%", transform: "translate(-50%,-50%) rotate(90deg)" }}>{n}</span>
           </React.Fragment>
         ))}
         {/* hash marks */}
-        {Array.from({ length: 21 }, (_, i) => 12 + i * 4).map((y) => (
+        {Array.from({ length: 19 }, (_, i) => 12 + i * 4).map((y) => (
           <React.Fragment key={y}>
             <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "39%", top: y + "%" }} />
             <div className="absolute w-1.5 h-px bg-white/30" style={{ left: "59.5%", top: y + "%" }} />
