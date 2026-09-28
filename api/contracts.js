@@ -131,6 +131,19 @@ function getField(fields, candidates) {
   }
   return undefined;
 }
+// Looser match for the coach-tenure columns: any column whose name contains
+// the role (hc / headcoach, oc, dc) AND "with team" (or "team since"), so
+// "Head HC with team", "HC With Team Since", "OC w/ team" all resolve.
+function getCoachWith(fields, role) {
+  const roles = role === "hc" ? ["hc", "headcoach"] : role === "oc" ? ["oc", "offensivecoordinator"] : ["dc", "defensivecoordinator"];
+  for (const k of Object.keys(fields)) {
+    const n = norm(k);
+    if (!(n.includes("withteam") || n.includes("wteam") || n.includes("teamsince"))) continue;
+    if (n.includes("since") && !n.includes("with") && !n.includes("wteam")) continue;   // that's the plain "Since" column
+    if (roles.some((r) => n.startsWith(r) || n.includes(r))) return fields[k];
+  }
+  return undefined;
+}
 
 // Returns a clean string; resolves linked record ids via resolver map;
 // never lets a raw rec id through.
@@ -281,9 +294,9 @@ export default async function handler(req, res) {
           hcSince: coerceNum(getField(t.fields, FIELDS.teamHCSince)),
           ocSince: coerceNum(getField(t.fields, FIELDS.teamOCSince)),
           dcSince: coerceNum(getField(t.fields, FIELDS.teamDCSince)),
-          hcWith: coerceNum(getField(t.fields, FIELDS.teamHCWith)),
-          ocWith: coerceNum(getField(t.fields, FIELDS.teamOCWith)),
-          dcWith: coerceNum(getField(t.fields, FIELDS.teamDCWith)),
+          hcWith: coerceNum(getField(t.fields, FIELDS.teamHCWith) ?? getCoachWith(t.fields, "hc")),
+          ocWith: coerceNum(getField(t.fields, FIELDS.teamOCWith) ?? getCoachWith(t.fields, "oc")),
+          dcWith: coerceNum(getField(t.fields, FIELDS.teamDCWith) ?? getCoachWith(t.fields, "dc")),
           offCoord: asText(getField(t.fields, FIELDS.teamOffCoord)),
           defCoord: asText(getField(t.fields, FIELDS.teamDefCoord)),
           wins: coerceNum(getField(t.fields, FIELDS.teamWins)),
