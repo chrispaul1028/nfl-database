@@ -992,6 +992,16 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       const hit = byLabel[0] || byPos[0] || byFamily[0] || outStarter[i] || null;
       if (hit) { assigned[i] = hit; used.add(hit.id); if (outStarter[i] && hit !== outStarter[i]) s.nextUp = true; }
     });
+    // Fullback: only about a third of the league carries one, so the slot
+    // exists only when a healthy FB is on the depth chart. He lines up
+    // offset in front of the RB (offset-I look) rather than leaving a hole.
+    const fb = roster
+      .filter((p) => !used.has(p.id) && !sitP(p) && (/^FB\d*$/.test(lblOf(p)) || String(p.pos || "").toUpperCase() === "FB"))
+      .sort((a, b) => depthNo(a) - depthNo(b) || (a.sort ?? 9999) - (b.sort ?? 9999))[0];
+    if (fb) {
+      SLOTS.push({ lbl: "FB", x: 36, y: 80, exact: ["FB1"], aliases: ["FB"] });
+      assigned.push(fb); used.add(fb.id);
+    }
   } else {
     // ── Defense: NOT a template. Every declared starter takes the field. ──
     // Real depth charts don't have exactly 11 starters (4 LBs + a nickel is
