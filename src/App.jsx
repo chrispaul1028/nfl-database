@@ -1213,10 +1213,10 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           return (
             <button key={unit + i + (p ? p.id : "")} disabled={!p} onClick={p ? () => onSelectPlayer(p) : undefined}
               className="absolute flex flex-col items-center"
-              style={{ left: s.x + "%", top: s.y + "%", transform: "translate(-50%, -50%)", animation: `hrbPop .35s ease-out ${i * 30}ms both` }}>
+              style={{ left: s.x + "%", top: s.y + "%", width: 112, transform: "translate(-50%, -50%)", animation: `hrbPop .35s ease-out ${i * 30}ms both` }}>
               <span className="relative">
                 {p && photoOf(p, abbr) ? (
-                  <Headshot p={p} abbr={abbr} className={"w-14 h-14 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)}
+                  <Headshot p={p} abbr={abbr} className={"w-14 h-14 max-w-none shrink-0 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)}
                     fallback={<span className={"w-14 h-14 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] bg-white/90 text-slate-700 " + ringCls(p)}>{s.lbl}</span>} />
                 ) : (
                   <span className={"w-14 h-14 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
@@ -1243,7 +1243,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                 )}
                 {p && <HealthBadge p={p} />}
               </span>
-              <span className={"mt-2 text-[9px] font-bold text-white/95 drop-shadow text-center leading-tight " + (["LG", "C", "RG"].includes(s.lbl) || /^(L|R)?(DE|DT|NT|DL|EDGE)\d*$/.test(s.lbl) ? "max-w-[100px] truncate" : "max-w-[88px] whitespace-normal break-words")}>
+              <span className={"mt-2 text-[9px] font-bold text-white/95 drop-shadow text-center leading-tight " + (["LG", "C", "RG"].includes(s.lbl) || /^(L|R)?(DE|DT|NT|DL|EDGE)\d*$/.test(s.lbl) ? "max-w-[104px] truncate" : ["LT", "RT"].includes(s.lbl) ? "max-w-[104px] whitespace-normal break-words" : "whitespace-nowrap")}>
                 {p ? (() => {
                   const parts = p.name.split(" ");
                   const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
@@ -1278,7 +1278,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center min-w-0">
                 <span className="relative">
                   {photoOf(p, abbr) ? (
-                    <Headshot p={p} abbr={abbr} className={"w-14 h-14 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}
+                    <Headshot p={p} abbr={abbr} className={"w-14 h-14 max-w-none shrink-0 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}
                       fallback={<span className={"w-14 h-14 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>{String(p.pos || "").toUpperCase() || "—"}</span>} />
                   ) : (
                     <span className={"w-14 h-14 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
