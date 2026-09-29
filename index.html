@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#2563eb" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -14,11 +14,17 @@
     <script>tailwind.config = { darkMode: "media" };</script>
     <style>
       body { background: #f1f5f9; }
+      /* no pinch or double-tap zoom anywhere */
+      html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; }
       @media (prefers-color-scheme: dark) { body { background: #020617; } }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // iPhone Safari ignores user-scalable=no, so block its pinch gestures directly
+      ["gesturestart", "gesturechange", "gestureend"].forEach(function (t) { document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false }); });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
