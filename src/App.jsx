@@ -602,7 +602,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
                   <StatTile key={k} big ink={playerHeaderColor(p, dark) || "#2563eb"} dark={dark} label={lbl}
                     value={T ? (T[k] ?? "—") : "—"}
                     sub={r ? ordinal(r) + (rk.tie ? " (tie)" : "") : "—"} subClass={tier(r, peers.length)}
-                    foot={grp === "QB" || grp === "RB" ? undefined : grp + " Rank"}
+                    foot={grp === "WR" || grp === "TE" ? grp + " Rank" : undefined}
                     onClick={jump && onStatJump ? () => onStatJump({ key: k, name: p.name, team: toAbbr(teamOfPlayer(p) || p.teamName || ""), pos: grp }) : undefined} />
                 );
               })}
@@ -999,7 +999,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       .filter((p) => !used.has(p.id) && !sitP(p) && (/^FB\d*$/.test(lblOf(p)) || String(p.pos || "").toUpperCase() === "FB"))
       .sort((a, b) => depthNo(a) - depthNo(b) || (a.sort ?? 9999) - (b.sort ?? 9999))[0];
     if (fb) {
-      SLOTS.push({ lbl: "FB", x: 36, y: 80, exact: ["FB1"], aliases: ["FB"] });
+      SLOTS.push({ lbl: "FB", x: 30, y: 80, exact: ["FB1"], aliases: ["FB"] });
       assigned.push(fb); used.add(fb.id);
     }
   } else {
@@ -1083,7 +1083,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     };
     const spread = (n, i) => (n === 1 ? 50 : 10 + (80 * i) / (n - 1));
     const xFor = (r, n, i) => (XS[r] && XS[r][n] ? XS[r][n][i] : spread(n, i));
-    const Y = { dl: 72, lb: 56, db: 40, s: 24 };
+    const Y = { dl: 80, lb: 64, db: 40, s: 18 };
     SLOTS = []; assigned = [];
     // Personnel label from what's actually on the field: "4-3 · Nickel"
     const dbN = rows.db.filter((x) => x.p).length + rows.s.filter((x) => x.p).length;
@@ -1099,7 +1099,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           const inner = n - 2;
           if (i === 0) x = 11;
           else if (i === n - 1) x = 89;
-          else x = inner === 1 ? 50 : 32 + (36 * (i - 1)) / (inner - 1);
+          else { x = inner === 1 ? 50 : 32 + (36 * (i - 1)) / (inner - 1); y -= 3; }   // nickel/dime sit a touch shallower
           if (n === 1) x = 50;
         }
         SLOTS.push({ lbl: it.lbl, x, y, nextUp: !!it.nextUp });
@@ -1176,8 +1176,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : lr.rank <= 20 ? "text-yellow-300"
             : "text-rose-300";
           return (
-            <span className="absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm"
-              style={{ top: unit === "offense" ? "66.5%" : "82.5%" }}>
+            <span className="absolute right-2 bottom-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm">
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -1216,10 +1215,10 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               style={{ left: s.x + "%", top: s.y + "%", transform: "translate(-50%, -50%)", animation: `hrbPop .35s ease-out ${i * 30}ms both` }}>
               <span className="relative">
                 {p && photoOf(p, abbr) ? (
-                  <Headshot p={p} abbr={abbr} className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)}
-                    fallback={<span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] bg-white/90 text-slate-700 " + ringCls(p)}>{s.lbl}</span>} />
+                  <Headshot p={p} abbr={abbr} className={"w-14 h-14 rounded-full object-cover bg-white border-[3px] shadow-md " + ringCls(p)}
+                    fallback={<span className={"w-14 h-14 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] bg-white/90 text-slate-700 " + ringCls(p)}>{s.lbl}</span>} />
                 ) : (
-                  <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
+                  <span className={"w-14 h-14 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-md border-[3px] " + ringCls(p) + (p ? " bg-white/90 text-slate-700" : " bg-white/20 text-white/70 border-dashed")}>
                     {s.lbl}
                   </span>
                 )}
@@ -1278,10 +1277,10 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
               <button key={p.id} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center min-w-0">
                 <span className="relative">
                   {photoOf(p, abbr) ? (
-                    <Headshot p={p} abbr={abbr} className={"w-12 h-12 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}
-                      fallback={<span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>{String(p.pos || "").toUpperCase() || "—"}</span>} />
+                    <Headshot p={p} abbr={abbr} className={"w-14 h-14 rounded-full object-cover bg-white border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}
+                      fallback={<span className={"w-14 h-14 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>{String(p.pos || "").toUpperCase() || "—"}</span>} />
                   ) : (
-                    <span className={"w-12 h-12 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
+                    <span className={"w-14 h-14 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-[3px] " + ringCls(p).replace("border-white", "border-slate-200 dark:border-slate-700")}>
                       {String(p.pos || "").toUpperCase() || "—"}
                     </span>
                   )}
