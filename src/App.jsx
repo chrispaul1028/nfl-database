@@ -818,7 +818,7 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
     <span className="inline-flex flex-col items-start gap-0.5 min-w-0">
-      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 " : "text-[9px] py-px ") + cls}>
+      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 rounded-full px-2.5 text-white " + (label === "QUESTIONABLE" ? "bg-amber-500" : label === "DOUBTFUL" ? "bg-orange-500" : "bg-rose-600") : "text-[9px] py-px " + cls)}>
         {label}
       </span>
 
@@ -1083,7 +1083,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     };
     const spread = (n, i) => (n === 1 ? 50 : 10 + (80 * i) / (n - 1));
     const xFor = (r, n, i) => (XS[r] && XS[r][n] ? XS[r][n][i] : spread(n, i));
-    const Y = { dl: 80, lb: 64, db: 40, s: 18 };
+    const Y = { dl: 80, lb: 58, db: 40, s: 18 };
     SLOTS = []; assigned = [];
     // Personnel label from what's actually on the field: "4-3 · Nickel"
     const dbN = rows.db.filter((x) => x.p).length + rows.s.filter((x) => x.p).length;
@@ -1150,14 +1150,17 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
         ))}
       </div>}
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
-        style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
-        {/* subtle top-down light so it reads as turf, not a flat panel */}
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.10) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0.18) 100%)" }} />
+        style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#25874a 0 9%,#1d7440 9% 18%)" }}>
+        {/* turf: fine blade grain, a soft stadium-light vignette, and painted sidelines */}
+        <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 5px)" }} />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 40%, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.28) 100%)" }} />
+        <div className="absolute inset-y-0 left-0 w-[3px] bg-white/70" />
+        <div className="absolute inset-y-0 right-0 w-[3px] bg-white/70" />
         {/* end zone: team color with painted diagonal texture and big
             stenciled letters — reads like turf paint, not a UI header */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
           style={{ height: "9%", background: TEAM_ALT[abbr] || teamColor(abbr) }}>
-          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px)" }} />
+          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.12))" }} />
           <div className="absolute inset-x-0 top-[18%] h-px bg-white/25" />
           <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/25" />
           {/* painted end-zone lettering: team nickname, outlined like turf paint */}
@@ -1176,7 +1179,8 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : lr.rank <= 20 ? "text-yellow-300"
             : "text-rose-300";
           return (
-            <span className="absolute right-2 bottom-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm">
+            <span className={"absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm " + (unit === "offense" ? "" : "bottom-2")}
+              style={unit === "offense" ? { top: "66.5%" } : undefined}>
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -1398,7 +1402,7 @@ function injuryDetail(p, abbr, deep) {
   let label = "";
   if (e) {
     // ESPN fills blanks with "Not Specified" / "Other" / "Unknown"; those aren't notes
-    const clean = (x) => { const t = String(x || "").trim(); return /^(not specified|unspecified|other|unknown|n\/a|none)$/i.test(t) ? "" : t; };
+    const clean = (x) => { const t = String(x || "").trim(); return /^(not specified|unspecified|other|unknown|n\/a|none|active|inactive|out|questionable|doubtful|probable|healthy|day.to.day)$/i.test(t) ? "" : t; };
     const parts = [e.side, e.location, e.detail].map(clean).filter(Boolean);
     label = [...new Set(parts.map((x) => x.toLowerCase()))].join(" ");   // drop exact repeats
     if (!label && clean(e.type)) label = clean(e.type);
@@ -1407,6 +1411,7 @@ function injuryDetail(p, abbr, deep) {
     label = [inj.injury_body_part, inj.injury_notes].filter(Boolean).join(" ");
   }
   label = injCase(label);
+  if (/^(active|inactive|out|questionable|doubtful|probable|healthy)( injury)?$/i.test(label)) label = "";   // a status, not a note
   // Airtable's "Return Date" wins when ESPN hasn't published a date of its own.
   const raw = p.estReturn || (e && e.returnDate) || (deep && deep.returnDate) || null;
   const retTxt = fmtReturn(raw);
