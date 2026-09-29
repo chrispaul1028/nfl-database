@@ -938,16 +938,16 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
   if (unit === "offense") {
     // Offense keeps the 11-man template — it's stable across the league.
     SLOTS = [
-      { lbl: "WR", x: 11, y: 24, exact: ["WR1"], aliases: ["WR"] },
-      { lbl: "WR", x: 89, y: 24, exact: ["WR2"], aliases: ["WR"] },
-      { lbl: "WR", x: 22, y: 40, exact: ["WR3"], aliases: ["WR"] },
-      { lbl: "TE", x: 82, y: 40, exact: ["TE1"], aliases: ["TE"] },
-      { lbl: "LT", x: 10, y: 56, exact: ["LT1"], aliases: ["LT", "OT", "T"] },
-      { lbl: "LG", x: 30, y: 56, exact: ["LG1"], aliases: ["LG", "G", "OG"] },
-      { lbl: "C", x: 50, y: 56, exact: ["C1"], aliases: ["C", "OC"] },
-      { lbl: "RG", x: 70, y: 56, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
-      { lbl: "RT", x: 90, y: 56, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
-      { lbl: "QB", x: 50, y: 72, exact: ["QB1"], aliases: ["QB"] },
+      { lbl: "WR", x: 11, y: 18, exact: ["WR1"], aliases: ["WR"] },
+      { lbl: "WR", x: 89, y: 18, exact: ["WR2"], aliases: ["WR"] },
+      { lbl: "WR", x: 22, y: 34, exact: ["WR3"], aliases: ["WR"] },
+      { lbl: "TE", x: 82, y: 34, exact: ["TE1"], aliases: ["TE"] },
+      { lbl: "LT", x: 10, y: 52, exact: ["LT1"], aliases: ["LT", "OT", "T"] },
+      { lbl: "LG", x: 30, y: 52, exact: ["LG1"], aliases: ["LG", "G", "OG"] },
+      { lbl: "C", x: 50, y: 52, exact: ["C1"], aliases: ["C", "OC"] },
+      { lbl: "RG", x: 70, y: 52, exact: ["RG1"], aliases: ["RG", "G", "OG"] },
+      { lbl: "RT", x: 90, y: 52, exact: ["RT1"], aliases: ["RT", "OT", "T"] },
+      { lbl: "QB", x: 50, y: 70, exact: ["QB1"], aliases: ["QB"] },
       { lbl: "RB", x: 50, y: 88, exact: ["RB1", "HB1"], aliases: ["RB", "HB", "FB"] },
     ];
     // Two-pass slot assignment.
@@ -999,7 +999,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       .filter((p) => !used.has(p.id) && !sitP(p) && (/^FB\d*$/.test(lblOf(p)) || String(p.pos || "").toUpperCase() === "FB"))
       .sort((a, b) => depthNo(a) - depthNo(b) || (a.sort ?? 9999) - (b.sort ?? 9999))[0];
     if (fb) {
-      SLOTS.push({ lbl: "FB", x: 30, y: 80, exact: ["FB1"], aliases: ["FB"] });
+      SLOTS.push({ lbl: "FB", x: 30, y: 81, exact: ["FB1"], aliases: ["FB"] });
       assigned.push(fb); used.add(fb.id);
     }
   } else {
@@ -1177,7 +1177,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
             : "text-rose-300";
           return (
             <span className={"absolute right-2 flex items-baseline gap-1 rounded-md bg-black/35 backdrop-blur-sm px-2 py-1 text-[10px] font-extrabold text-white/90 shadow-sm " + (unit === "offense" ? "" : "bottom-2")}
-              style={unit === "offense" ? { top: "66.5%" } : undefined}>
+              style={unit === "offense" ? { top: "62.5%" } : undefined}>
               {unit === "offense" ? "OL" : "DEF"}
               <span className={"tabular-nums " + tierText}>{ordinal(lr.rank)}</span>
             </span>
@@ -1243,7 +1243,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
                 )}
                 {p && <HealthBadge p={p} />}
               </span>
-              <span className="mt-2 text-[9px] font-bold text-white/95 max-w-[100px] truncate drop-shadow">
+              <span className={"mt-2 text-[9px] font-bold text-white/95 drop-shadow text-center leading-tight " + (["LG", "C", "RG"].includes(s.lbl) || /^(L|R)?(DE|DT|NT|DL|EDGE)\d*$/.test(s.lbl) ? "max-w-[100px] truncate" : "max-w-[88px] whitespace-normal break-words")}>
                 {p ? (() => {
                   const parts = p.name.split(" ");
                   const last = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "")
