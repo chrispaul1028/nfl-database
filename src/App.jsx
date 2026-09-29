@@ -864,10 +864,9 @@ function autoDepthLabels(roster, abbr) {
     const sp = injFor(p.name, abbr);
     if (!sp || !sp.depth_chart_position) continue;
     const slot = String(sp.depth_chart_position).toUpperCase();
-    const order = Number(sp.depth_chart_order) || 99;
-    const fam = FAMILY[slot];
-    if (fam) (groups[fam] ??= []).push({ p, slot, order });
-    else out[p.id] = slot + order;                      // "LT1", "LDE1", "NB1", "K1"
+    const order = Number(sp.depth_chart_order) || 99;   // unknown order sorts last
+    const fam = FAMILY[slot] || slot;                   // LT, LDE, NB, K… number within their own slot
+    (groups[fam] ??= []).push({ p, slot, order });
   }
   // Positions Chris numbers as one sequence: WR1..WRn across LWR/RWR/SWR slots
   for (const [fam, list] of Object.entries(groups)) {
@@ -1257,6 +1256,36 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           );
         })}
       </div>
+      {/* Special teams: one compact strip, same on offense and defense.
+          K / P / LS from the depth chart (K1, P1, LS1), returners from KR1 / PR1;
+          falls back to the Position field when nobody is labelled. */}
+      {(() => {
+        const pick = (lbl, pos) => {
+          const byLbl = roster.filter((p) => new RegExp("^" + lbl + "\\d*$").test(lblOf(p)) && !sitP(p)).sort((a, b) => depthNo(a) - depthNo(b))[0];
+          if (byLbl) return byLbl;
+          return pos ? roster.filter((p) => String(p.pos || "").toUpperCase() === pos && !sitP(p)).sort((a, b) => (a.sort ?? 9999) - (b.sort ?? 9999))[0] : null;
+        };
+        const spots = [["K", pick("K", "K")], ["P", pick("P", "P")], ["LS", pick("LS", "LS")], ["KR", pick("KR", null)], ["PR", pick("PR", null)]].filter(([, p]) => p);
+        if (!spots.length) return null;
+        const lastOf = (p) => { const parts = String(p.name).split(" "); return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "") ? parts.slice(-2).join(" ") : parts.slice(-1)[0]; };
+        return (
+          <div className="mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 pt-2 pb-2.5">
+            <div className="text-[9px] font-semibold tracking-widest uppercase text-slate-400 mb-2">Special Teams</div>
+            <div className="flex justify-around gap-1">
+              {spots.map(([k, p]) => (
+                <button key={k} onClick={() => onSelectPlayer(p)} className="flex flex-col items-center min-w-0 flex-1">
+                  <span className="relative">
+                    <Headshot p={p} abbr={abbr} className="w-11 h-11 max-w-none shrink-0 rounded-full object-cover bg-white border-2 border-slate-200 dark:border-slate-700"
+                      fallback={<span className="w-11 h-11 rounded-full flex items-center justify-center text-[9px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-500 border-2 border-slate-200 dark:border-slate-700">{k}</span>} />
+                    <span className="absolute -top-1 -left-1.5 px-1 rounded bg-slate-900/85 text-white text-[8px] font-extrabold">{k}</span>
+                  </span>
+                  <span className="mt-1 text-[9px] font-bold text-slate-600 dark:text-slate-300 max-w-full truncate">{(cleanNo(p.no) ? "#" + cleanNo(p.no) + " " : "") + lastOf(p)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {/* The sideline: everyone on this side of the ball who isn't in the 11.
           Horizontal scroll, best-rated first — depth at a glance without
           stealing space from the formation. */}
@@ -1435,7 +1464,7 @@ function TeamPill({ team }) {
 // ═══════════════ TAB: PLAYER HUB ═════════════════════════════════
 // Hub for the Players bottom tab: one place for players, injuries, contracts, draft
 function PlayersHub({ players, onSelect }) {
-  const [view, setView] = useState("players");
+  const [view, setView] = useSticky("hub.view", "players");
   const [seenBefore, setSeenBefore] = useState(null);   // the mark from BEFORE this visit, for NEW tags
   const unread = view === "injury" ? 0 : injUnreadCount();
   const open = (k) => {
@@ -1458,12 +1487,20 @@ function PlayersHub({ players, onSelect }) {
 }
 
 function PlayersTab({ players, onSelect, pills, forceInj, since }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useSticky(forceInj ? "inj.q" : "players.q", "");
   const dark = useDark();
   const injOnly = !!forceInj;
+  // Injury report also searches by team: "bills", "buffalo", "BUF"
+  const teamHit = (p) => {
+    const s = q.toLowerCase().trim();
+    if (!s) return true;
+    const a = toAbbr(teamOfPlayer(p) || p.teamName || "");
+    const full = String(TEAM_NAMES[a] || p.teamName || "").toLowerCase();
+    return String(a).toLowerCase() === s || (s.length >= 3 && full.includes(s));
+  };
   const list = useMemo(
     () => players
-      .filter((p) => matchesQuery(p, q, true))
+      .filter((p) => matchesQuery(p, q, true) || (injOnly && teamHit(p)))
       .filter((p) => !injOnly || (() => {
         const inj = injFor(p.name, toAbbr(teamOfPlayer(p) || p.teamName || ""));
         // injured = a designation, or a reserve-list roster status (not plain "Inactive")
@@ -1599,7 +1636,7 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark, since }) {
 // ═══════════════ TAB: DRAFT ══════════════════════════════════════
 // Draft classes from the Airtable fields (Draft Year + "Round 1, Pick 12 (DET)").
 function DraftTab({ players, onSelect, pills }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useSticky("DraftTab.q", "");
   const dark = useDark();
   const parsed = useMemo(() => players
     .filter((p) => p.draftYear)
@@ -1609,7 +1646,7 @@ function DraftTab({ players, onSelect, pills }) {
       return { p, year: Number(p.draftYear), round: m ? Number(m[1]) : 99, pick: m ? Number(m[2]) : 999, by: team ? team[1] : null };
     }), [players]);
   const years = useMemo(() => [...new Set(parsed.map((x) => x.year))].sort((a, b) => b - a), [parsed]);
-  const [year, setYear] = useState(null);
+  const [year, setYear] = useSticky("DraftTab.year", null);
   const yr = year || years[0] || null;
   const list = useMemo(() => parsed
     .filter((x) => x.year === yr && matchesQuery(x.p, q))
@@ -1760,7 +1797,7 @@ function nextSeason(s) {
 }
 
 function ContractsTab({ players, onSelect, pills }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useSticky("ContractsTab.q", "");
   const [faOnly, setFaOnly] = useState(false);
   const list = useMemo(
     () =>
@@ -2172,6 +2209,16 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
 
 // Last-used tabs per team page (survives the page unmounting for a player card)
 const TEAM_VIEW_MEMO = {};
+// Same idea for every other screen: a player card replaces the whole tab, so
+// any tab state (sub-view, search text, filters) lives here by key and is
+// restored when you come back. Cleared only when you tap a bottom tab.
+const STICKY = {};
+function useSticky(key, init) {
+  const [v, setV] = useState(() => (key in STICKY ? STICKY[key] : init));
+  useEffect(() => { STICKY[key] = v; }, [key, v]);
+  return [v, setV];
+}
+const SCROLL_MEMO = { y: 0 };
 function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats, onSwitchTeam, onStatJump }) {
   useEffect(() => { window.scrollTo(0, 0); }, [team.id]);
   const alpha = useMemo(() => [...(teams || [])].sort((a, b) => String(a.name).localeCompare(String(b.name))), [teams]);
@@ -2203,10 +2250,21 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   // this is a 53-man list, so it's cheap and always current)
   const roster = (() => {
     const auto = autoDepthLabels(rosterRaw, abbr);
+    // Airtable = the healthy depth chart and always wins. Players it doesn't
+    // label get Sleeper's order, numbered AFTER the Airtable ones at that spot
+    // (Airtable QB1 + Sleeper's next QB -> QB2, never a second QB1).
+    const baseOf = (l) => { const m = String(l || "").toUpperCase().match(/^([A-Z]+)(\d*)$/); return m ? [m[1], Number(m[2] || 1)] : [null, 0]; };
+    const top = {};
+    for (const p of rosterRaw) { const [b, n] = baseOf(p.sortLabel); if (b) top[b] = Math.max(top[b] || 0, n); }
+    const fill = rosterRaw.filter((p) => !p.sortLabel && auto[p.id])
+      .map((p) => ({ p, b: baseOf(auto[p.id])[0], n: baseOf(auto[p.id])[1] }))
+      .sort((x, y) => x.n - y.n);
+    const next = {}, lbl = {};
+    for (const { p, b } of fill) { next[b] = (next[b] ?? (top[b] || 0)) + 1; lbl[p.id] = b + next[b]; }
     return rosterRaw.map((p) => {
       if (p.sortLabel) return { ...p, depthSrc: "airtable" };
-      const lbl = auto[p.id] || null;
-      return { ...p, sortLabel: lbl, sort: p.sort ?? rankOfLabel(lbl), depthSrc: lbl ? "sleeper" : null };
+      const l = lbl[p.id] || null;
+      return { ...p, sortLabel: l, sort: p.sort ?? rankOfLabel(l), depthSrc: l ? "sleeper" : null };
     });
   })();
   const payroll = roster.reduce((a, p) => a + currentSalary(p), 0);
@@ -2639,9 +2697,9 @@ function teamLeaderRows(seasonStats, key) {
 function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed, backTo, onBack }) {
   // A right-swipe (or the back pill) returns to the team/player page a stat tile came from
   const swipe = useSwipe({ onRight: onBack || undefined });
-  const [catId, setCatId] = useState("passing");
-  const [statKey, setStatKey] = useState(null);
-  const [posPick, setPosPick] = useState("ALL");
+  const [catId, setCatId] = useSticky("stats.cat", "passing");
+  const [statKey, setStatKey] = useSticky("stats.key", null);
+  const [posPick, setPosPick] = useSticky("stats.pos", "ALL");
   const [hilite, setHilite] = useState(null);   // normalized name of the row we jumped to
   const [teamHilite, setTeamHilite] = useState(null); // team abbr we jumped to (Teams board)
   const rowRef = useRef(null);
@@ -3890,7 +3948,16 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState("targets"); // land on the Week board
-  const [sel, setSel] = useState(null);
+  const [sel, setSelRaw] = useState(null);
+  // Opening a card remembers where you were scrolled; closing it puts you back.
+  const setSel = (p) => { if (p) SCROLL_MEMO.y = window.scrollY; setSelRaw(p); };
+  useEffect(() => {
+    if (sel) { window.scrollTo(0, 0); return; }
+    const y = SCROLL_MEMO.y; if (!y) return;
+    requestAnimationFrame(() => window.scrollTo(0, y));
+    const t = setTimeout(() => window.scrollTo(0, y), 120);   // again once lists finish painting
+    return () => clearTimeout(t);
+  }, [sel]);
   const [players, setPlayers] = useState(null);
   const [teams, setTeams] = useState([]);
   const [stand, setStand] = useState(null); // records + stat ranks from /api/standings
@@ -4032,11 +4099,14 @@ export default function App() {
   }, []);
 
   if (sel) {
+    const hubView = STICKY["hub.view"];
     return (
       <PlayerDetail
         p={sel}
         onBack={() => setSel(null)}
-        backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams") : "Players"}
+        backLabel={tab === "teams" ? (selTeam ? selTeam.name : "Teams")
+          : tab === "players" ? ({ draft: "Draft", contracts: "Contracts", injury: "Injury Report" }[hubView] || "Players")
+          : tab === "stats" ? "Stats" : tab === "targets" ? "Week" : "Players"}
         mode="full"
         seasonStats={seasonStats}
         onStatJump={(j) => { setJumpBack({ tab, sel, selTeam, label: sel.name }); setStatJump(j); setSel(null); setSelTeam(null); setTab("stats"); }}
@@ -4079,7 +4149,7 @@ export default function App() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setJumpBack(null); setNavTick((n) => n + 1); }}
+            onClick={() => { setTab(t.id); setSel(null); setSelTeam(null); setJumpBack(null); setNavTick((n) => n + 1); for (const k of Object.keys(STICKY)) delete STICKY[k]; SCROLL_MEMO.y = 0; }}
             className={"flex-1 py-2.5 text-center " + (tab === t.id ? "text-blue-600" : "text-slate-400")}
           >
             <div className="relative inline-block text-lg leading-none">{t.icon}{t.id === "players" && <UnreadDot n={injUnreadCount()} className="absolute -top-1.5 -right-3.5" />}</div>
