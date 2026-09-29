@@ -1077,7 +1077,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     //   corners pin to the sidelines with the nickel tucked closer to the
     //   line, safeties split the deep middle.
     const XS = {
-      dl: { 3: [22, 50, 78], 4: [10, 36.7, 63.3, 90], 5: [10, 30, 50, 70, 90] },
+      dl: { 3: [22, 50, 78], 4: [14, 38, 62, 86], 5: [13, 31.5, 50, 68.5, 87] },
       lb: { 2: [33, 67], 3: [26, 50, 74], 4: [12, 38, 62, 88], 5: [10, 30, 50, 70, 90] },
       s: { 1: [50], 2: [33, 67], 3: [25, 50, 75] },
     };
