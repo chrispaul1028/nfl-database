@@ -1150,17 +1150,14 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
         ))}
       </div>}
       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm"
-        style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#25874a 0 9%,#1d7440 9% 18%)" }}>
-        {/* turf: fine blade grain, a soft stadium-light vignette, and painted sidelines */}
-        <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 5px)" }} />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 40%, rgba(255,255,255,0.10) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.28) 100%)" }} />
-        <div className="absolute inset-y-0 left-0 w-[3px] bg-white/70" />
-        <div className="absolute inset-y-0 right-0 w-[3px] bg-white/70" />
+        style={{ paddingBottom: "118%", background: "repeating-linear-gradient(180deg,#1c7c40 0 9%,#166534 9% 18%)" }}>
+        {/* subtle top-down light so it reads as turf, not a flat panel */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.10) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0.18) 100%)" }} />
         {/* end zone: team color with painted diagonal texture and big
             stenciled letters — reads like turf paint, not a UI header */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
           style={{ height: "9%", background: TEAM_ALT[abbr] || teamColor(abbr) }}>
-          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.12))" }} />
+          <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 10px, transparent 10px 20px)" }} />
           <div className="absolute inset-x-0 top-[18%] h-px bg-white/25" />
           <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/25" />
           {/* painted end-zone lettering: team nickname, outlined like turf paint */}
