@@ -184,7 +184,7 @@ function matchesQuery(p, q, namesOnly) {
 
 // ═══════════════ SHARED PIECES ═══════════════════════════════════
 function Avatar({ p, size }) {
-  const px = size === "lg" ? "w-20 h-20 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-11 h-11 text-sm";
+  const px = size === "xl" ? "w-[6.5rem] h-[6.5rem] text-3xl" : size === "lg" ? "w-20 h-20 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-11 h-11 text-sm";
   const url = photoOf(p);
   const no = cleanNo(p.no);
   const label = no ? "#" + no : p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
@@ -555,7 +555,7 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
       <div className="relative px-5 pb-5 text-white" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
-          <div className="rounded-full p-[3px] bg-white/90 shadow-lg shrink-0"><Avatar p={p} size="lg" /></div>
+          <div className="rounded-full bg-white shadow-lg shrink-0 overflow-hidden"><Avatar p={p} size="xl" /></div>
           <div className="min-w-0">
             <div className="text-[26px] font-extrabold leading-tight truncate drop-shadow-sm">
               {p.name}
