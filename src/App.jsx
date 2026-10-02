@@ -818,7 +818,7 @@ function InjBadge({ p, team, lg = false, noNote = false }) {
   const note = inj.injury_body_part || null; // e.g. "Hamstring", "Knee"
   return (
     <span className="inline-flex flex-col items-start gap-0.5 min-w-0">
-      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 rounded-full px-2.5 text-white " + (label === "QUESTIONABLE" ? "bg-amber-500" : label === "DOUBTFUL" ? "bg-orange-500" : "bg-rose-600") : "text-[9px] py-px " + cls)}>
+      <span className={"font-extrabold rounded px-1.5 shrink-0 " + (lg ? "text-[11px] py-0.5 rounded-full px-2.5 text-white " + (label === "QUESTIONABLE" ? "bg-amber-500" : label === "DOUBTFUL" ? "bg-rose-600" : "bg-rose-600") : "text-[9px] py-px " + cls)}>
         {label}
       </span>
 
@@ -3369,7 +3369,7 @@ const HELMET_KIT = {
 // Real-world decal rules. Facing right you are looking at the helmet's LEFT
 // side; flipped (home) you see its RIGHT side. Pittsburgh only decals the right
 // side, Cleveland has no logo at all.
-const DECAL_SIDE = { PIT: "right", CLE: "none", CIN: "none" };
+const DECAL_SIDE = { CLE: "none", CIN: "none" };
 // Bengals: no logo, the shell itself is the tiger. Tapered black stripes drop
 // from the crown; each is a closed shape so it thins to a point like paint.
 const TIGER_STRIPES = [
