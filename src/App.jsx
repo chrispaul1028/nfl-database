@@ -184,7 +184,7 @@ function matchesQuery(p, q, namesOnly) {
 
 // ═══════════════ SHARED PIECES ═══════════════════════════════════
 function Avatar({ p, size }) {
-  const px = size === "xl" ? "w-[6.5rem] h-[6.5rem] text-3xl" : size === "lg" ? "w-20 h-20 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-11 h-11 text-sm";
+  const px = size === "xl" ? "w-[6.5rem] h-[6.5rem] text-3xl" : size === "md" ? "w-14 h-14 text-base" : size === "lg" ? "w-20 h-20 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-11 h-11 text-sm";
   const url = photoOf(p);
   const no = cleanNo(p.no);
   const label = no ? "#" + no : p.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
@@ -234,8 +234,7 @@ function Tile({ value, label, label2, sub, accent, valueClass, compact, tint, tr
   return (
     <Tag onClick={onClick} className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4") + (onClick ? " active:scale-[0.97] transition-transform w-full" : "")}
       style={style}>
-      <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
-        style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}{label2 && <span className="block">{label2}</span>}</div>
+      <div className={"font-semibold tracking-widest uppercase mb-1 text-slate-700 dark:text-white " + (compact ? "text-[8px] " : "text-[10px] ")}>{label}{label2 && <span className="block">{label2}</span>}</div>
       <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}<Trend t={trend} /></div>
       {sub && (
         <div className={"text-[10px] font-bold mt-0.5 " + (typeof sub === "object" && sub.cls ? sub.cls : "text-blue-600 dark:text-blue-400")}>
@@ -1417,7 +1416,7 @@ const TEAM_ALT = {
   LV: "#A5ACAF", LAC: "#FFC20E", LAR: "#FFA300", MIA: "#FC4C02", MIN: "#FFC62F", NE: "#C60C30", NO: "#D3BC8D", NYG: "#A71930",
   NYJ: "#000000", PHI: "#A5ACAF", PIT: "#FFB612", SF: "#B3995D", SEA: "#69BE28", TB: "#FF7900", TEN: "#4B92DB", WSH: "#FFB612", WAS: "#FFB612",
 };     // abbr -> alternate color
-const TEAM_SECONDARY = { ...TEAM_ALT, ATL: "#A5ACAF", BAL: "#9E7C0C", ARI: "#FFB612", CIN: "#FB4F14", NYJ: "#FFFFFF" };   // tile borders
+const TEAM_SECONDARY = { ...TEAM_ALT, ATL: "#A5ACAF", BAL: "#9E7C0C", ARI: "#FFFFFF", CIN: "#FB4F14", NYJ: "#FFFFFF" };   // tile borders
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
 const INJ_META = { count: 0, error: null, at: null };   // what the last /api/injuries call returned
 // Unread injury updates: ESPN records touched since the Injury Report was last
@@ -2306,7 +2305,9 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
         </span>
       </div>
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-        {data.games.map((g) => {
+        {(() => { let w = 0, l = 0, t = 0; return data.games.map((g) => {
+          if (g.result) { if (g.result === "W") w++; else if (g.result === "L") l++; else t++; }
+          const recAfter = g.result ? `${w}-${l}${t ? "-" + t : ""}` : null;
           if (g.bye) return (
             <div key={"bye" + g.week} className="flex items-center gap-3 px-3 py-2.5">
               <span className="w-9 text-[10px] font-extrabold text-slate-400 tabular-nums">WK {g.week}</span>
@@ -2329,6 +2330,7 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
                   <span className="shrink-0 text-right">
                     <span className={"text-[13px] font-black " + (g.result === "W" ? "text-emerald-600 dark:text-emerald-400" : g.result === "L" ? "text-rose-600 dark:text-rose-400" : "text-slate-500")}>{g.result}</span>
                     <span className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white ml-1.5">{g.my}-{g.their}</span>
+                    <span className="block text-[10px] font-bold tabular-nums text-slate-400">({recAfter})</span>
                   </span>
                 ) : live ? (
                   <span className="shrink-0 text-right">
@@ -2340,7 +2342,7 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
               {matchup(g.opp) && <div className="flex flex-wrap gap-1 mt-2 pl-[2.875rem]">{matchup(g.opp)}</div>}
             </div>
           );
-        })}
+        }); })()}
       </div>
     </div>
   );
@@ -2555,7 +2557,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 const ds = ts.map(diffPg).filter((d) => d != null);
                 const avg = ds.length ? ds.reduce((a, b) => a + b, 0) / ds.length : null;
                 const cls = avg == null ? null : avg >= 2 ? "text-red-500 dark:text-red-400" : avg <= -2 ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400";
-                return <Tile value={avg == null ? "—" : (avg > 0 ? "+" : "") + avg.toFixed(1)} valueClass={cls} label="Opp Strength" label2={label} sub={rec(ts) ? { label: rec(ts), cls: "text-slate-400" } : (gs.length ? null : "none")} />;
+                return <Tile onClick={jumpTeam("ppg")} value={avg == null ? "—" : (avg > 0 ? "+" : "") + avg.toFixed(1)} valueClass={cls} label="Opp Point Diff" label2={label} sub={rec(ts) ? { label: rec(ts), cls: "text-slate-400" } : (gs.length ? null : "none")} />;
               };
               return (
                 <>
@@ -2687,7 +2689,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                     style={{ borderLeft: `3px solid ${tint(dark ? "66" : "33")}` }}>
                     <span className="w-9 text-center text-[10px] font-extrabold uppercase shrink-0 rounded-md py-1"
                       style={{ backgroundColor: ink, color: onInk }}>{p.sortLabel || p.pos || "—"}</span>
-                    <Avatar p={p} />
+                    <Avatar p={p} size="md" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {cleanNo(p.no) && <span className="text-slate-400 font-semibold mr-1.5">#{cleanNo(p.no)}</span>}{p.name}
@@ -2742,7 +2744,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                   const act = activeOf(p);
                   return (
                     <button key={p.id} onClick={() => onSelectPlayer(p)} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-slate-50 dark:active:bg-slate-800">
-                      <Avatar p={p} />
+                      <Avatar p={p} size="md" />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{p.name}</span>
                         <span className="block text-[11px] text-slate-400 font-medium truncate">
