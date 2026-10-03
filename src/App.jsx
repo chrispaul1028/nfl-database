@@ -552,7 +552,12 @@ function PlayerDetail({ p, onBack, backLabel, mode = "full", seasonStats, onStat
   const no = cleanNo(p.no);
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-24" {...swipe}>
-      <div className="relative px-5 pb-5 text-white" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+      <div className="relative isolate px-5 pb-5 text-white overflow-hidden" style={{ backgroundColor: playerHeaderColor(p, dark), paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}>
+        {/* faint team logo behind the header, like the logo on the 50 */}
+        {(() => { const ab = toAbbr(teamOfPlayer(p) || p.teamName || ""); const lg = TEAM_LOGOS[ab]; return lg ? (
+          <img src={lg} alt="" aria-hidden="true" className="absolute -z-10 pointer-events-none select-none opacity-[0.10] w-56 h-56 object-contain"
+            style={{ right: "-2.5rem", top: "50%", transform: "translateY(-38%)" }} />
+        ) : null; })()}
         <button onClick={onBack} className="relative text-sm font-semibold opacity-80 mb-4">‹ {backLabel}</button>
         <div className="relative flex items-center gap-4">
           <div className="rounded-full bg-white shadow-lg shrink-0 overflow-hidden"><Avatar p={p} size="xl" /></div>
@@ -1041,8 +1046,12 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
       return edge ? (d <= 1 ? 0 : 4) : 2;
     };
     const rows = { dl: [], lb: [], db: [], s: [] };
+    // Airtable decides who starts. If any player in a row has an Airtable
+    // label, Sleeper-filled players in that row are depth only (next man up),
+    // never extra starters. Rows with no Airtable labels fall back to Sleeper.
+    const airRows = new Set(roster.filter((p) => p.depthSrc === "airtable" && baseOf(p) && ROW_OF(baseOf(p))).map((p) => ROW_OF(baseOf(p))));
     const starters = roster
-      .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= maxFor(b); })
+      .filter((p) => { const b = baseOf(p); return b && ROW_OF(b) && depthNo(p) <= maxFor(b) && !(p.depthSrc === "sleeper" && airRows.has(ROW_OF(b))); })
       .sort((a, b) => sideKey(baseOf(a), depthNo(a)) - sideKey(baseOf(b), depthNo(b)) || depthNo(a) - depthNo(b));
     const starterIds = new Set(starters.map((p) => p.id));
     starters.forEach((p) => {
@@ -2207,6 +2216,101 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
   );
 }
 
+// ═══════════════ TEAM SCHEDULE ═══════════════════════════════════
+// Full regular season for one team from /api/scoreboard?team=XXX, plus four
+// pills per game grading the opponent from season-to-date box scores:
+// their offense (pass / rush yds per game) and their defense (pass / rush
+// yds allowed per game). Colour = how hard that matchup is for THIS team:
+// red = opponent ranks top 10 (tough), amber = 11-22, green = 23rd+ (soft).
+const SCHED_CACHE = {};
+function TeamSchedule({ abbr, teams, ink }) {
+  const [data, setData] = useState(SCHED_CACHE[abbr] || null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    if (SCHED_CACHE[abbr]) { setData(SCHED_CACHE[abbr]); return; }
+    let live = true;
+    fetch(`/api/scoreboard?team=${encodeURIComponent(abbr)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!live) return; if (d && d.games) { SCHED_CACHE[abbr] = d; setData(d); } else setErr(d && d.error ? d.error : "No schedule"); })
+      .catch((e) => live && setErr(String(e.message || e)));
+    return () => { live = false; };
+  }, [abbr]);
+  const statsOf = (opp) => { const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp)); return t && t.stx ? t.stx : null; };
+  const tier = (rank) => rank == null ? "bg-slate-100 dark:bg-slate-800 text-slate-400"
+    : rank <= 10 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
+    : rank <= 22 ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+    : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+  const fmtDate = (iso, timeValid) => {
+    if (!iso) return "TBD";
+    const d = new Date(iso);
+    const day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    return timeValid ? day + " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : day + " · TBD";
+  };
+  if (err) return <div className="text-center text-sm text-slate-400 mt-10">Schedule unavailable right now.</div>;
+  if (!data) return <div className="mt-6"><Loader /></div>;
+  const pill = (lbl, v, rank) => (
+    <span className={"flex-1 min-w-0 rounded-lg px-1 py-1 text-center leading-none " + tier(rank)}>
+      <span className="block text-[7px] font-extrabold tracking-wider uppercase opacity-80">{lbl}</span>
+      <span className="block text-[11px] font-black tabular-nums mt-0.5">{v != null ? Math.round(v) : "—"}</span>
+    </span>
+  );
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase">Schedule</span>
+        <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400">
+          Opp. per game:
+          <span className="px-1.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">tough</span>
+          <span className="px-1.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">soft</span>
+        </span>
+      </div>
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+        {data.games.map((g) => {
+          if (g.bye) return (
+            <div key={"bye" + g.week} className="flex items-center gap-3 px-3 py-2.5">
+              <span className="w-9 text-[10px] font-extrabold text-slate-400 tabular-nums">WK {g.week}</span>
+              <span className="text-xs font-extrabold tracking-widest text-slate-400">BYE</span>
+            </div>
+          );
+          const o = statsOf(g.opp);
+          const live = g.state === "in";
+          return (
+            <div key={g.week} className="px-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 shrink-0 text-[10px] font-extrabold text-slate-400 tabular-nums">WK {g.week}</span>
+                <img src={g.oppLogo || TEAM_LOGOS[g.opp]} alt="" className="w-7 h-7 object-contain shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-extrabold text-slate-900 dark:text-white truncate">
+                    <span className="text-slate-400 font-bold mr-1">{g.neutral ? "vs" : g.home ? "vs" : "@"}</span>{g.oppName || g.opp}
+                  </div>
+                  <div className="text-[10px] font-semibold text-slate-400 truncate">{fmtDate(g.date, g.timeValid)}{g.tv ? " · " + g.tv : ""}</div>
+                </div>
+                {g.result ? (
+                  <span className="shrink-0 text-right">
+                    <span className={"text-[13px] font-black " + (g.result === "W" ? "text-emerald-600 dark:text-emerald-400" : g.result === "L" ? "text-rose-600 dark:text-rose-400" : "text-slate-500")}>{g.result}</span>
+                    <span className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white ml-1.5">{g.my}-{g.their}</span>
+                  </span>
+                ) : live ? (
+                  <span className="shrink-0 text-right">
+                    <span className="block text-[13px] font-black tabular-nums text-slate-900 dark:text-white">{g.my ?? 0}-{g.their ?? 0}</span>
+                    <span className="block text-[9px] font-extrabold text-rose-500">LIVE</span>
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex gap-1 mt-2 pl-[2.875rem]">
+                {pill("Off Pass", o && o.offPassYpg, o && o.offPassYpgRank)}
+                {pill("Off Rush", o && o.offRushYpg, o && o.offRushYpgRank)}
+                {pill("Def Pass", o && o.defPassYpg, o && o.defPassYpgRank)}
+                {pill("Def Rush", o && o.defRushYpg, o && o.defRushYpgRank)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Last-used tabs per team page (survives the page unmounting for a player card)
 const TEAM_VIEW_MEMO = {};
 // Same idea for every other screen: a player card replaces the whole tab, so
@@ -2466,7 +2570,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         </div>
 
         <div className="flex gap-2 mt-4">
-          {[["roster", "Roster"], ["contracts", "Contracts"], ["charts", "Stats"]].map(([k, lbl]) => (
+          {[["roster", "Roster"], ["schedule", "Schedule"], ["contracts", "Contracts"], ["charts", "Stats"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (seg === k
                 ? ""
@@ -2597,6 +2701,8 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
         )}
 
         {seg === "charts" && <TeamStatsPanel roster={roster} abbr={abbr} seasonStats={seasonStats} mode={chartMode} setMode={setChartMode} onSelectPlayer={onSelectPlayer} />}
+
+        {seg === "schedule" && <TeamSchedule abbr={abbr} teams={teams} ink={ink} />}
 
         {seg === "roster" && !unit && roster.length === 0 && (
           <div className="text-center text-sm text-slate-400 mt-16">
