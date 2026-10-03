@@ -225,7 +225,10 @@ function ordinal(n) {
 const TileBorderCtx = React.createContext(null);
 function Tile({ value, label, label2, sub, accent, valueClass, compact, tint, trend, onClick }) {
   const Tag = onClick ? "button" : "div";
-  const edge = React.useContext(TileBorderCtx);
+  const edgeRaw = React.useContext(TileBorderCtx);
+  const dark = useDark();
+  // a white border vanishes on a white tile (light mode); black on a dark one
+  const edge = !edgeRaw ? null : (!dark && lumOf(edgeRaw) > 0.92) ? "#94a3b8" : (dark && lumOf(edgeRaw) < 0.08) ? "#64748b" : edgeRaw;
   const style = edge ? { borderColor: edge, borderWidth: 2, ...(tint ? { boxShadow: `inset 0 2px 0 0 ${tint}` } : {}) }
     : tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined;
   return (
@@ -1414,6 +1417,7 @@ const TEAM_ALT = {
   LV: "#A5ACAF", LAC: "#FFC20E", LAR: "#FFA300", MIA: "#FC4C02", MIN: "#FFC62F", NE: "#C60C30", NO: "#D3BC8D", NYG: "#A71930",
   NYJ: "#000000", PHI: "#A5ACAF", PIT: "#FFB612", SF: "#B3995D", SEA: "#69BE28", TB: "#FF7900", TEN: "#4B92DB", WSH: "#FFB612", WAS: "#FFB612",
 };     // abbr -> alternate color
+const TEAM_SECONDARY = { ...TEAM_ALT, ATL: "#A5ACAF", BAL: "#9E7C0C", ARI: "#FFB612", CIN: "#FB4F14", NYJ: "#FFFFFF" };   // tile borders
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
 const INJ_META = { count: 0, error: null, at: null };   // what the last /api/injuries call returned
 // Unread injury updates: ESPN records touched since the Injury Report was last
@@ -2248,11 +2252,6 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
       .catch((e) => live && setErr(String(e.message || e)));
     return () => { live = false; };
   }, [abbr]);
-  const statsOf = (opp) => { const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp)); return t && t.stx ? t.stx : null; };
-  const tier = (rank) => rank == null ? "bg-slate-100 dark:bg-slate-800 text-slate-400"
-    : rank <= 10 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
-    : rank <= 22 ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-    : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
   const fmtDate = (iso, timeValid) => {
     if (!iso) return "TBD";
     const d = new Date(iso);
@@ -2261,20 +2260,49 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
   };
   if (err) return <div className="text-center text-sm text-slate-400 mt-10">Schedule unavailable right now.</div>;
   if (!data) return <div className="mt-6"><Loader /></div>;
-  const pill = (lbl, v, rank) => (
-    <span className={"flex-1 min-w-0 rounded-lg px-1 py-1 text-center leading-none " + tier(rank)}>
-      <span className="block text-[7px] font-extrabold tracking-wider uppercase opacity-80">{lbl}</span>
-      <span className="block text-[11px] font-black tabular-nums mt-0.5">{v != null ? Math.round(v) : "—"}</span>
-    </span>
-  );
+  // Three plain-English chips per game: how good the opponent is (point diff
+  // per game), what their offense does, and where their defense is soft/stout.
+  const GOOD = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+  const BAD = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
+  const MID = "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
+  const NEU = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+  const chip = (txt, cls) => <span className={"rounded-md px-1.5 py-[3px] text-[9px] font-extrabold whitespace-nowrap " + cls}>{txt}</span>;
+  const matchup = (opp) => {
+    const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp));
+    const o = t && t.stx ? t.stx : null;
+    if (!t) return null;
+    const gp = (t.wins || 0) + (t.losses || 0) + (t.ties || 0);
+    const pf = t.pf, pa = t.pa;
+    const d = gp && pf != null && pa != null ? (pf - pa) / gp : null;
+    const out = [];
+    if (d != null) out.push(chip(`OPP ${d > 0 ? "+" : ""}${d.toFixed(1)}/G`, d >= 2 ? BAD : d <= -2 ? GOOD : MID));
+    if (o) {
+      const pr = o.offPassYpgRank, rr = o.offRushYpgRank;
+      if (rr != null && pr != null) {
+        const id = rr <= 10 && pr > rr + 5 ? "Run-heavy O" : pr <= 10 && rr > pr + 5 ? "Pass-heavy O" : rr <= 10 && pr <= 10 ? "Explosive O" : rr >= 23 && pr >= 23 ? "Weak O" : "Balanced O";
+        out.push(chip(id, id === "Explosive O" ? BAD : id === "Weak O" ? GOOD : NEU));
+      }
+      const dp = o.defPassYpgRank, dr = o.defRushYpgRank;
+      if (dp != null && dr != null) {
+        // what you can attack (green) or must respect (red)
+        if (dp >= 23 && dr >= 23) out.push(chip("Soft D", GOOD));
+        else if (dp >= 23) out.push(chip("Soft vs pass", GOOD));
+        else if (dr >= 23) out.push(chip("Soft vs run", GOOD));
+        else if (dp <= 10 && dr <= 10) out.push(chip("Stout D", BAD));
+        else if (dp <= 10) out.push(chip("Stout vs pass", BAD));
+        else if (dr <= 10) out.push(chip("Stout vs run", BAD));
+        else out.push(chip("Average D", NEU));
+      }
+    }
+    return out.length ? out : null;
+  };
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between px-1 mb-2">
         <span className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase">Schedule</span>
         <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400">
-          Opp. per game:
           <span className="px-1.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">tough</span>
-          <span className="px-1.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">soft</span>
+          <span className="px-1.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">favorable</span>
         </span>
       </div>
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
@@ -2285,7 +2313,6 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
               <span className="text-xs font-extrabold tracking-widest text-slate-400">BYE</span>
             </div>
           );
-          const o = statsOf(g.opp);
           const live = g.state === "in";
           return (
             <div key={g.week} className="px-3 py-2.5">
@@ -2310,12 +2337,7 @@ function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
                   </span>
                 ) : null}
               </div>
-              <div className="flex gap-1 mt-2 pl-[2.875rem]">
-                {pill("Off Pass", o && o.offPassYpg, o && o.offPassYpgRank)}
-                {pill("Off Rush", o && o.offRushYpg, o && o.offRushYpgRank)}
-                {pill("Def Pass", o && o.defPassYpg, o && o.defPassYpgRank)}
-                {pill("Def Rush", o && o.defRushYpg, o && o.defRushYpgRank)}
-              </div>
+              {matchup(g.opp) && <div className="flex flex-wrap gap-1 mt-2 pl-[2.875rem]">{matchup(g.opp)}</div>}
             </div>
           );
         })}
@@ -2441,7 +2463,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
       </div>
 
       <div className="px-4 -mt-3">
-        <TileBorderCtx.Provider value={TEAM_ALT[abbr] && lumOf(TEAM_ALT[abbr]) > 0.08 ? TEAM_ALT[abbr] : (TEAM_ACCENT[abbr] || null)}>
+        <TileBorderCtx.Provider value={TEAM_SECONDARY[abbr] || TEAM_ACCENT[abbr] || null}>
         <div className={"grid gap-2 " + (seg === "roster" && unit ? "grid-cols-4" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
@@ -2525,7 +2547,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
               const sched = SCHED_CACHE[abbr];
               const oppOf = (g) => teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), g.opp));
               const diffPg = (t) => { if (!t) return null; const gp = (t.wins || 0) + (t.losses || 0) + (t.ties || 0); const { pf, pa } = teamPts(t, started); return gp && pf != null && pa != null ? (pf - pa) / gp : null; };
-              const rec = (ts) => { const w = ts.reduce((a, t) => a + (t.wins || 0), 0), l = ts.reduce((a, t) => a + (t.losses || 0), 0), tt = ts.reduce((a, t) => a + (t.ties || 0), 0); return w + l + tt ? `opp ${w}-${l}${tt ? "-" + tt : ""}` : null; };
+              const rec = (ts) => { const w = ts.reduce((a, t) => a + (t.wins || 0), 0), l = ts.reduce((a, t) => a + (t.losses || 0), 0), tt = ts.reduce((a, t) => a + (t.ties || 0), 0); return w + l + tt ? `OPP ${w}-${l}${tt ? "-" + tt : ""}` : null; };
               const games = sched ? sched.games.filter((g) => !g.bye) : [];
               const played = games.filter((g) => g.result), left = games.filter((g) => !g.result);
               const sos = (gs, label) => {
@@ -2533,13 +2555,13 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 const ds = ts.map(diffPg).filter((d) => d != null);
                 const avg = ds.length ? ds.reduce((a, b) => a + b, 0) / ds.length : null;
                 const cls = avg == null ? null : avg >= 2 ? "text-red-500 dark:text-red-400" : avg <= -2 ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400";
-                return <Tile value={avg == null ? "—" : (avg > 0 ? "+" : "") + avg.toFixed(1)} valueClass={cls} label={label} sub={rec(ts) ? { label: rec(ts), cls: "text-slate-400" } : (gs.length ? null : "none")} />;
+                return <Tile value={avg == null ? "—" : (avg > 0 ? "+" : "") + avg.toFixed(1)} valueClass={cls} label="Opp Strength" label2={label} sub={rec(ts) ? { label: rec(ts), cls: "text-slate-400" } : (gs.length ? null : "none")} />;
               };
               return (
                 <>
-                  {sos(played, "SOS · Played")}
-                  {sos(left.slice(0, 5), "SOS · Next 5")}
-                  {sos(left, "SOS · Remaining")}
+                  {sos(played, "Played")}
+                  {sos(left.slice(0, 5), "Next 5")}
+                  {sos(left, "Rest of Season")}
                 </>
               );
             }
@@ -2743,7 +2765,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
 
         {seg === "charts" && <TeamStatsPanel roster={roster} abbr={abbr} seasonStats={seasonStats} mode={chartMode} setMode={setChartMode} onSelectPlayer={onSelectPlayer} />}
 
-        {seg === "schedule" && <TeamSchedule abbr={abbr} teams={teams} ink={ink} onTeam={(opp) => { const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp)); if (t && onSwitchTeam) onSwitchTeam(t); }} onLoaded={() => setSchedTick((n) => n + 1)} />}
+        {seg === "schedule" && <TeamSchedule abbr={abbr} teams={teams} ink={ink} onTeam={(opp) => { const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp)); if (t && onSwitchTeam) { TEAM_VIEW_MEMO[t.id] = { seg: "roster", rosterView: "list" }; setSeg("roster"); setRosterView("list"); onSwitchTeam(t); } }} onLoaded={() => setSchedTick((n) => n + 1)} />}
 
         {seg === "roster" && !unit && roster.length === 0 && (
           <div className="text-center text-sm text-slate-400 mt-16">
