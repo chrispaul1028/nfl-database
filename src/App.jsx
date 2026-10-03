@@ -220,11 +220,17 @@ function ordinal(n) {
   return n + suffix;
 }
 
+// Team-page tiles take a border in the team's alternate colour; set once on
+// the grid, read by every Tile inside it.
+const TileBorderCtx = React.createContext(null);
 function Tile({ value, label, label2, sub, accent, valueClass, compact, tint, trend, onClick }) {
   const Tag = onClick ? "button" : "div";
+  const edge = React.useContext(TileBorderCtx);
+  const style = edge ? { borderColor: edge, borderWidth: 2, ...(tint ? { boxShadow: `inset 0 2px 0 0 ${tint}` } : {}) }
+    : tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined;
   return (
     <Tag onClick={onClick} className={"bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col items-center justify-center " + (compact ? "px-1 py-2.5" : "px-2 py-4") + (onClick ? " active:scale-[0.97] transition-transform w-full" : "")}
-      style={tint ? { borderColor: tint + "66", boxShadow: `inset 0 2px 0 0 ${tint}` } : undefined}>
+      style={style}>
       <div className={"font-semibold tracking-widest uppercase mb-1 " + (compact ? "text-[8px] " : "text-[10px] ") + (tint ? "" : "text-slate-400")}
         style={tint ? { color: tint, opacity: 0.9 } : undefined}>{label}{label2 && <span className="block">{label2}</span>}</div>
       <div className={(compact ? "text-lg " : "text-2xl ") + "font-extrabold tracking-tight " + (valueClass ? valueClass : accent ? ACCENT_TEXT : "text-slate-900 dark:text-slate-100")}>{value}<Trend t={trend} /></div>
@@ -1400,7 +1406,14 @@ function ListHeader({ title, q, setQ, placeholder, pills, noSearch }) {
 // Populated once data loads: abbr -> logo URL
 const TEAM_LOGOS = {};
 const TEAM_NAMES = {};   // abbr -> full name
-const TEAM_ALT = {};     // abbr -> alternate color (from ESPN scoreboard)
+// Official secondary colours, so every team has one even on a bye week; the
+// scoreboard feed overwrites these with ESPN's values as games load.
+const TEAM_ALT = {
+  ARI: "#000000", ATL: "#000000", BAL: "#000000", BUF: "#C60C30", CAR: "#0085CA", CHI: "#C83803", CIN: "#000000", CLE: "#FF3C00",
+  DAL: "#869397", DEN: "#002244", DET: "#B0B7BC", GB: "#FFB612", HOU: "#A71930", IND: "#A2AAAD", JAX: "#D7A22A", KC: "#FFB81C",
+  LV: "#A5ACAF", LAC: "#FFC20E", LAR: "#FFA300", MIA: "#FC4C02", MIN: "#FFC62F", NE: "#C60C30", NO: "#D3BC8D", NYG: "#A71930",
+  NYJ: "#000000", PHI: "#A5ACAF", PIT: "#FFB612", SF: "#B3995D", SEA: "#69BE28", TB: "#FF7900", TEN: "#4B92DB", WSH: "#FFB612", WAS: "#FFB612",
+};     // abbr -> alternate color
 const INJ_ESPN = {};     // ESPN athlete id -> ESPN injury record (type/location/side/detail/returnDate)
 const INJ_META = { count: 0, error: null, at: null };   // what the last /api/injuries call returned
 // Unread injury updates: ESPN records touched since the Injury Report was last
@@ -2223,7 +2236,7 @@ function TeamStatsPanel({ roster, abbr, seasonStats, mode, setMode, onSelectPlay
 // yds allowed per game). Colour = how hard that matchup is for THIS team:
 // red = opponent ranks top 10 (tough), amber = 11-22, green = 23rd+ (soft).
 const SCHED_CACHE = {};
-function TeamSchedule({ abbr, teams, ink }) {
+function TeamSchedule({ abbr, teams, ink, onTeam, onLoaded }) {
   const [data, setData] = useState(SCHED_CACHE[abbr] || null);
   const [err, setErr] = useState(null);
   useEffect(() => {
@@ -2231,7 +2244,7 @@ function TeamSchedule({ abbr, teams, ink }) {
     let live = true;
     fetch(`/api/scoreboard?team=${encodeURIComponent(abbr)}`)
       .then((r) => r.json())
-      .then((d) => { if (!live) return; if (d && d.games) { SCHED_CACHE[abbr] = d; setData(d); } else setErr(d && d.error ? d.error : "No schedule"); })
+      .then((d) => { if (!live) return; if (d && d.games) { SCHED_CACHE[abbr] = d; setData(d); onLoaded && onLoaded(); } else setErr(d && d.error ? d.error : "No schedule"); })
       .catch((e) => live && setErr(String(e.message || e)));
     return () => { live = false; };
   }, [abbr]);
@@ -2276,7 +2289,7 @@ function TeamSchedule({ abbr, teams, ink }) {
           const live = g.state === "in";
           return (
             <div key={g.week} className="px-3 py-2.5">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 active:opacity-70" onClick={() => onTeam && onTeam(g.opp)} role="button">
                 <span className="w-9 shrink-0 text-[10px] font-extrabold text-slate-400 tabular-nums">WK {g.week}</span>
                 <img src={g.oppLogo || TEAM_LOGOS[g.opp]} alt="" className="w-7 h-7 object-contain shrink-0" />
                 <div className="min-w-0 flex-1">
@@ -2342,6 +2355,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   const unit = rosterView === "list" ? null : rosterView;
   const lineRanks = useMemo(() => computeLineRanks(players, teams), [players, teams]);
   const [roleFilter, setRoleFilter] = useState(null);
+  const [, setSchedTick] = useState(0);   // re-render the SOS tiles once the schedule arrives
   const [chartMode, setChartMode] = useState("leaders");
   const [capSeason, setCapSeason] = useState(null);
   const rosterRaw = players.filter((p) => {
@@ -2427,6 +2441,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
       </div>
 
       <div className="px-4 -mt-3">
+        <TileBorderCtx.Provider value={TEAM_ALT[abbr] && lumOf(TEAM_ALT[abbr]) > 0.08 ? TEAM_ALT[abbr] : (TEAM_ACCENT[abbr] || null)}>
         <div className={"grid gap-2 " + (seg === "roster" && unit ? "grid-cols-4" : "grid-cols-3")}>
           {(() => {
             const started = seasonStarted(teams);
@@ -2503,6 +2518,31 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
                 </>
               );
             }
+            if (seg === "schedule") {
+              // Strength of schedule from opponents' season-to-date point
+              // differential per game (better than win% this early). Positive
+              // = opponents outscore people = a tough slate.
+              const sched = SCHED_CACHE[abbr];
+              const oppOf = (g) => teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), g.opp));
+              const diffPg = (t) => { if (!t) return null; const gp = (t.wins || 0) + (t.losses || 0) + (t.ties || 0); const { pf, pa } = teamPts(t, started); return gp && pf != null && pa != null ? (pf - pa) / gp : null; };
+              const rec = (ts) => { const w = ts.reduce((a, t) => a + (t.wins || 0), 0), l = ts.reduce((a, t) => a + (t.losses || 0), 0), tt = ts.reduce((a, t) => a + (t.ties || 0), 0); return w + l + tt ? `opp ${w}-${l}${tt ? "-" + tt : ""}` : null; };
+              const games = sched ? sched.games.filter((g) => !g.bye) : [];
+              const played = games.filter((g) => g.result), left = games.filter((g) => !g.result);
+              const sos = (gs, label) => {
+                const ts = gs.map(oppOf).filter(Boolean);
+                const ds = ts.map(diffPg).filter((d) => d != null);
+                const avg = ds.length ? ds.reduce((a, b) => a + b, 0) / ds.length : null;
+                const cls = avg == null ? null : avg >= 2 ? "text-red-500 dark:text-red-400" : avg <= -2 ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400";
+                return <Tile value={avg == null ? "—" : (avg > 0 ? "+" : "") + avg.toFixed(1)} valueClass={cls} label={label} sub={rec(ts) ? { label: rec(ts), cls: "text-slate-400" } : (gs.length ? null : "none")} />;
+              };
+              return (
+                <>
+                  {sos(played, "SOS · Played")}
+                  {sos(left.slice(0, 5), "SOS · Next 5")}
+                  {sos(left, "SOS · Remaining")}
+                </>
+              );
+            }
             if (seg === "contracts") {
               const fa = roster.filter((p) => { const e = nextEvent(p); return e && (e.kind === "UFA" || e.kind === "RFA"); }).length;
               const ages = roster.map((p) => Number(p.age)).filter((a) => a > 0);
@@ -2568,6 +2608,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
             );
           })()}
         </div>
+        </TileBorderCtx.Provider>
 
         <div className="flex gap-2 mt-4">
           {[["roster", "Roster"], ["schedule", "Schedule"], ["contracts", "Contracts"], ["charts", "Stats"]].map(([k, lbl]) => (
@@ -2702,7 +2743,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
 
         {seg === "charts" && <TeamStatsPanel roster={roster} abbr={abbr} seasonStats={seasonStats} mode={chartMode} setMode={setChartMode} onSelectPlayer={onSelectPlayer} />}
 
-        {seg === "schedule" && <TeamSchedule abbr={abbr} teams={teams} ink={ink} />}
+        {seg === "schedule" && <TeamSchedule abbr={abbr} teams={teams} ink={ink} onTeam={(opp) => { const t = teams.find((x) => injTeamEq(x.abbr || toAbbr(x.name), opp)); if (t && onSwitchTeam) onSwitchTeam(t); }} onLoaded={() => setSchedTick((n) => n + 1)} />}
 
         {seg === "roster" && !unit && roster.length === 0 && (
           <div className="text-center text-sm text-slate-400 mt-16">
