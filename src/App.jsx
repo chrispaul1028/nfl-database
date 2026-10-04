@@ -2865,6 +2865,18 @@ function teamLeaderRows(seasonStats, key) {
   for (const r of sorted) r.tie = sorted.filter((o) => o.val[key] === r.val[key]).length > 1;
   return sorted;
 }
+// One line per team for the weekly cheat sheet: identity (pass rate),
+// offense (pts/g + rank), defense (pts allowed/g + rank) and where the
+// defense is soft or stout. Ranks come from the same boards as the Stats tab.
+function cheatRows(seasonStats) {
+  const keys = ["passRate", "ppg", "papg", "defPassYds", "defRushYds"];
+  const out = {};
+  for (const k of keys) for (const r of teamLeaderRows(seasonStats, k)) {
+    const o = (out[r.abbr] ??= { abbr: r.abbr, gp: r.gp, val: r.val, rank: {} });
+    o.rank[k] = r.rank;
+  }
+  return out;
+}
 function StatsTab({ players, onSelect, seasonStats, jump, onJumpUsed, backTo, onBack }) {
   // A right-swipe (or the back pill) returns to the team/player page a stat tile came from
   const swipe = useSwipe({ onRight: onBack || undefined });
@@ -3059,10 +3071,10 @@ const valTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 d
   : val >= ok ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
   : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
 
-function TdBoardTab({ players, teams, onSelect, navTick }) {
+function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
   const [board, setBoard] = useState(null);
   const [sb, setSb] = useState(null);
-  const [seg, setSeg] = useState("matchups");
+  const [seg, setSeg] = useSticky("week.seg", "cheat");
   const [digestWeek, setDigestWeek] = useState(null);
   const [selGame, setSelGame] = useState(null);
   // The bottom nav lives outside this tab, so it can't reach selGame directly.
@@ -3152,7 +3164,7 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
       </div>
       <div className="px-4 pt-3">
         <div className="flex gap-2 mb-3">
-          {[["matchups", "Matchups"], ["digest", "Digest"], ["bets", "Bets"]].map(([k, lbl]) => (
+          {[["cheat", "Cheat Sheet"], ["matchups", "Matchups"], ["digest", "Digest"], ["bets", "Bets"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-1.5 rounded-full text-xs font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
@@ -3160,7 +3172,83 @@ function TdBoardTab({ players, teams, onSelect, navTick }) {
           ))}
         </div>
 
-        {seg === "matchups" ? (
+        {seg === "cheat" ? (() => {
+          if (!sb) return <Loader label="Loading games" />;
+          if (!sb.games.length) return <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>;
+          const rows = cheatRows(seasonStats);
+          const n = Object.keys(rows).length || 32;
+          const GOOD = "text-emerald-600 dark:text-emerald-400", BAD = "text-rose-600 dark:text-rose-400", MID = "text-amber-600 dark:text-amber-400";
+          const tone = (r) => r == null ? "text-slate-400" : r <= 10 ? GOOD : r >= n - 9 ? BAD : MID;
+          const CHIP_G = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+          const CHIP_R = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
+          const CHIP_N = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+          const chip = (txt, cls) => <span key={txt} className={"rounded px-1.5 py-[2px] text-[8px] font-extrabold whitespace-nowrap " + cls}>{txt}</span>;
+          const dChips = (o) => {
+            const dp = o.rank.defPassYds, dr = o.rank.defRushYds, c = [];
+            if (dp == null || dr == null) return c;
+            const soft = n - 9;
+            if (dp >= soft && dr >= soft) c.push(chip("Soft D", CHIP_R));
+            else if (dp >= soft) c.push(chip("Soft vs pass", CHIP_R));
+            else if (dr >= soft) c.push(chip("Soft vs run", CHIP_R));
+            else if (dp <= 10 && dr <= 10) c.push(chip("Stout D", CHIP_G));
+            else if (dp <= 10) c.push(chip("Stout vs pass", CHIP_G));
+            else if (dr <= 10) c.push(chip("Stout vs run", CHIP_G));
+            else c.push(chip("Average D", CHIP_N));
+            return c;
+          };
+          const TeamLine = ({ t }) => {
+            const key = Object.keys(rows).find((k) => injTeamEq(k, t.abbr));
+            const o = key ? rows[key] : null;
+            const pr = o ? o.val.passRate : null, prk = o ? o.rank.passRate : null;
+            const idTag = prk == null ? null : prk <= 8 ? ["Pass-heavy", CHIP_N] : prk >= n - 7 ? ["Run-heavy", CHIP_N] : ["Balanced", CHIP_N];
+            return (
+              <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] items-center gap-1 py-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-6 h-6 object-contain shrink-0" />
+                  <span className="text-[12px] font-black text-slate-900 dark:text-white truncate">{t.abbr}</span>
+                </div>
+                <div className="text-center leading-tight">
+                  <div className={"text-[13px] font-black tabular-nums " + (o ? "text-slate-900 dark:text-white" : "text-slate-400")}>{pr != null ? Math.round(pr) + "%" : "—"}</div>
+                  {idTag && <div className="mt-0.5">{chip(idTag[0], idTag[1])}</div>}
+                </div>
+                <div className="text-center leading-tight">
+                  <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.ppg)}>{o ? o.val.ppg.toFixed(1) : "—"}</div>
+                  <div className="text-[8px] font-bold text-slate-400">{o && o.rank.ppg ? ordinal(o.rank.ppg) : ""}</div>
+                </div>
+                <div className="text-center leading-tight">
+                  <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.papg)}>{o ? o.val.papg.toFixed(1) : "—"}</div>
+                  <div className="text-[8px] font-bold text-slate-400">{o && o.rank.papg ? ordinal(o.rank.papg) : ""}</div>
+                </div>
+                {o && <div className="col-span-4 flex flex-wrap gap-1 pl-[4.5rem] -mt-0.5">{dChips(o)}</div>}
+              </div>
+            );
+          };
+          return (
+            <>
+              <div className="flex items-center justify-between px-1 mb-2 text-[9px] font-bold text-slate-400">
+                <span>Season to date · rank colour: <span className={GOOD}>top 10</span> · <span className={BAD}>bottom 10</span></span>
+                <span>D chips: <span className={CHIP_R + " px-1 rounded"}>soft</span> <span className={CHIP_G + " px-1 rounded"}>stout</span></span>
+              </div>
+              {gamesByDay.map((grp) => (
+                <div key={grp.key} className="mb-4">
+                  <div className="text-[10px] font-semibold tracking-widest uppercase mb-1.5 text-slate-400">{grp.key}</div>
+                  <div className="space-y-2">
+                    {grp.games.map((g) => (
+                      <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2">
+                        <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] gap-1 text-[8px] font-extrabold tracking-widest uppercase text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800">
+                          <span className="truncate">{g.away.abbr} @ {g.home.abbr}</span><span className="text-center">Pass %</span><span className="text-center">Pts/G</span><span className="text-center">Allowed</span>
+                        </div>
+                        <TeamLine t={g.away} />
+                        <div className="border-t border-dashed border-slate-100 dark:border-slate-800" />
+                        <TeamLine t={g.home} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          );
+        })() : seg === "matchups" ? (
           <>
             {!sb && <Loader label="Loading games" />}
             {sb && sb.games.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>}
@@ -4309,7 +4397,7 @@ export default function App() {
         />
       )}
       <div className="pb-28">
-        {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} navTick={navTick} />}
+        {players && tab === "targets" && <TdBoardTab players={players} teams={mergedTeams} onSelect={setSel} navTick={navTick} seasonStats={seasonStats} />}
         {players && tab === "players" && <PlayersHub players={players} onSelect={setSel} />}
         {players && tab === "stats" && <StatsTab players={players} onSelect={setSel} seasonStats={seasonStats} jump={statJump} onJumpUsed={() => setStatJump(null)}
           backTo={jumpBack ? jumpBack.label : null}
