@@ -2869,11 +2869,24 @@ function teamLeaderRows(seasonStats, key) {
 // offense (pts/g + rank), defense (pts allowed/g + rank) and where the
 // defense is soft or stout. Ranks come from the same boards as the Stats tab.
 function cheatRows(seasonStats) {
-  const keys = ["passRate", "ppg", "papg", "defPassYds", "defRushYds"];
+  const keys = ["passRate", "ppg", "papg", "offPassYds", "offRushYds", "defPassYds", "defRushYds"];
   const out = {};
   for (const k of keys) for (const r of teamLeaderRows(seasonStats, k)) {
-    const o = (out[r.abbr] ??= { abbr: r.abbr, gp: r.gp, val: r.val, rank: {} });
+    const o = (out[r.abbr] ??= { abbr: r.abbr, gp: r.gp, val: r.val, rank: {}, carriers: [], targets: [] });
     o.rank[k] = r.rank;
+  }
+  // who gets the ball: top two by carries and by targets, as a share of the team total
+  const byTeam = {};
+  for (const P of Object.values((seasonStats && seasonStats.players) || {})) {
+    const t = (byTeam[P.team] ??= { car: 0, tgt: 0, list: [] });
+    t.car += P.totals.car || 0; t.tgt += P.totals.tgt || 0; t.list.push(P);
+  }
+  for (const [abbr, t] of Object.entries(byTeam)) {
+    const o = out[abbr]; if (!o) continue;
+    o.carriers = t.list.filter((P) => (P.totals.car || 0) > 0).sort((a, b) => b.totals.car - a.totals.car).slice(0, 2)
+      .map((P) => ({ p: P, pct: Math.round((P.totals.car / Math.max(1, t.car)) * 100) }));
+    o.targets = t.list.filter((P) => (P.totals.tgt || 0) > 0).sort((a, b) => b.totals.tgt - a.totals.tgt).slice(0, 2)
+      .map((P) => ({ p: P, pct: Math.round((P.totals.tgt / Math.max(1, t.tgt)) * 100) }));
   }
   return out;
 }
@@ -3074,7 +3087,7 @@ const valTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 d
 function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
   const [board, setBoard] = useState(null);
   const [sb, setSb] = useState(null);
-  const [seg, setSeg] = useSticky("week.seg", "cheat");
+  const [seg, setSeg] = useSticky("week.seg", "matchups");
   const [digestWeek, setDigestWeek] = useState(null);
   const [selGame, setSelGame] = useState(null);
   // The bottom nav lives outside this tab, so it can't reach selGame directly.
@@ -3164,7 +3177,7 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
       </div>
       <div className="px-4 pt-3">
         <div className="flex gap-2 mb-3">
-          {[["cheat", "Cheat Sheet"], ["matchups", "Matchups"], ["digest", "Digest"], ["bets", "Bets"]].map(([k, lbl]) => (
+          {[["matchups", "Matchups"], ["cheat", "Cheat Sheet"], ["digest", "Digest"], ["bets", "Bets"]].map(([k, lbl]) => (
             <button key={k} onClick={() => setSeg(k)}
               className={"flex-1 py-1.5 rounded-full text-xs font-bold " + (seg === k ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
@@ -3196,20 +3209,46 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
             else c.push(chip("Average D", CHIP_N));
             return c;
           };
-          const TeamLine = ({ t }) => {
-            const key = Object.keys(rows).find((k) => injTeamEq(k, t.abbr));
-            const o = key ? rows[key] : null;
+          const rowOf = (abbr) => { const key = Object.keys(rows).find((k) => injTeamEq(k, abbr)); return key ? rows[key] : null; };
+          const soft = n - 9;
+          // The edge: what this offense does well vs what the opponent's defence gives up.
+          const edgeOf = (o, d) => {
+            if (!o || !d) return null;
+            const runO = o.rank.offRushYds != null && o.rank.offRushYds <= 12, passO = o.rank.offPassYds != null && o.rank.offPassYds <= 12;
+            const runSoft = d.rank.defRushYds != null && d.rank.defRushYds >= soft, passSoft = d.rank.defPassYds != null && d.rank.defPassYds >= soft;
+            const runStout = d.rank.defRushYds != null && d.rank.defRushYds <= 10, passStout = d.rank.defPassYds != null && d.rank.defPassYds <= 10;
+            if (runSoft && (runO || o.rank.passRate >= n - 7)) return ["Edge: run it", CHIP_G, "run"];
+            if (passSoft && (passO || o.rank.passRate <= 8)) return ["Edge: throw it", CHIP_G, "pass"];
+            if (runSoft) return ["Opening: run game", CHIP_G, "run"];
+            if (passSoft) return ["Opening: pass game", CHIP_G, "pass"];
+            if (runStout && passStout) return ["Tough: stout D both ways", CHIP_R, null];
+            if (runStout && (runO || o.rank.passRate >= n - 7)) return ["Tough: they stop the run", CHIP_R, "pass"];
+            if (passStout && (passO || o.rank.passRate <= 8)) return ["Tough: they stop the pass", CHIP_R, "run"];
+            return ["No clear edge", CHIP_N, null];
+          };
+          const who = (list, unit) => list.length ? (
+            <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              <span className="font-extrabold text-slate-400 uppercase tracking-wide mr-1">{unit}</span>
+              {list.map(({ p, pct }, i) => (
+                <span key={p.id}>{i ? " · " : ""}<button onClick={() => { const full = players.find((x) => x.name === p.name) ; if (full) onSelect(full); }} className="font-bold text-slate-700 dark:text-slate-200">{String(p.name).split(" ").slice(-1)[0]}</button> {pct}%</span>
+              ))}
+            </span>
+          ) : null;
+          const TeamLine = ({ t, opp }) => {
+            const o = rowOf(t.abbr), d = rowOf(opp.abbr);
             const pr = o ? o.val.passRate : null, prk = o ? o.rank.passRate : null;
             const idTag = prk == null ? null : prk <= 8 ? ["Pass-heavy", CHIP_N] : prk >= n - 7 ? ["Run-heavy", CHIP_N] : ["Balanced", CHIP_N];
+            const edge = edgeOf(o, d);
             return (
-              <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] items-center gap-1 py-1.5">
-                <div className="flex items-center gap-1.5 min-w-0">
+              <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] items-start gap-1 py-1.5">
+                <div className="flex items-center gap-1.5 min-w-0 pt-1">
                   <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-6 h-6 object-contain shrink-0" />
                   <span className="text-[12px] font-black text-slate-900 dark:text-white truncate">{t.abbr}</span>
                 </div>
-                <div className="text-center leading-tight">
+                <div className="text-center leading-tight flex flex-col items-center gap-1">
                   <div className={"text-[13px] font-black tabular-nums " + (o ? "text-slate-900 dark:text-white" : "text-slate-400")}>{pr != null ? Math.round(pr) + "%" : "—"}</div>
-                  {idTag && <div className="mt-0.5">{chip(idTag[0], idTag[1])}</div>}
+                  {idTag && chip(idTag[0], idTag[1])}
+                  {o && dChips(o)}
                 </div>
                 <div className="text-center leading-tight">
                   <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.ppg)}>{o ? o.val.ppg.toFixed(1) : "—"}</div>
@@ -3219,7 +3258,12 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
                   <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.papg)}>{o ? o.val.papg.toFixed(1) : "—"}</div>
                   <div className="text-[8px] font-bold text-slate-400">{o && o.rank.papg ? ordinal(o.rank.papg) : ""}</div>
                 </div>
-                {o && <div className="col-span-4 flex flex-wrap gap-1 pl-[4.5rem] -mt-0.5">{dChips(o)}</div>}
+                {o && (
+                  <div className="col-span-4 flex items-center gap-2 flex-wrap pt-0.5">
+                    {edge && chip(edge[0], edge[1])}
+                    {edge && edge[2] === "run" ? who(o.carriers, "Carries") : edge && edge[2] === "pass" ? who(o.targets, "Targets") : <>{who(o.carriers, "Carries")}{who(o.targets, "Targets")}</>}
+                  </div>
+                )}
               </div>
             );
           };
@@ -3227,20 +3271,20 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
             <>
               <div className="flex items-center justify-between px-1 mb-2 text-[9px] font-bold text-slate-400">
                 <span>Season to date · rank colour: <span className={GOOD}>top 10</span> · <span className={BAD}>bottom 10</span></span>
-                <span>D chips: <span className={CHIP_R + " px-1 rounded"}>soft</span> <span className={CHIP_G + " px-1 rounded"}>stout</span></span>
+                <span><span className={CHIP_G + " px-1 rounded"}>edge</span> <span className={CHIP_R + " px-1 rounded"}>tough</span> = this offense vs that defense</span>
               </div>
               {gamesByDay.map((grp) => (
                 <div key={grp.key} className="mb-4">
-                  <div className="text-[10px] font-semibold tracking-widest uppercase mb-1.5 text-slate-400">{grp.key}</div>
+                  {!grp.live && <div className="text-[10px] font-semibold tracking-widest uppercase mb-1.5 text-slate-400">{grp.key}</div>}
                   <div className="space-y-2">
                     {grp.games.map((g) => (
                       <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2">
                         <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] gap-1 text-[8px] font-extrabold tracking-widest uppercase text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800">
                           <span className="truncate">{g.away.abbr} @ {g.home.abbr}</span><span className="text-center">Pass %</span><span className="text-center">Pts/G</span><span className="text-center">Allowed</span>
                         </div>
-                        <TeamLine t={g.away} />
+                        <TeamLine t={g.away} opp={g.home} />
                         <div className="border-t border-dashed border-slate-100 dark:border-slate-800" />
-                        <TeamLine t={g.home} />
+                        <TeamLine t={g.home} opp={g.away} />
                       </div>
                     ))}
                   </div>
