@@ -3190,100 +3190,82 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
           if (!sb.games.length) return <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>;
           const rows = cheatRows(seasonStats);
           const n = Object.keys(rows).length || 32;
-          const GOOD = "text-emerald-600 dark:text-emerald-400", BAD = "text-rose-600 dark:text-rose-400", MID = "text-amber-600 dark:text-amber-400";
-          const tone = (r) => r == null ? "text-slate-400" : r <= 10 ? GOOD : r >= n - 9 ? BAD : MID;
-          const CHIP_G = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
-          const CHIP_R = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
-          const CHIP_N = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-          const chip = (txt, cls) => <span key={txt} className={"rounded px-1.5 py-[2px] text-[8px] font-extrabold whitespace-nowrap " + cls}>{txt}</span>;
-          const dChips = (o) => {
-            const dp = o.rank.defPassYds, dr = o.rank.defRushYds, c = [];
-            if (dp == null || dr == null) return c;
-            const soft = n - 9;
-            if (dp >= soft && dr >= soft) c.push(chip("Soft D", CHIP_R));
-            else if (dp >= soft) c.push(chip("Soft vs pass", CHIP_R));
-            else if (dr >= soft) c.push(chip("Soft vs run", CHIP_R));
-            else if (dp <= 10 && dr <= 10) c.push(chip("Stout D", CHIP_G));
-            else if (dp <= 10) c.push(chip("Stout vs pass", CHIP_G));
-            else if (dr <= 10) c.push(chip("Stout vs run", CHIP_G));
-            else c.push(chip("Average D", CHIP_N));
-            return c;
-          };
-          const rowOf = (abbr) => { const key = Object.keys(rows).find((k) => injTeamEq(k, abbr)); return key ? rows[key] : null; };
           const soft = n - 9;
-          // The edge: what this offense does well vs what the opponent's defence gives up.
-          const edgeOf = (o, d) => {
-            if (!o || !d) return null;
-            const runO = o.rank.offRushYds != null && o.rank.offRushYds <= 12, passO = o.rank.offPassYds != null && o.rank.offPassYds <= 12;
-            const runSoft = d.rank.defRushYds != null && d.rank.defRushYds >= soft, passSoft = d.rank.defPassYds != null && d.rank.defPassYds >= soft;
-            const runStout = d.rank.defRushYds != null && d.rank.defRushYds <= 10, passStout = d.rank.defPassYds != null && d.rank.defPassYds <= 10;
-            if (runSoft && (runO || o.rank.passRate >= n - 7)) return ["Edge: run it", CHIP_G, "run"];
-            if (passSoft && (passO || o.rank.passRate <= 8)) return ["Edge: throw it", CHIP_G, "pass"];
-            if (runSoft) return ["Opening: run game", CHIP_G, "run"];
-            if (passSoft) return ["Opening: pass game", CHIP_G, "pass"];
-            if (runStout && passStout) return ["Tough: stout D both ways", CHIP_R, null];
-            if (runStout && (runO || o.rank.passRate >= n - 7)) return ["Tough: they stop the run", CHIP_R, "pass"];
-            if (passStout && (passO || o.rank.passRate <= 8)) return ["Tough: they stop the pass", CHIP_R, "run"];
-            return ["No clear edge", CHIP_N, null];
+          const rowOf = (abbr) => { const key = Object.keys(rows).find((k) => injTeamEq(k, abbr)); return key ? rows[key] : null; };
+          const GOOD = "bg-emerald-500 text-white", LEAN = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+          const BAD = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
+          const NEU = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+          const rankTone = (r) => r == null ? "text-slate-400" : r <= 10 ? "text-emerald-600 dark:text-emerald-400" : r >= soft ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400";
+          const lastName = (nm) => { const parts = String(nm).split(" "); return /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[parts.length - 1] || "") ? parts.slice(-2).join(" ") : parts.slice(-1)[0]; };
+          const identity = (o) => { const r = o && o.rank.passRate; return r == null ? "—" : r <= 8 ? "Pass-heavy" : r >= n - 7 ? "Run-heavy" : "Balanced"; };
+          // One verdict per team: this offense's lean vs. that defense's weak side.
+          const verdict = (o, d) => {
+            if (!o || !d) return { tag: "Even", cls: NEU, good: false, why: "Not enough data yet.", show: "both" };
+            const lean = identity(o), opp = d.abbr;
+            const runSoft = d.rank.defRushYds >= soft, passSoft = d.rank.defPassYds >= soft;
+            const runStout = d.rank.defRushYds <= 10, passStout = d.rank.defPassYds <= 10;
+            if (lean === "Run-heavy" && runSoft) return { tag: "Good spot", cls: GOOD, good: true, why: `They run a lot and ${opp} is soft against the run (${ordinal(d.rank.defRushYds)}).`, show: "run" };
+            if (lean === "Pass-heavy" && passSoft) return { tag: "Good spot", cls: GOOD, good: true, why: `They throw a lot and ${opp} is soft against the pass (${ordinal(d.rank.defPassYds)}).`, show: "pass" };
+            if (runSoft && passSoft) return { tag: "Good spot", cls: GOOD, good: true, why: `${opp} is soft against both the run and the pass.`, show: "both" };
+            if (lean === "Run-heavy" && runStout) return { tag: "Tough spot", cls: BAD, good: false, why: `They run a lot but ${opp} is stout against the run (${ordinal(d.rank.defRushYds)}).`, show: "pass" };
+            if (lean === "Pass-heavy" && passStout) return { tag: "Tough spot", cls: BAD, good: false, why: `They throw a lot but ${opp} is stout against the pass (${ordinal(d.rank.defPassYds)}).`, show: "run" };
+            if (runStout && passStout) return { tag: "Tough spot", cls: BAD, good: false, why: `${opp} is top 10 against both the run and the pass.`, show: "both" };
+            if (runSoft) return { tag: "Lean run", cls: LEAN, good: false, why: `${opp} is soft against the run (${ordinal(d.rank.defRushYds)}); the ground game is the opening.`, show: "run" };
+            if (passSoft) return { tag: "Lean pass", cls: LEAN, good: false, why: `${opp} is soft against the pass (${ordinal(d.rank.defPassYds)}); the air is the opening.`, show: "pass" };
+            return { tag: "Even", cls: NEU, good: false, why: `${opp}'s defense has no obvious weak side.`, show: "both" };
           };
-          const who = (list, unit) => list.length ? (
-            <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              <span className="font-extrabold text-slate-400 uppercase tracking-wide mr-1">{unit}</span>
+          const who = (list, unit) => list && list.length ? (
+            <div className="text-[11px] text-slate-600 dark:text-slate-300">
+              <span className="font-extrabold text-slate-400 text-[9px] uppercase tracking-wider mr-1.5">{unit}</span>
               {list.map(({ p, pct }, i) => (
-                <span key={p.id}>{i ? " · " : ""}<button onClick={() => { const full = players.find((x) => x.name === p.name) ; if (full) onSelect(full); }} className="font-bold text-slate-700 dark:text-slate-200">{String(p.name).split(" ").slice(-1)[0]}</button> {pct}%</span>
+                <span key={p.id}>{i ? " · " : ""}<button onClick={() => { const full = players.find((x) => x.name === p.name); if (full) onSelect(full); }} className="font-bold text-slate-800 dark:text-white">{lastName(p.name)}</button> {pct}%</span>
               ))}
-            </span>
+            </div>
           ) : null;
           const TeamLine = ({ t, opp }) => {
             const o = rowOf(t.abbr), d = rowOf(opp.abbr);
-            const pr = o ? o.val.passRate : null, prk = o ? o.rank.passRate : null;
-            const idTag = prk == null ? null : prk <= 8 ? ["Pass-heavy", CHIP_N] : prk >= n - 7 ? ["Run-heavy", CHIP_N] : ["Balanced", CHIP_N];
-            const edge = edgeOf(o, d);
+            const v = verdict(o, d);
+            const key = "cheat.open." + t.abbr;
+            const open = !!STICKY[key];
+            const [, bump] = useState(0);
             return (
-              <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] items-start gap-1 py-1.5">
-                <div className="flex items-center gap-1.5 min-w-0 pt-1">
-                  <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-6 h-6 object-contain shrink-0" />
-                  <span className="text-[12px] font-black text-slate-900 dark:text-white truncate">{t.abbr}</span>
-                </div>
-                <div className="text-center leading-tight flex flex-col items-center gap-1">
-                  <div className={"text-[13px] font-black tabular-nums " + (o ? "text-slate-900 dark:text-white" : "text-slate-400")}>{pr != null ? Math.round(pr) + "%" : "—"}</div>
-                  {idTag && chip(idTag[0], idTag[1])}
-                  {o && dChips(o)}
-                </div>
-                <div className="text-center leading-tight">
-                  <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.ppg)}>{o ? o.val.ppg.toFixed(1) : "—"}</div>
-                  <div className="text-[8px] font-bold text-slate-400">{o && o.rank.ppg ? ordinal(o.rank.ppg) : ""}</div>
-                </div>
-                <div className="text-center leading-tight">
-                  <div className={"text-[13px] font-black tabular-nums " + tone(o && o.rank.papg)}>{o ? o.val.papg.toFixed(1) : "—"}</div>
-                  <div className="text-[8px] font-bold text-slate-400">{o && o.rank.papg ? ordinal(o.rank.papg) : ""}</div>
-                </div>
-                {o && (
-                  <div className="col-span-4 flex items-center gap-2 flex-wrap pt-0.5">
-                    {edge && chip(edge[0], edge[1])}
-                    {edge && edge[2] === "run" ? who(o.carriers, "Carries") : edge && edge[2] === "pass" ? who(o.targets, "Targets") : <>{who(o.carriers, "Carries")}{who(o.targets, "Targets")}</>}
+              <div className={v.good ? "bg-emerald-50 dark:bg-emerald-500/10 -mx-3 px-3" : ""}>
+                <button onClick={() => { STICKY[key] = !open; bump((x) => x + 1); }} className="w-full flex items-center gap-2.5 py-2.5 text-left">
+                  <img src={t.logo || TEAM_LOGOS[t.abbr]} alt="" className="w-7 h-7 object-contain shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-black text-slate-900 dark:text-white">{t.abbr} <span className="text-slate-400 font-bold">· {identity(o)}{o ? " · " + Math.round(o.val.passRate) + "% pass" : ""}</span></div>
+                  </div>
+                  <span className={"rounded-full px-2.5 py-1 text-[10px] font-extrabold whitespace-nowrap " + v.cls}>{v.tag}</span>
+                  <span className={"text-slate-300 text-[10px] transition-transform " + (open ? "rotate-180" : "")}>▼</span>
+                </button>
+                {open && o && (
+                  <div className="pl-[2.375rem] pb-3 space-y-1.5">
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300">{v.why}</div>
+                    <div className="flex gap-4 text-[11px]">
+                      <span><span className="font-extrabold text-slate-400 text-[9px] uppercase tracking-wider mr-1">Scores</span><span className={"font-black tabular-nums " + rankTone(o.rank.ppg)}>{o.val.ppg.toFixed(1)}</span> <span className="text-slate-400">({ordinal(o.rank.ppg)})</span></span>
+                      <span><span className="font-extrabold text-slate-400 text-[9px] uppercase tracking-wider mr-1">Allows</span><span className={"font-black tabular-nums " + rankTone(o.rank.papg)}>{o.val.papg.toFixed(1)}</span> <span className="text-slate-400">({ordinal(o.rank.papg)})</span></span>
+                    </div>
+                    {(v.show === "run" || v.show === "both") && who(o.carriers, "Carries")}
+                    {(v.show === "pass" || v.show === "both") && who(o.targets, "Targets")}
                   </div>
                 )}
               </div>
             );
           };
+          const goodCount = sb.games.reduce((a, g) => a + (verdict(rowOf(g.away.abbr), rowOf(g.home.abbr)).good ? 1 : 0) + (verdict(rowOf(g.home.abbr), rowOf(g.away.abbr)).good ? 1 : 0), 0);
           return (
             <>
-              <div className="flex items-center justify-between px-1 mb-2 text-[9px] font-bold text-slate-400">
-                <span>Season to date · rank colour: <span className={GOOD}>top 10</span> · <span className={BAD}>bottom 10</span></span>
-                <span><span className={CHIP_G + " px-1 rounded"}>edge</span> <span className={CHIP_R + " px-1 rounded"}>tough</span> = this offense vs that defense</span>
+              <div className="flex items-center justify-between px-1 mb-2 text-[10px] font-semibold text-slate-400">
+                <span>How each offense lines up vs the other defense. Tap a team for the why.</span>
+                <span className="shrink-0 ml-2"><span className={"rounded-full px-2 py-0.5 text-white font-extrabold " + GOOD}>{goodCount}</span> good spots</span>
               </div>
               {gamesByDay.map((grp) => (
                 <div key={grp.key} className="mb-4">
                   {!grp.live && <div className="text-[10px] font-semibold tracking-widest uppercase mb-1.5 text-slate-400">{grp.key}</div>}
                   <div className="space-y-2">
                     {grp.games.map((g) => (
-                      <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-2">
-                        <div className="grid grid-cols-[4.25rem_1fr_1fr_1fr] gap-1 text-[8px] font-extrabold tracking-widest uppercase text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800">
-                          <span className="truncate">{g.away.abbr} @ {g.home.abbr}</span><span className="text-center">Pass %</span><span className="text-center">Pts/G</span><span className="text-center">Allowed</span>
-                        </div>
+                      <div key={g.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm px-3 py-1 divide-y divide-dashed divide-slate-100 dark:divide-slate-800 overflow-hidden">
                         <TeamLine t={g.away} opp={g.home} />
-                        <div className="border-t border-dashed border-slate-100 dark:border-slate-800" />
                         <TeamLine t={g.home} opp={g.away} />
                       </div>
                     ))}
