@@ -1035,7 +1035,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
     // labels (LDE, RILB) are one-per-side, so they're always depth 1.
     const STARTER_MAX = {
       DE: 2, DT: 2, NT: 1, EDGE: 2, DL: 4,
-      OLB: 2, ILB: 2, MLB: 2, LB: 4, WLB: 1, SLB: 1, MIKE: 1, WILL: 1, SAM: 1, JACK: 1, BUCK: 1, MACK: 1,
+      OLB: 2, ILB: 2, MLB: 1, LB: 4, WLB: 1, SLB: 1, MIKE: 1, WILL: 1, SAM: 1, JACK: 1, BUCK: 1, MACK: 1,
       CB: 3, NB: 1, NCB: 1, SLOT: 1, DB: 2, STAR: 1, DIME: 1, NICKEL: 1, FS: 1, SS: 1, S: 2,
     };
     const maxFor = (b0) => (b0 !== norm(b0) ? 1 : (STARTER_MAX[b0] ?? 1));
@@ -1072,6 +1072,7 @@ function FormationView({ roster, abbr, unit, setUnit, onSelectPlayer, lineRank, 
           .filter((q) => !used.has(q.id) && !starterIds.has(q.id) && q.id !== p.id && baseOf(q) && ROW_OF(baseOf(q)) === row && !sitP(q))
           .sort((a, b) => (norm(baseOf(a)) === fam ? 0 : 1) - (norm(baseOf(b)) === fam ? 0 : 1) || depthNo(a) - depthNo(b))[0];
         if (repl) { who = repl; nextUp = true; }
+        else { rows[ROW_OF(baseOf(p))].push({ p: null, lbl: baseOf(p), vacant: true }); return; }   // nobody behind him: open slot, he's on the sideline
       }
       rows[ROW_OF(baseOf(p))].push({ p: who, lbl: baseOf(p), nextUp });
       used.add(who.id);
@@ -3084,7 +3085,11 @@ const valTile = (val, good, ok) => (val == null ? "bg-slate-100 text-slate-400 d
   : val >= ok ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
   : "bg-rose-500/15 text-rose-600 dark:text-rose-400");
 
+const LOCKED_STATS = {};   // `${season}:${week}` -> season stats through the prior week
 function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
+  // Cheat Sheet numbers freeze for the whole week: they use games through the
+  // previous week only, so a 1pm game can't change a 4pm team's ranks.
+  const [locked, setLocked] = useState(null);
   const [board, setBoard] = useState(null);
   const [sb, setSb] = useState(null);
   const [seg, setSeg] = useSticky("week.seg", "matchups");
@@ -3116,6 +3121,13 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
     const allDone = sb.games.every((g) => g.state === "post");
     if (!allDone || nextSb) return;
     fetch(`/api/scoreboard?week=${(sb.week || 1) + 1}`).then((r) => r.json()).then((d) => { if (d && d.games) setNextSb(d); }).catch(() => {});
+    const wk = sb.week || 1, yr = sb.season || (seasonStats && seasonStats.season) || new Date().getFullYear();
+    const key = `${yr}:${wk}`;
+    if (LOCKED_STATS[key]) { setLocked(LOCKED_STATS[key]); return; }
+    if (wk <= 1) { setLocked(null); return; }   // week 1: nothing to lock to, use what's there
+    fetch(`/api/season-stats?season=${yr}&through=${wk - 1}`).then((r) => r.json())
+      .then((d) => { if (d && d.players) { LOCKED_STATS[key] = d; setLocked(d); } })
+      .catch(() => {});
   }, [sb, nextSb]);
   useEffect(() => {
     if (history) return;
@@ -3188,7 +3200,8 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
         {seg === "cheat" ? (() => {
           if (!sb) return <Loader label="Loading games" />;
           if (!sb.games.length) return <div className="p-6 text-center text-xs text-slate-400">No games scheduled this week.</div>;
-          const rows = cheatRows(seasonStats);
+          const stats = locked || seasonStats;
+          const rows = cheatRows(stats);
           const n = Object.keys(rows).length || 32;
           const soft = n - 9;
           const rowOf = (abbr) => { const key = Object.keys(rows).find((k) => injTeamEq(k, abbr)); return key ? rows[key] : null; };
@@ -3256,7 +3269,7 @@ function TdBoardTab({ players, teams, onSelect, navTick, seasonStats }) {
           return (
             <>
               <div className="flex items-center justify-between px-1 mb-2 text-[10px] font-semibold text-slate-400">
-                <span>How each offense lines up vs the other defense. Tap a team for the why.</span>
+                <span>How each offense lines up vs the other defense. Tap a team for the why.{locked ? ` Locked: through Week ${(sb.week || 1) - 1}.` : ""}</span>
                 <span className="shrink-0 ml-2"><span className={"rounded-full px-2 py-0.5 text-white font-extrabold " + GOOD}>{goodCount}</span> good spots</span>
               </div>
               {gamesByDay.map((grp) => (
