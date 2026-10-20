@@ -40,10 +40,15 @@ async function boardHandler(req, res) {
     const baseSeason = curSeason - 1;
     const base = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}`;
 
-    const [sb, B, C, sleeper] = await Promise.all([
-      getJson(`${base}/api/scoreboard`),
+    // The board is locked for the week: this season's numbers only run
+    // through LAST week, so games in progress can't move the ranks or picks.
+    const sb = await getJson(`${base}/api/scoreboard`);
+    const lockWeek = Math.max(0, (Number(sb && sb.week) || 1) - 1);
+    const [B, C, sleeper] = await Promise.all([
       getJson(`${base}/api/season-stats?season=${baseSeason}`),
-      getJson(`${base}/api/season-stats?season=${curSeason}`).catch(() => ({ players: {}, teams: {}, allowed: {}, weeksWithGames: 0 })),
+      lockWeek > 0
+        ? getJson(`${base}/api/season-stats?season=${curSeason}&through=${lockWeek}`).catch(() => ({ players: {}, teams: {}, allowed: {}, weeksWithGames: 0 }))
+        : Promise.resolve({ players: {}, teams: {}, allowed: {}, weeksWithGames: 0 }),
       getJson("https://api.sleeper.app/v1/players/nfl"),
     ]);
     // Sleeper by ESPN athlete id (Sleeper carries espn_id for nearly everyone)
