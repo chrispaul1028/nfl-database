@@ -1576,7 +1576,7 @@ function PlayersTab({ players, onSelect, pills, forceInj, since }) {
 // ═══════════════ INJURY FEED (newest update first) ═══════════════
 // One row per injured player, sorted by the time ESPN last touched the record.
 // Return date: ESPN's returnDate, else Airtable's Est Return, else "—".
-function InjuryFeed({ players, onSelect, q, setQ, pills, dark, since }) {
+function InjuryFeed({ players, onSelect, q, setQ, pills, dark, since, embedded }) {
   const rows = useMemo(() => {
     const out = [];
     for (const p of players) {
@@ -1612,8 +1612,8 @@ function InjuryFeed({ players, onSelect, q, setQ, pills, dark, since }) {
   }
   return (
     <div>
-      <ListHeader title={<>Injury Report <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />
-      <div className="px-4 pb-28 mt-4 space-y-4">
+      {!embedded && <ListHeader title={<>Injury Report <span className="text-[10px] font-bold text-white/50 align-middle">{NFL_VERSION}</span></>} q={q} setQ={setQ} pills={pills} />}
+      <div className={embedded ? "mt-3 space-y-4" : "px-4 pb-28 mt-4 space-y-4"}>
         <div className={"text-[10px] font-semibold px-1 " + (INJ_META.error || !INJ_META.count ? "text-rose-500" : "text-slate-400")}>
           {INJ_META.error ? "ESPN injury feed error: " + INJ_META.error
             : INJ_META.count ? `ESPN feed · ${INJ_META.count} records${INJ_META.at ? " · " + INJ_META.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""} · newest update first`
@@ -1925,6 +1925,26 @@ function unitOf(p) {
 
 const ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"];
 
+// NFL playoff picture from the standings: per conference, the 4 division
+// winners seeded 1–4 by record, then 3 wild cards. Ties broken by point
+// differential (the real tiebreakers need head-to-head and common-games
+// results we don't carry).
+function seedPlayoffs(teams) {
+  const confOf = (t) => { const c = String(t.conference || "").toLowerCase(); return c.startsWith("afc") ? "afc" : c.startsWith("nfc") ? "nfc" : null; };
+  const diff = (t) => (t.pf != null && t.pa != null ? t.pf - t.pa : 0);
+  const cmp = (a, b) => winPct(b) - winPct(a) || (b.wins ?? 0) - (a.wins ?? 0) || diff(b) - diff(a) || String(a.name).localeCompare(String(b.name));
+  const out = { afc: [], nfc: [] };
+  for (const c of ["afc", "nfc"]) {
+    const mine = teams.filter((t) => confOf(t) === c);
+    const byDiv = {};
+    for (const t of mine) (byDiv[t.division || "?"] ??= []).push(t);
+    const leaders = [], rest = [];
+    for (const arr of Object.values(byDiv)) { arr.sort(cmp); if (arr.length) leaders.push(arr[0]); rest.push(...arr.slice(1)); }
+    leaders.sort(cmp); rest.sort(cmp);
+    out[c] = [...leaders.map((t) => ({ t, divLeader: true })), ...rest.map((t) => ({ t, divLeader: false }))];
+  }
+  return out;
+}
 function winPct(t) {
   const w = t.wins ?? 0, l = t.losses ?? 0;
   return w + l > 0 ? w / (w + l) : -1;
@@ -1932,7 +1952,7 @@ function winPct(t) {
 
 function TeamsTab({ teams, players, onSelect }) {
   const [q, setQ] = useState("");
-  const [conf, setConf] = useState("all"); // all | east | west
+  const [conf, setConf] = useSticky("teams.conf", "standings"); // standings | all | afc | nfc | playoffs
   const [div, setDiv] = useState(null);    // division name or null
   const s = q.toLowerCase().trim();
   // Direct team-name matches, plus teams of any player whose name matches -
@@ -1962,6 +1982,7 @@ function TeamsTab({ teams, players, onSelect }) {
   const divisions = conf === "all" ? [] :
     [...new Set(teams.filter((t) => confOf(t) === conf).map((t) => t.division).filter(Boolean))].sort();
   let list = teams.filter((t) => {
+    if (conf === "standings" || conf === "playoffs") return false;
     if (conf !== "all" && confOf(t) !== conf) return false;
     if (div && t.division !== div) return false;
     if (!s) return true;
@@ -1976,20 +1997,105 @@ function TeamsTab({ teams, players, onSelect }) {
   );
   const pickConf = (k) => { setConf(k); setDiv(null); };
   const dark = useDark();
+  const seeded = useMemo(() => seedPlayoffs(teams), [teams]);
+  const confTitle = { afc: "AFC", nfc: "NFC" };
   return (
     <div>
       <div className="px-4 pb-28" style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}>
         <div className="flex gap-2 mt-1">
-          {[["all", "All"], ["afc", "AFC"], ["nfc", "NFC"]].map(([k, lbl]) => (
+          {[["standings", "Standings"], ["all", "Teams"], ["afc", "AFC"], ["nfc", "NFC"], ["playoffs", "Playoffs"]].map(([k, lbl]) => (
             <button key={k} onClick={() => pickConf(k)}
-              className={"flex-1 py-2 rounded-full text-xs font-bold transition-colors " + (conf === k
+              className={"flex-1 py-2 rounded-full text-[11px] font-bold transition-colors " + (conf === k
                 ? "bg-blue-600 text-white"
                 : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800")}>
               {lbl}
             </button>
           ))}
         </div>
-        {divisions.length > 0 && (
+        {conf === "standings" && (
+          <div className="mt-4 space-y-4">
+            {["afc", "nfc"].map((c) => {
+              const rows = seeded[c] || [];
+              return (
+                <div key={c} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-[12px] font-extrabold tracking-widest uppercase text-slate-900 dark:text-white">{confTitle[c]}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">1–7 make the playoffs · 1 seed gets the bye</span>
+                  </div>
+                  <div className="grid grid-cols-[1.5rem_1fr_3rem_2.75rem_2.5rem_2.5rem_2.75rem] gap-1 px-3 py-1 text-[8px] font-extrabold tracking-widest uppercase text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                    <span>#</span><span>Team</span><span className="text-center">W-L</span><span className="text-center">Pct</span><span className="text-center">PF</span><span className="text-center">PA</span><span className="text-center">Diff</span>
+                  </div>
+                  {rows.map((r, i) => {
+                    const t = r.t, d = (t.pf != null && t.pa != null) ? t.pf - t.pa : null;
+                    return (
+                      <React.Fragment key={t.id}>
+                        {i === 7 && <div className="h-[2px] bg-emerald-500/80" />}
+                        <button onClick={() => onSelect(t)} className="w-full grid grid-cols-[1.5rem_1fr_3rem_2.75rem_2.5rem_2.5rem_2.75rem] gap-1 items-center px-3 py-2 border-t border-slate-100 dark:border-slate-800 text-left active:bg-slate-50 dark:active:bg-slate-800">
+                          <span className={"text-[11px] font-black tabular-nums " + (i < 7 ? "text-slate-900 dark:text-white" : "text-slate-400")}>{i + 1}</span>
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <img src={t.logo || TEAM_LOGOS[t.abbr || toAbbr(t.name)]} alt="" className="w-6 h-6 object-contain shrink-0" />
+                            <span className="text-[12px] font-black text-slate-900 dark:text-white truncate">{t.abbr || toAbbr(t.name)}</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{String(t.division || "").replace(/^(AFC|NFC)\s*/i, "").slice(0, 1)}</span>
+                            {r.divLeader && <span className="text-amber-400 text-[10px]">★</span>}
+                          </span>
+                          <span className="text-center text-[11px] font-black tabular-nums text-slate-900 dark:text-white">{t.wins ?? 0}-{t.losses ?? 0}{t.ties ? "-" + t.ties : ""}</span>
+                          <span className="text-center text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">{winPct(t).toFixed(3).replace(/^0/, "")}</span>
+                          <span className="text-center text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">{t.pf ?? "—"}</span>
+                          <span className="text-center text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">{t.pa ?? "—"}</span>
+                          <span className={"text-center text-[10px] font-black tabular-nums " + (d == null ? "text-slate-400" : d > 0 ? "text-emerald-600 dark:text-emerald-400" : d < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500")}>{d == null ? "—" : (d > 0 ? "+" : "") + d}</span>
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+                  <div className="px-3 py-2 text-[9px] text-slate-400 border-t border-slate-100 dark:border-slate-800">★ division leader · seeds 1–4 are division winners by record, 5–7 wild cards · ties broken by point differential (the NFL's full tiebreakers need head-to-head results)</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {conf === "playoffs" && (
+          <div className="mt-4 space-y-5">
+            <div className="text-[10px] font-semibold text-slate-400 px-1">Seeding if the season ended today. Wild Card round: 7 @ 2, 6 @ 3, 5 @ 4 · the 1 seed rests.</div>
+            {["afc", "nfc"].map((c) => {
+              const rows = (seeded[c] || []).slice(0, 7);
+              const at = (n) => rows[n - 1];
+              const Card = ({ t, seed }) => t ? (
+                <button onClick={() => onSelect(t)} className="flex items-center gap-1.5 px-2 py-1.5 text-left w-full">
+                  <img src={t.logo || TEAM_LOGOS[t.abbr || toAbbr(t.name)]} alt="" className="w-5 h-5 object-contain shrink-0" />
+                  <span className="text-[9px] font-bold text-slate-400 w-3">{seed}</span>
+                  <span className="text-[11px] font-black text-slate-900 dark:text-white truncate">{t.abbr || toAbbr(t.name)}</span>
+                  <span className="text-[9px] font-bold text-slate-400 tabular-nums ml-auto">{t.wins ?? 0}-{t.losses ?? 0}{t.ties ? "-" + t.ties : ""}</span>
+                </button>
+              ) : <div className="flex items-center gap-1.5 px-2 py-1.5"><span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0" /><span className="text-[11px] font-black text-slate-400">TBD</span></div>;
+              const Box = ({ children }) => <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">{children}</div>;
+              return (
+                <div key={c}>
+                  <div className="flex items-center justify-between px-1 mb-1.5">
+                    <span className="text-[12px] font-extrabold tracking-widest uppercase text-slate-900 dark:text-white">{confTitle[c]}</span>
+                    <span className="text-[9px] font-semibold text-slate-400">Wild Card · Divisional · Championship</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 items-center">
+                    <div className="space-y-2">
+                      <Box><Card t={at(7)} seed={7} /><Card t={at(2)} seed={2} /></Box>
+                      <Box><Card t={at(6)} seed={6} /><Card t={at(3)} seed={3} /></Box>
+                      <Box><Card t={at(5)} seed={5} /><Card t={at(4)} seed={4} /></Box>
+                    </div>
+                    <div className="space-y-2">
+                      <Box><Card t={at(1)} seed={1} /><Card t={null} /></Box>
+                      <Box><Card t={null} /><Card t={null} /></Box>
+                    </div>
+                    <div><Box><Card t={null} /><Card t={null} /></Box></div>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="mx-auto max-w-xs rounded-2xl border-2 border-amber-400 bg-white dark:bg-slate-900 px-4 py-3 text-center">
+              <div className="text-[9px] font-extrabold tracking-widest uppercase text-amber-500">Super Bowl</div>
+              <div className="text-[12px] font-bold text-slate-500 dark:text-slate-300">AFC champ · NFC champ</div>
+            </div>
+          </div>
+        )}
+        {conf !== "standings" && conf !== "playoffs" && divisions.length > 0 && (
           <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
             {divisions.map((d) => (
               <button key={d} onClick={() => setDiv(div === d ? null : d)}
@@ -2377,7 +2483,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
   // Inside Roster: "list" (full roster), "offense" or "defense" (formation)
   const [rosterView, setRosterView] = useState(remembered.rosterView || "list");
   useEffect(() => { TEAM_VIEW_MEMO[team.id] = { seg, rosterView }; }, [team.id, seg, rosterView]);
-  const unit = rosterView === "list" ? null : rosterView;
+  const unit = rosterView === "list" || rosterView === "injury" ? null : rosterView;
   const lineRanks = useMemo(() => computeLineRanks(players, teams), [players, teams]);
   const [roleFilter, setRoleFilter] = useState(null);
   const [, setSchedTick] = useState(0);   // re-render the SOS tiles once the schedule arrives
@@ -2649,7 +2755,7 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
 
         {seg === "roster" && (
           <div className="flex gap-2 mt-3">
-            {[["offense", "Offense"], ["defense", "Defense"]].map(([k, lbl]) => (
+            {[["offense", "Offense"], ["defense", "Defense"], ["injury", "Injury Report"]].map(([k, lbl]) => (
               <button key={k} onClick={() => setRosterView(rosterView === k ? "list" : k)}
                 className={"flex-1 py-1.5 rounded-full text-[11px] font-extrabold transition-colors " + (rosterView === k
                   ? ""
@@ -2661,7 +2767,10 @@ function TeamDetail({ team, teams, players, onBack, onSelectPlayer, seasonStats,
           </div>
         )}
         {seg === "roster" && unit && <FormationView roster={roster} abbr={abbr} unit={unit} onSelectPlayer={onSelectPlayer} lineRank={lineRanks[abbr]} team={team} />}
-        {seg === "roster" && !unit && orderedRoles.map((role) => (
+        {seg === "roster" && rosterView === "injury" && (
+          <InjuryFeed embedded players={rosterRaw} onSelect={onSelectPlayer} q="" setQ={() => {}} dark={dark} />
+        )}
+        {seg === "roster" && rosterView !== "injury" && !unit && orderedRoles.map((role) => (
           <div key={role}>
             <div className="text-[12px] font-extrabold tracking-widest text-slate-900 dark:text-white uppercase mt-6 mb-2 px-1">{role}</div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
